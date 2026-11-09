@@ -15,7 +15,7 @@ This is the mission/operations module integrated into the existing SPT-EconomyGu
   - Links a ready mission group to a Fika match when all group members have registered in the same exact map/match.
   - Captures match end before Fika removes its match record and creates a manual review record.
 - Idempotent points/rank award ledger and review audit fields.
-- Regression tests for Fika 2.4.3 lifecycle, account binding, Scav identity mapping, review and reward trust boundaries.
+- Regression tests for Fika 2.4.3 lifecycle, account binding, Scav identity mapping, review trust boundaries and SPT mail reward delivery.
 
 ## Mission flow
 
