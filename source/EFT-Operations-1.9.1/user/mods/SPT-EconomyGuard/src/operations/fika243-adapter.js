@@ -588,8 +588,14 @@ class Fika243OperationsAdapter {
         })) : [];
         const directSnapshotKey = matchId ? `${matchId}:${identity.profileId}` : '';
         const pendingSnapshotKey = `pending:${identity.profileId}`;
-        const snapshotKey = directSnapshotKey && this.raidSnapshots.has(directSnapshotKey) ? directSnapshotKey : pendingSnapshotKey;
-        const raidSnapshot = this.raidSnapshots.get(snapshotKey) || null;
+        const directSnapshot = directSnapshotKey ? this.raidSnapshots.get(directSnapshotKey) : null;
+        const pendingSnapshot = this.raidSnapshots.get(pendingSnapshotKey) || null;
+        const pendingMatchesRaid = !!pendingSnapshot
+            && (!pendingSnapshot.matchId || String(pendingSnapshot.matchId) === String(matchId || ''))
+            && (!activeGroup || String(pendingSnapshot.groupId) === String(activeGroup.id))
+            && Date.now() - Number(pendingSnapshot.startedAt || 0) <= 4 * 60 * 60 * 1000;
+        const raidSnapshot = directSnapshot || (pendingMatchesRaid ? pendingSnapshot : null);
+        const snapshotKey = directSnapshot ? directSnapshotKey : (raidSnapshot ? pendingSnapshotKey : '');
         const acceptedAccount = safe(() => this.services.saveServer && this.services.saveServer.getProfile(sessionId), null);
         const acceptedCharacters = object(acceptedAccount && acceptedAccount.characters);
         const acceptedCharacter = raidSnapshot && raidSnapshot.side === 'scav' ? object(acceptedCharacters.scav) : object(acceptedCharacters.pmc);
