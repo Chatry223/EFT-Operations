@@ -264,7 +264,8 @@ async function verifyAsyncLifecycleWrappers() {
     };
     const asyncAdapter = new Fika243OperationsAdapter({ modDir: asyncModDir, operations: asyncOperations, logger: { info() {}, warn() {}, debug() {} } });
     asyncAdapter.services.saveServer = { getProfile() { return profileState; } };
-    asyncAdapter.services.fikaMatchService = { getMatchIdByProfile() { return 'async-match'; } };
+    let asyncMatchId = null;
+    asyncAdapter.services.fikaMatchService = { getMatchIdByProfile() { return asyncMatchId; } };
     const asyncLifecycleService = {
         async startLocalRaid() { await Promise.resolve(); return { location: 'woods' }; },
         async endLocalRaid() {
@@ -303,7 +304,12 @@ async function verifyAsyncLifecycleWrappers() {
     assert.notEqual(asyncLifecycleService.startLocalRaid, resetStart, 'lifecycle start hook must be re-applied after Fika resets the method');
     assert.notEqual(asyncLifecycleService.endLocalRaid, resetEnd, 'lifecycle end hook must be re-applied after Fika resets the method');
     await asyncLifecycleService.startLocalRaid('session-async', { playerSide: 'pmc', location: 'woods' });
-    assert.equal(asyncAdapter.raidSnapshots.size, 1, 'raid-start snapshot must be captured after the async start handler resolves');
+    assert.equal(asyncAdapter.raidSnapshots.has('pending:abcdef0123456789abcdef21'), true, 'raid-start snapshot should be retained while Fika player registration is pending');
+    asyncMatchId = 'async-match';
+    asyncOperations.state.groups[0].state = 'in_raid';
+    asyncOperations.state.groups[0].raidId = 'async-match';
+    asyncAdapter.bindPendingRaidSnapshots(asyncOperations.state.groups[0], 'async-match', 'woods');
+    assert.equal(asyncAdapter.raidSnapshots.has('async-match:abcdef0123456789abcdef21'), true, 'pending snapshot should be bound when the Fika match is linked');
     const result = await asyncLifecycleService.endLocalRaid('session-async', {
         serverId: 'woods.789',
         results: { result: 'Survived', profile: { Inventory: { items: [
