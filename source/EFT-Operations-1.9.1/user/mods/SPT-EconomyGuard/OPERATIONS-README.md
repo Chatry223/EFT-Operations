@@ -41,7 +41,7 @@ Fika 2.4.3 uses `serverId` as a synthetic host player key when creating a match;
 ## Rewards
 
 - Approved points are immediately credited to the Operations points/rank ledger.
-- Rouble and item rewards are delivered as SPT system-mail attachments after admin approval. Stackable items are split using the SPT template stack limit. Failed or interrupted deliveries move to `delivery_attention_required`; they are not retried automatically, preventing duplicate mail. Admin must reconcile that state manually.
+- Rouble and item rewards are delivered as SPT system-mail attachments after admin approval. Stackable items are split using the SPT template stack limit. Failed or interrupted deliveries move to `delivery_attention_required`; they are not retried automatically, preventing duplicate mail. The admin Awards ledger exposes an audited reconciliation action: retry only after verifying no mail was sent, or mark delivered only after verifying receipt. Both decisions require a note and are recorded.
 - Award keys are idempotent per mission/group/player, preventing duplicate point awards.
 
 ## Storage and upgrade
