@@ -75,7 +75,8 @@ class OperationsClientApi {
             const player = this.resolvePlayer(sessionId);
             const group = this.operations.state.groups.find(g => ['forming', 'in_raid', 'review'].includes(g.state) && g.members.some(m => m.profileId === player.profileId));
             const mission = group ? this.operations.get(group.missionId) : null;
-            return this.response({ ok: true, player: this.operations.getPlayer(player.profileId), group: group ? this.publicGroup(group) : null, mission: mission ? this.publicMission(mission) : null });
+            const canStart = this.canStartGroup(group, mission);
+            return this.response({ ok: true, player: this.operations.getPlayer(player.profileId), group: group ? this.publicGroup(group, player.profileId) : null, mission: mission ? this.publicMission(mission) : null, canStart });
         } catch (err) { return this.response({ ok: false, error: this.errorCode(err) }); }
     }
 
@@ -85,7 +86,7 @@ class OperationsClientApi {
             const missionId = String(info && info.missionId || '').trim();
             if (!missionId || missionId.length > 100) throw new Error('INVALID_MISSION_ID');
             const group = this.operations.accept(missionId, player.profileId, player.displayName, player.scavProfileId);
-            return this.response({ ok: true, group: this.publicGroup(group) });
+            return this.response({ ok: true, group: this.publicGroup(group, player.profileId) });
         } catch (err) { return this.response({ ok: false, error: this.errorCode(err) }); }
     }
 
@@ -96,7 +97,7 @@ class OperationsClientApi {
             if (!groupId || groupId.length > 100) throw new Error('INVALID_GROUP_ID');
             const ready = info && info.ready === true;
             const result = this.operations.setReady(groupId, player.profileId, ready);
-            return this.response({ ok: true, group: this.publicGroup(result.group), canStart: result.canStart });
+            return this.response({ ok: true, group: this.publicGroup(result.group, player.profileId), canStart: result.canStart });
         } catch (err) { return this.response({ ok: false, error: this.errorCode(err) }); }
     }
 
@@ -106,16 +107,36 @@ class OperationsClientApi {
             const groupId = String(info && info.groupId || '').trim();
             if (!groupId || groupId.length > 100) throw new Error('INVALID_GROUP_ID');
             const group = this.operations.leaveGroup(groupId, player.profileId);
-            return this.response({ ok: true, group: this.publicGroup(group) });
+            return this.response({ ok: true, group: this.publicGroup(group, player.profileId) });
         } catch (err) { return this.response({ ok: false, error: this.errorCode(err) }); }
     }
 
-    publicGroup(group) {
+    canStartGroup(group, mission) {
+        const now = Date.now();
+        return !!group && group.state === 'forming' && !!mission && mission.status === 'published'
+            && (!mission.startAt || Date.parse(mission.startAt) <= now)
+            && (!mission.endAt || Date.parse(mission.endAt) > now)
+            && group.members.length >= mission.minPlayers
+            && group.members.every(member => member.ready === true);
+    }
+
+    publicGroup(group, viewerProfileId = '') {
+        const mission = this.operations.get(group.missionId);
+        const readyCount = group.members.filter(member => member.ready === true).length;
         return {
             id: group.id,
             missionId: group.missionId,
             state: group.state,
-            members: group.members.map(m => ({ displayName: m.displayName, ready: m.ready === true, acceptedAt: m.acceptedAt, result: m.result })),
+            minPlayers: mission ? mission.minPlayers : 1,
+            maxPlayers: mission ? mission.maxPlayers : group.members.length,
+            readyCount,
+            members: group.members.map((member, index) => ({
+                displayName: member.displayName,
+                ready: member.ready === true,
+                isLeader: index === 0 && String(member.profileId) === String(viewerProfileId),
+                acceptedAt: member.acceptedAt,
+                result: member.result
+            })),
             createdAt: group.createdAt,
             startedAt: group.startedAt || null,
             finishedAt: group.finishedAt || null
