@@ -488,14 +488,23 @@ namespace EFTOperations.Client
                 }
             }
             GUILayout.EndScrollView();
-            bool localIsFikaHost = fikaKillHookInstalled && IsFikaServer();
+            bool localIsFikaHost = (fikaKillHookInstalled || fikaVisitHookInstalled) && IsFikaServer();
+            bool needsVisitTelemetry = false;
+            bool needsKillTelemetry = false;
+            if (mission.objectives != null)
+                foreach (ObjectiveDto objective in mission.objectives)
+                    if (objective != null)
+                    {
+                        if (objective.type == "visit") needsVisitTelemetry = true;
+                        if (objective.type == "kill" || objective.type == "kill_type") needsKillTelemetry = true;
+                    }
+            string hostTelemetryStatus = localIsFikaHost
+                ? (needsVisitTelemetry && !fikaVisitHookInstalled ? "Fika host active; visit-trigger hook unavailable."
+                    : (needsKillTelemetry && !fikaKillHookInstalled ? "Fika host active; kill hook unavailable." : "Fika host telemetry is active."))
+                : (fikaKillHookInstalled || fikaVisitHookInstalled ? "Waiting for the Fika squad host to provide objective telemetry." : "Fika 1.2.3 host bridge is not active. Objective progress may remain pending.");
             GUILayout.Label(hasReviewEvidence
                 ? "Host-reported or SPT-accepted evidence is visible. Final completion and rewards still require admin review."
-                : (localIsFikaHost
-                    ? "Fika host telemetry is active. Waiting for objective events; rewards still require admin review."
-                    : (fikaKillHookInstalled
-                        ? "Waiting for the Fika squad host to provide objective telemetry."
-                        : "Fika 1.2.3 host bridge is not active. Objective progress may remain pending.")), SmallStyle());
+                : hostTelemetryStatus + " Final completion and rewards still require admin review.", SmallStyle());
             GUILayout.EndArea();
         }
 
@@ -651,7 +660,7 @@ namespace EFTOperations.Client
                 if (!(isAiValue is bool) || (bool)isAiValue) return;
                 string actorProfileId = ReadMember(player, "ProfileId") as string;
                 if (!IsProfileId(actorProfileId)) return;
-                object rawTriggerId = ReadFirstMember(trigger, "Id", "ID", "TriggerId", "PlaceId", "PlaceID");
+                object rawTriggerId = ReadFirstMember(trigger, "Id", "ID", "id", "TriggerId", "triggerId", "PlaceId", "PlaceID", "placeId", "_id");
                 string triggerId = rawTriggerId == null ? String.Empty : rawTriggerId.ToString().Trim();
                 if (String.IsNullOrWhiteSpace(triggerId) || triggerId.Length > 100) return;
 
