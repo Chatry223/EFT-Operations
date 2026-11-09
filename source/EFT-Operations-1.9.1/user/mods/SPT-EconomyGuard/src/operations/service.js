@@ -193,7 +193,7 @@ class OperationsService {
         if (!m || m.status !== 'published' || (m.startAt && Date.parse(m.startAt) > Date.now()) || (m.endAt && Date.parse(m.endAt) <= Date.now()) || g.members.length < m.minPlayers || !g.members.every(x => x.ready)) throw new Error('GROUP_NOT_READY');
         const validatedRaidId = text(raidId, 100, 'RAID_ID', true);
         g.state = 'in_raid'; g.raidId = validatedRaidId; g.startedAt = new Date().toISOString();
-        g.progress = Object.fromEntries(m.objectives.map(o => [o.id, 0])); this.persist(); return clone(g);
+        g.progress = Object.fromEntries(m.objectives.map(o => [o.id, 0])); g.processedEventIds = []; this.persist(); return clone(g);
     }
 
     // Call only from a server-side SPT/Fika event adapter. Never expose this method as a public client endpoint.
@@ -205,15 +205,33 @@ class OperationsService {
         if (event.evidenceTrust !== 'server_verified' || !['fika-server-adapter', 'spt-server-adapter'].includes(String(event.source || ''))) {
             throw new Error('UNTRUSTED_RAID_EVENT');
         }
+        const eventId = text(event.eventId, 120, 'EVENT_ID', true);
         const eventMap = text(event.map, 40, 'EVENT_MAP', true).toLowerCase();
         if (eventMap !== String(m.map || '').toLowerCase()) throw new Error('RAID_EVENT_MAP_MISMATCH');
         const amount = integer(event.amount, 1, 1000, 'EVENT_AMOUNT', 1);
+        // Kill/collection/visit events must identify a real member of this operation.
+        // Lifecycle-wide extraction/survival events may be aggregate, but any supplied
+        // profile identity is still checked against the accepted roster.
+        const actorBoundTypes = new Set(['kill', 'kill_type', 'collect', 'visit']);
+        if (actorBoundTypes.has(event.type) && !event.profileId) throw new Error('RAID_EVENT_ACTOR_REQUIRED');
+        if (event.profileId) {
+            const actorId = requireProfileId(event.profileId);
+            if (!g.members.some(member => member.profileId === actorId || member.scavProfileId === actorId)) {
+                throw new Error('RAID_EVENT_ACTOR_NOT_MEMBER');
+            }
+        }
+        if (!Array.isArray(g.processedEventIds)) g.processedEventIds = [];
+        if (g.processedEventIds.includes(eventId)) return clone(g.progress);
         for (const objective of m.objectives) {
             if (objective.type !== event.type) continue;
             if (objective.target && String(event.target || '').toLowerCase() !== String(objective.target).toLowerCase()) continue;
             if (objective.params.map && String(objective.params.map).toLowerCase() !== (eventMap || String(m.map || '').toLowerCase())) continue;
             g.progress[objective.id] = Math.min(objective.count, (g.progress[objective.id] || 0) + amount);
         }
+        // Bound persisted deduplication state so a long-running server cannot grow
+        // the operations store without limit. IDs are scoped to this raid group.
+        g.processedEventIds.push(eventId);
+        if (g.processedEventIds.length > 10000) g.processedEventIds.splice(0, g.processedEventIds.length - 10000);
         this.persist(); return clone(g.progress);
     }
 
