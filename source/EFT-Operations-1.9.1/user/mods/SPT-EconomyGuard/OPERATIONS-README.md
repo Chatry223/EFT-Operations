@@ -10,7 +10,7 @@ This is the mission/operations module integrated into the existing SPT-EconomyGu
 - Group acceptance, member ready state and server-side SPT account identity resolution.
 - Client-side in-game mission board source (BepInEx), including new-operation banner, rank/points and reward preview. The DLL is not included in this server package; use the separate client build GUI helper.
 - Exact Fika Server 2.4.3 adapter:
-  - Authenticates Fika create/leave and add-player/death-update profile IDs against the SPT session that made the callback.
+  - Authenticates Fika raid-create host username against the PMC/Scav nickname in the SPT session; validates raid-leave and add-player/death-update profile IDs against that same authenticated account.
   - Matches PMC and Scav profile IDs to the same SPT account.
   - Links a ready mission group to a Fika match when all group members have registered in the same exact map/match.
   - Captures match end before Fika removes its match record and creates a manual review record.
