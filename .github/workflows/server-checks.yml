@@ -19,31 +19,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  source-status:
-    name: Source bundle readiness
-    runs-on: ubuntu-latest
-    outputs:
-      source_ready: ${{ steps.detect.outputs.source_ready }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Detect source layout
-        id: detect
-        shell: bash
-        run: |
-          if [ -f user/mods/SPT-EconomyGuard/package.json ]; then
-            echo "source_ready=true" >> "$GITHUB_OUTPUT"
-          elif [ -f source/EFT-Operations-1.9.1/user/mods/SPT-EconomyGuard/package.json ]; then
-            echo "source_ready=true" >> "$GITHUB_OUTPUT"
-          elif [ -f source/EFT-Operations-1.9.1.zip ]; then
-            echo "source_ready=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "source_ready=false" >> "$GITHUB_OUTPUT"
-          fi
   server-tests:
     name: SPT server checks and tests
-    needs: source-status
-    # Always execute the test gate. If the uploaded source is missing, the explicit
-    # Prepare source tree step fails with a useful error instead of silently skipping.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
