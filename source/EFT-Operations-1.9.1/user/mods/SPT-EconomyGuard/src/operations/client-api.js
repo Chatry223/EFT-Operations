@@ -119,7 +119,7 @@ class OperationsClientApi {
             const type = String(info && info.type || 'kill').trim().toLowerCase();
             const eventId = String(info && info.eventId || '').trim();
             const matchId = String(info && info.matchId || '').trim();
-            const actorProfileId = String(info && (info.actorProfileId || info.killerProfileId) || '').trim();
+            const actorProfileId = String(info && (type === 'visit' ? info.actorProfileId : info.killerProfileId) || '').trim();
             if (!['kill', 'visit'].includes(type)) throw new Error('INVALID_HOST_EVENT_TYPE');
             if (!eventId || eventId.length > 120) throw new Error('INVALID_EVENT_ID');
             if (!matchId || matchId.length > 100) throw new Error('INVALID_MATCH_ID');
