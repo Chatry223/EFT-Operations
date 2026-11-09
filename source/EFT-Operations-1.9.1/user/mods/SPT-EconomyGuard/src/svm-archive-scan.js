@@ -4,10 +4,11 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 
-const MAX_ARCHIVES = 500;
+const MAX_ARCHIVES = 200;
 const MAX_ENTRIES_PER_ARCHIVE = 20000;
-const MAX_ARCHIVE_BYTES = 512 * 1024 * 1024;
-const MAX_DIRECTORY_BYTES = 64 * 1024 * 1024;
+const MAX_ARCHIVE_BYTES = 256 * 1024 * 1024;
+const MAX_DIRECTORY_BYTES = 16 * 1024 * 1024;
+const MAX_TOTAL_SCAN_BYTES = 512 * 1024 * 1024;
 const MAX_JSON_BYTES = 2 * 1024 * 1024;
 const MAX_PREVIEW_ENTRIES = 50;
 const MAX_PREVIEW_TOTAL_BYTES = 4 * 1024 * 1024;
@@ -167,6 +168,7 @@ class SvmArchiveScanner {
     constructor(serverRoot, options = {}) {
         this.serverRoot = path.resolve(serverRoot);
         this.maxArchives = Math.min(MAX_ARCHIVES, Math.max(1, Number(options.maxArchives) || MAX_ARCHIVES));
+        this.maxTotalBytes = Math.min(MAX_TOTAL_SCAN_BYTES, Math.max(16 * 1024 * 1024, Number(options.maxTotalBytes) || MAX_TOTAL_SCAN_BYTES));
     }
 
     scan() {
@@ -174,7 +176,9 @@ class SvmArchiveScanner {
         const errors = [];
         const stack = [this.serverRoot];
         const seen = new Set();
-        while (stack.length && seen.size < this.maxArchives) {
+        let scannedBytes = 0;
+        let limitReached = false;
+        while (stack.length && seen.size < this.maxArchives && !limitReached) {
             const dir = stack.pop();
             let entries;
             try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
@@ -188,6 +192,17 @@ class SvmArchiveScanner {
                 if (seen.has(canonical)) continue;
                 seen.add(canonical);
                 try {
+                    const archiveSize = fs.statSync(full).size;
+                    if (archiveSize > MAX_ARCHIVE_BYTES) {
+                        errors.push({ path: path.relative(this.serverRoot, full).split(path.sep).join('/'), error: 'ZIP_SIZE_LIMIT' });
+                        continue;
+                    }
+                    if (scannedBytes + archiveSize > this.maxTotalBytes) {
+                        seen.delete(canonical);
+                        limitReached = true;
+                        break;
+                    }
+                    scannedBytes += archiveSize;
                     const matches = listZipEntries(full);
                     if (matches.length) archives.push({
                         path: path.relative(this.serverRoot, full).split(path.sep).join('/'),
@@ -200,10 +215,10 @@ class SvmArchiveScanner {
                 } catch (err) {
                     errors.push({ path: path.relative(this.serverRoot, full).split(path.sep).join('/'), error: err.message || 'ZIP_SCAN_FAILED' });
                 }
-                if (seen.size >= this.maxArchives) break;
+                if (seen.size >= this.maxArchives) { limitReached = true; break; }
             }
         }
-        return { scannedArchives: seen.size, matchingArchives: archives.length, truncated: stack.length > 0 || seen.size >= this.maxArchives, archives, errors: errors.slice(0, 100) };
+        return { scannedArchives: seen.size, scannedBytes, matchingArchives: archives.length, truncated: limitReached || stack.length > 0, archives, errors: errors.slice(0, 100) };
     }
 }
 
