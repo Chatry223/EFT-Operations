@@ -109,11 +109,17 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          zip -qr "dist/SPT-EconomyGuard-1.9.1-${GITHUB_SHA::7}.zip" user/mods/SPT-EconomyGuard
+          archive="dist/SPT-EconomyGuard-1.9.1-${GITHUB_SHA::7}.zip"
+          zip -qr "$archive" user/mods/SPT-EconomyGuard
+          unzip -t "$archive"
+          unzip -Z1 "$archive" | grep -Fx 'user/mods/SPT-EconomyGuard/package.json'
+          sha256sum "$archive" > "$archive.sha256"
       - name: Upload server-mod package
         uses: actions/upload-artifact@v4
         with:
           name: EFT-Operations-ServerMod-${{ github.sha }}
-          path: dist/SPT-EconomyGuard-1.9.1-*.zip
+          path: |
+            dist/SPT-EconomyGuard-1.9.1-*.zip
+            dist/SPT-EconomyGuard-1.9.1-*.zip.sha256
           if-no-files-found: error
           retention-days: 30
