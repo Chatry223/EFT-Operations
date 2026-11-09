@@ -765,13 +765,17 @@ class AdminPanelServer {
                             evidenceCount: Array.isArray(group.evidenceEvents) ? group.evidenceEvents.length : 0
                         },
                         fikaEvidence: fikaEvidence.map(sanitizeFikaEvent),
-                        hostEvidence: hostEvidence.map(event => ({
-                            eventId: event.eventId, type: event.type, profileId: event.profileId,
-                            target: event.target, targetCategory: event.targetCategory,
-                            victimProfileId: event.victimProfileId, victimRole: event.victimRole,
-                            victimSide: event.victimSide, reporterProfileId: event.reporterProfileId,
-                            matchId: event.matchId, evidenceTrust: event.evidenceTrust, timestamp: event.timestamp
-                        })),
+                        hostEvidence: hostEvidence.map(event => {
+                            const actor = (group.members || []).find(member => String(member.profileId || '') === String(event.profileId || '')
+                                || String(member.scavProfileId || '') === String(event.profileId || ''));
+                            return {
+                                type: event.type,
+                                killerName: actor ? String(actor.displayName || 'Unknown operator') : 'Unknown operator',
+                                target: event.target, targetCategory: event.targetCategory,
+                                victimRole: event.victimRole, victimSide: event.victimSide,
+                                evidenceTrust: event.evidenceTrust, timestamp: event.timestamp
+                            };
+                        }),
                         objectiveEvidence
                     };
                 }));
