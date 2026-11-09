@@ -235,7 +235,10 @@ class OperationsService {
             const category = text(event.targetCategory, 40, 'EVENT_TARGET_CATEGORY', true).toLowerCase();
             if (!['scav', 'boss', 'raider', 'rogue', 'cultist', 'pmc', 'follower', 'other', 'unknown'].includes(category)) throw new Error('INVALID_EVENT_TARGET_CATEGORY');
         }
-        if (!g.progressTrust || typeof g.progressTrust !== 'object') g.progressTrust = {};
+        if (!g.progress || typeof g.progress !== 'object' || Array.isArray(g.progress)) {
+            g.progress = Object.fromEntries(m.objectives.map(objective => [objective.id, 0]));
+        }
+        if (!g.progressTrust || typeof g.progressTrust !== 'object' || Array.isArray(g.progressTrust)) g.progressTrust = {};
         if (!Array.isArray(g.evidenceEvents)) g.evidenceEvents = [];
         const targetCandidates = [event.target, event.targetCategory].map(value => String(value || '').trim().toLowerCase()).filter(Boolean);
         for (const objective of m.objectives) {
