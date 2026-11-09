@@ -9,8 +9,8 @@
     <Optimize>true</Optimize>
   </PropertyGroup>
   <PropertyGroup>
-    <GameManagedDir Condition="'$(GameManagedDir)' == ''">C:\\SPT\\EscapeFromTarkov_Data\\Managed</GameManagedDir>
-    <BepInExCoreDir Condition="'$(BepInExCoreDir)' == ''">C:\\SPT\\BepInEx\\core</BepInExCoreDir>
+    <GameManagedDir Condition="'$(GameManagedDir)' == ''">C:\SPT\EscapeFromTarkov_Data\Managed</GameManagedDir>
+    <BepInExCoreDir Condition="'$(BepInExCoreDir)' == ''">C:\SPT\BepInEx\core</BepInExCoreDir>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="BepInEx"><HintPath>$(BepInExCoreDir)\BepInEx.dll</HintPath><Private>false</Private></Reference>
