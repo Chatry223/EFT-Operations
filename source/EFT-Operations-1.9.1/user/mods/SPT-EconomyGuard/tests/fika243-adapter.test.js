@@ -123,6 +123,93 @@ async function testFika243LifecycleAndAcceptedLootEvidence() {
   }
 }
 
+async function testFikaSquadAutoLinkAndPendingSnapshots() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'eg-fika-squad-'));
+  try {
+    const modDir = path.join(root, 'user', 'mods', 'SPT-EconomyGuard');
+    const fikaDir = path.join(root, 'user', 'mods', 'fika-server');
+    fs.mkdirSync(modDir, { recursive: true }); fs.mkdirSync(fikaDir, { recursive: true });
+    fs.writeFileSync(path.join(fikaDir, 'package.json'), JSON.stringify({ version: '2.4.3', sptVersion: '~3.11' }));
+
+    const profileA = 'abcdef0123456789abcdef11';
+    const scavA = 'abcdef0123456789abcdef12';
+    const profileB = 'abcdef0123456789abcdef13';
+    const scavB = 'abcdef0123456789abcdef14';
+    const profiles = {
+      'session-a': { info: { Nickname: 'Alpha' }, characters: { pmc: { _id: profileA, Info: { Nickname: 'Alpha' }, Inventory: { items: [] } }, scav: { _id: scavA, Info: { Nickname: 'Alpha-Scav' }, Inventory: { items: [] } } } },
+      'session-b': { info: { Nickname: 'Bravo' }, characters: { pmc: { _id: profileB, Info: { Nickname: 'Bravo' }, Inventory: { items: [] } }, scav: { _id: scavB, Info: { Nickname: 'Bravo-Scav' }, Inventory: { items: [] } } } }
+    };
+    const saveServer = { getProfile: sessionId => profiles[sessionId] };
+    const operations = new OperationsService(path.join(root, 'data'), { info() {}, warn() {} });
+    const mission = operations.save({
+      title: 'Fika squad link', map: 'woods', mode: 'squad', minPlayers: 2, maxPlayers: 2,
+      objectives: [{ id: 'extract', type: 'extract', count: 1 }],
+      rewards: { points: 50, roubles: 0, items: [] }
+    });
+    operations.setStatus(mission.id, 'published');
+    const groupA = operations.accept(mission.id, profileA, 'Alpha', scavA);
+    const groupB = operations.accept(mission.id, profileB, 'Bravo', scavB);
+    assert.strictEqual(groupA.id, groupB.id);
+    operations.setReady(groupA.id, profileA, true);
+    operations.setReady(groupA.id, profileB, true);
+
+    const matches = new Map();
+    const matchService = {
+      matches,
+      getMatch(matchId) { return matches.get(matchId); },
+      getMatchIdByPlayer(playerId) {
+        for (const [matchId, match] of matches) if (match.players.has(playerId)) return matchId;
+        return undefined;
+      },
+      getMatchIdByProfile(sessionId) {
+        const profile = saveServer.getProfile(sessionId);
+        return this.getMatchIdByPlayer(profile.characters.pmc._id) || this.getMatchIdByPlayer(profile.characters.scav._id);
+      },
+      createMatch(data) {
+        const match = { locationData: { Id: data.settings.location }, raidConfig: data.settings, players: new Map() };
+        matches.set(data.serverId, match);
+        this.addPlayerToMatch(data.serverId, data.serverId, { isDead: false });
+        return true;
+      },
+      addPlayerToMatch(matchId, playerId, data) { matches.get(matchId).players.set(playerId, data); },
+      endMatch(matchId, reason) { this.ended = [matchId, reason]; matches.delete(matchId); },
+      deleteMatch(matchId) { matches.delete(matchId); }
+    };
+    const lifecycle = {
+      async startLocalRaid() { return 'started'; },
+      async endLocalRaid() { return 'ended'; }
+    };
+    const container = makeContainer({ SaveServer: saveServer, FikaMatchService: matchService, LocationLifecycleService: lifecycle });
+    const adapter = new Fika243OperationsAdapter({ modDir, operations, logger: { info() {}, warn() {}, debug() {} } });
+    assert.strictEqual(adapter.install(container), true);
+    container.resolve('SaveServer');
+    container.resolve('FikaMatchService');
+    container.resolve('LocationLifecycleService');
+
+    await lifecycle.startLocalRaid('session-a', { location: 'woods', playerSide: 'pmc', serverId: 'woods.pmc.1' });
+    await lifecycle.startLocalRaid('session-b', { location: 'woods', playerSide: 'pmc', serverId: 'woods.pmc.1' });
+    assert.strictEqual(adapter.raidSnapshots.has('pending:' + profileA), true);
+    assert.strictEqual(adapter.raidSnapshots.has('pending:' + profileB), true);
+
+    matchService.createMatch({ serverId: profileA, hostUsername: 'Alpha', settings: { location: 'woods' } });
+    assert.strictEqual(operations.state.groups[0].state, 'forming', 'one Fika player is not enough to start the squad operation');
+    matchService.addPlayerToMatch(profileA, profileB, { isDead: false });
+    const activeGroup = operations.state.groups[0];
+    assert.strictEqual(activeGroup.state, 'in_raid');
+    assert.strictEqual(activeGroup.raidId, profileA);
+    assert.strictEqual(adapter.getStatus().playerJoinHook, true);
+    assert.strictEqual(adapter.raidSnapshots.has(profileA + ':' + profileA), true);
+    assert.strictEqual(adapter.raidSnapshots.has(profileA + ':' + profileB), true);
+    assert.strictEqual(adapter.getRecentEvents(20).some(event => event.type === 'mission_group_linked'), true);
+
+    matchService.endMatch(profileA, 'test end');
+    assert.strictEqual(activeGroup.state, 'review');
+    assert.strictEqual(operations.state.awards.length, 0);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
 function testUnsupportedVersionDoesNotPatch() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'eg-fika-mismatch-'));
   try {
@@ -139,7 +226,7 @@ function testUnsupportedVersionDoesNotPatch() {
   }
 }
 
-Promise.resolve().then(testFika243LifecycleAndAcceptedLootEvidence).then(() => {
+Promise.resolve().then(testFika243LifecycleAndAcceptedLootEvidence).then(testFikaSquadAutoLinkAndPendingSnapshots).then(() => {
   testUnsupportedVersionDoesNotPatch();
   process.stdout.write('Fika 2.4.3 adapter tests passed\\n');
 }).catch(error => { console.error(error); process.exitCode = 1; });
