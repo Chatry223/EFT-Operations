@@ -89,6 +89,23 @@ class SvmConfigService {
         if (String(pkg.version || '') !== '1.11.1' || !/^3\.11(?:\.x)?$/.test(String(pkg.sptVersion || ''))) throw new Error('SVM_VERSION_NOT_VERIFIED');
         const preset = active.preset;
         const changes = [];
+        // Section switches are explicit user-controlled SVM settings; changing a value
+        // while its section is disabled must never silently enable that section.
+        if (input.tradersEnabled !== undefined) {
+            if (typeof input.tradersEnabled !== 'boolean') throw new Error('INVALID_SVM_TRADERS_ENABLED');
+            if (preset.Traders.EnableTraders !== input.tradersEnabled) {
+                preset.Traders.EnableTraders = input.tradersEnabled;
+                changes.push('Traders.EnableTraders');
+            }
+        }
+        if (input.itemsEnabled !== undefined) {
+            if (!isObject(preset.Items) || typeof preset.Items.EnableItems !== 'boolean') throw new Error('SVM_ITEMS_ENABLE_SETTING_MISSING');
+            if (typeof input.itemsEnabled !== 'boolean') throw new Error('INVALID_SVM_ITEMS_ENABLED');
+            if (preset.Items.EnableItems !== input.itemsEnabled) {
+                preset.Items.EnableItems = input.itemsEnabled;
+                changes.push('Items.EnableItems');
+            }
+        }
         const number = (value, min, max, field, integer = false) => {
             if (value === '' || value == null) throw new Error('INVALID_SVM_' + field.toUpperCase());
             const n = Number(value);
