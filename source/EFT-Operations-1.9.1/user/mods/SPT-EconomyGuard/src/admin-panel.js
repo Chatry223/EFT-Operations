@@ -570,14 +570,19 @@ class AdminPanelServer {
             if (req.method === 'GET' && pathname === '/api/operations') return this.send(res, 200, this.requireOperations().list());
             if (req.method === 'GET' && pathname === '/api/operations/awards') return this.send(res, 200, this.requireOperations().state.awards.slice(-500).reverse());
             if (req.method === 'GET' && pathname === '/api/operations/reviews') {
-                const queue = this.requireOperations().reviewQueue();
+                const operations = this.requireOperations();
+                const queue = operations.reviewQueue();
                 const events = this.fikaOperationsAdapter && typeof this.fikaOperationsAdapter.getRecentEvents === 'function'
                     ? this.fikaOperationsAdapter.getRecentEvents(500) : [];
-                return this.send(res, 200, queue.map(group => ({
-                    ...group,
-                    fikaEvidence: events.filter(event => String(event.groupId || '') === String(group.id)
-                        || (!!group.raidId && String(event.matchId || '') === String(group.raidId)))
-                })));
+                return this.send(res, 200, queue.map(group => {
+                    const mission = (operations.state.missions || []).find(item => item.id === group.missionId);
+                    return {
+                        ...group,
+                        missionTitle: mission ? mission.title : group.missionId,
+                        fikaEvidence: events.filter(event => String(event.groupId || '') === String(group.id)
+                            || (!!group.raidId && String(event.matchId || '') === String(group.raidId)))
+                    };
+                }));
             }
             if (req.method === 'GET' && pathname === '/api/operations/fika') return this.send(res, 200, this.fikaOperationsAdapter ? { status: this.fikaOperationsAdapter.getStatus(), events: this.fikaOperationsAdapter.getRecentEvents(150) } : { status: { detected: false, enabled: false, reason: 'OPERATIONS_OR_FIKA_ADAPTER_DISABLED' }, events: [] });
             if (req.method === 'GET' && pathname === '/api/operations/leaderboard') { const o = this.requireOperations(); return this.send(res, 200, Object.keys(o.state.playerStats).map(id => o.getPlayer(id)).sort((a,b) => b.points-a.points).slice(0,200)); }
