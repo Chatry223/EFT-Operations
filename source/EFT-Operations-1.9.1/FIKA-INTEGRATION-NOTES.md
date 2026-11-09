@@ -23,10 +23,10 @@ The upstream Fika Plugin `v1.2.3` source was inspected:
 
 The version-gated adapter activates only when the sibling `fika-server/package.json` reports Fika `2.4.3` and SPT `~3.11`.
 
-- Observes `FikaUpdateCallbacks.handleRaidAddPlayer` and `handlePlayerDied`, validating each profile against the authenticated SPT session's PMC/Scav profiles.
+- Observes `FikaUpdateCallbacks.handleRaidAddPlayer` and `handlePlayerDied`, validating each profile against the authenticated SPT session's PMC/Scav profiles. Player-death reports are retained as `authenticated_client_report` evidence with the in-game display name where available; no killer identity is supplied.
 - Observes `FikaRaidCallbacks.handleRaidCreate` and `handleRaidLeave`; validates the host nickname or member profile against the authenticated account. Fika's synthetic host `serverId` sentinel is handled separately from normal member profile IDs.
 - Observes `FikaMatchService.addPlayerToMatch`. An Operations group is linked only after all accepted, Ready members appear in the same Fika match and the match map equals the mission map. It then calls `OperationsService.startGroup` to move the group into `in_raid`.
-- Observes `FikaMatchService.endMatch` while the match roster is still available, then calls `OperationsService.finishGroup` with the roster/death flags and matching raid-end reports. The group moves to `review` with `verified: false`.
+- Observes `FikaMatchService.endMatch` and direct `deleteMatch` paths while the roster is still available, then calls `OperationsService.finishGroup` with roster/death flags and matching raid-end reports. A per-match dedupe guard prevents double finalization when `endMatch` calls `deleteMatch`; a reused server ID is reset by `createMatch`. The group moves to `review` with `verified: false`.
 - Observes SPT/Fika `LocationLifecycleService.endLocalRaid`, retaining the client-supplied raid-end fields for review with the trust label `untrusted_client_report`.
 - Stores a bounded Fika evidence stream in `SPT-EconomyGuard-Data/operations/fika-events.jsonl`.
 - No automatic points or item rewards are issued from client-originated extraction data or match-end lifecycle evidence.
