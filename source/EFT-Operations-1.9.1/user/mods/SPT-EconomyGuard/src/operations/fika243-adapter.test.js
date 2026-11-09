@@ -111,7 +111,7 @@ lifecycleAdapter.captureRaidEnd('abcdef0123456789abcdef12', { serverId: 'woods.1
 liveMatchService.endMatch('match-live', 'host_left');
 const finishedGroup = ops.state.groups.find(x => x.id === group.id);
 assert.equal(finishedGroup.state, 'review', 'Fika match end must enter manual review, not auto-award');
-assert.equal(finishedGroup.reviewData.evidenceTrust, 'lifecycle_observation_plus_client_report');
+assert.equal(finishedGroup.reviewData.evidenceTrust, 'fika_registry_and_client_reports_unverified');
 assert.deepEqual(finishedGroup.reviewData.aliveProfileIds.sort(), ['abcdef0123456789abcdef11', 'abcdef0123456789abcdef12']);
 assert.deepEqual(finishedGroup.reviewData.extractedProfileIds.sort(), ['abcdef0123456789abcdef11', 'abcdef0123456789abcdef12']);
 assert.equal(ops.state.awards.length, 0, 'untrusted extraction reports must never issue rewards');
