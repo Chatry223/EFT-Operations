@@ -177,7 +177,7 @@ const lootRaidEnd = lifecycleAdapter.captureRaidEnd('abcdef0123456789abcdef11', 
     ] } } }
 });
 assert.equal(lootRaidEnd.lootSnapshotAvailable, true);
-assert.equal(lootRaidEnd.serverProcessedProfileAvailable, true);
+assert.equal(lootRaidEnd.serverProfileAvailable, true);
 assert.equal(lootRaidEnd.reportedLootItemCount, 4);
 assert.equal(lootRaidEnd.reportedLootByTpl['tpl-stack'], 3);
 assert.equal(lootRaidEnd.reportedLootByTpl['tpl-new'], 1);
