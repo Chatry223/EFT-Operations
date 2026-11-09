@@ -48,7 +48,13 @@ The package is a CI-tested server-mod build, not yet a runtime-certified release
 - Fika player registration/create/leave callbacks are bound to the authenticated SPT session. A player's own death flag and extraction/raid-result report still originate from that client; they can populate a manual review record but cannot auto-award.
 - Manual approval requires an evidence reference and explicit administrator confirmation of objectives and all member extractions.
 - No client route can submit mission progress or award requests.
+- Internal server-side raid-event intake now requires a unique `eventId`, checks the event map and trust source, and binds kill / kill-type / collect / visit events to an accepted PMC or Scav member. Duplicate event IDs are idempotent and the stored deduplication list is bounded per raid.
+- This is an input-safety guard, not proof that production kill / collect / visit telemetry is already connected. The Fika 2.4.3 adapter currently creates lifecycle and review evidence; it does not yet emit authoritative kill / loot / zone-visit objective events.
 
 ## Current validation boundary
 
-The dependency-archive verifier passes CRC integrity and exact SHA-256 checks for the target archives. The Windows client build now succeeds on GitHub-hosted Windows: commit `248e5924bc331167a908f050f8eee7a6574dde12`, artifact `13705463291`, DLL SHA-256 `443602390928327e748d6e8d7cc6e810b7d04bf8e0abed9b9d8fe325b0e0d4ef`. This verifies compilation only, not in-game runtime behavior. The adapter links ready groups to Fika matches and moves them to manual review at match end, but it does not yet collect authoritative kill/loot/visit objective progress.
+- Dependency-archive verification checks ZIP CRC integrity and exact SHA-256 fingerprints for the target EFT / BepInEx files.
+- The client project currently targets .NET Framework 4.7.2 / C# 7.3 and references the selected EFT Managed and BepInEx assemblies. A successful compile confirms reference resolution, not that the game runtime will load every API path.
+- Server unit tests and Windows build-helper validation passed on earlier commit `c22445de000ca803c37fab1031347557105e3f88` (28 server tests, 0 failures). The subsequent event-id hardening commits triggered new Actions runs that currently report failure before useful job-step logs are available; do not treat the earlier green run as validation of the newer commits.
+- No in-game EFT runtime test has been completed. Plugin loading, HUD behavior, native Fika host action, mail delivery, and coexistence with SAIN / LootingBots / SVM / LiveFleaPrices still require a backed-up test installation.
+- Fika Item Sending is a separate item-transfer path and is not hooked by this build. If EconomyGuard must cover that route, disable `allowItemSending` in Fika's server configuration until a version-specific interception is implemented and tested.
