@@ -240,8 +240,8 @@ class Fika243OperationsAdapter {
 
         if (typeof target.startLocalRaid === 'function' && !target.__egFika243StartLifecycleHook) {
             const originalStart = target.startLocalRaid;
-            target.startLocalRaid = function (sessionId, request, ...rest) {
-                const result = originalStart.call(this, sessionId, request, ...rest);
+            target.startLocalRaid = async function (sessionId, request, ...rest) {
+                const result = await originalStart.call(this, sessionId, request, ...rest);
                 safe(() => adapter.captureRaidStart(sessionId, request, result));
                 return result;
             };
@@ -250,9 +250,9 @@ class Fika243OperationsAdapter {
 
         if (!target.__egFika243LifecycleHook) {
             const originalEnd = target.endLocalRaid;
-            target.endLocalRaid = function (sessionId, request, ...rest) {
+            target.endLocalRaid = async function (sessionId, request, ...rest) {
                 let result;
-                try { result = originalEnd.call(this, sessionId, request, ...rest); }
+                try { result = await originalEnd.call(this, sessionId, request, ...rest); }
                 finally { safe(() => adapter.captureRaidEnd(sessionId, request)); }
                 return result;
             };
