@@ -15,24 +15,23 @@ Mission / campaign operations and EconomyGuard integration for SPT.
 - `source/EFT-Operations-1.9.1/user/mods/SPT-EconomyGuard`: server mod, admin panel, mission API, Fika adapter and tests.
 - `source/EFT-Operations-1.9.1/client/EFT.Operations.Client`: BepInEx client plugin source and graphical build helper.
 - `.github/workflows/server-checks.yml`: Linux server tests plus Windows PowerShell helper validation.
-- `.github/workflows/build-client.yml`: optional build on a private Windows EFT runner.
+- `source/EscapeFromTarkov_Data.zip` and `source/BepInEx.zip`: build-time dependency archives; the CI verifier checks their ZIP integrity and exact target SHA-256 fingerprints.
+- `.github/workflows/build-client.yml`: dependency verification plus a Windows-hosted client DLL build on pushes (not on pull requests).
 
 ## Build the client plugin with the graphical helper
 
 The source is already committed in this repository. On the Windows machine containing EFT/SPT and BepInEx:
 
 1. Open `source/EFT-Operations-1.9.1/client/EFT.Operations.Client/BUILD-GUI.bat`.
-2. In the window, select the EFT `EscapeFromTarkov_Data/Managed` folder (or the game root).
-3. Select the `BepInEx/core` folder (or the BepInEx root).
+2. Click **Load bundled ZIPs** to extract the verified build references into the local cache, or browse to your installed EFT/BepInEx folders.
+3. Select the **actual installed BepInEx root** in the third field (the folder containing `core` and `plugins`). If the actual EFT and BepInEx paths are selected, the helper can infer this folder.
 4. Click **Build and Install DLL**.
 
-The helper locates Visual Studio MSBuild, validates the required local references, builds Release/net472, installs `EFTOperations.Client.dll` into `BepInEx/plugins/EFTOperations`, and writes a SHA-256 build report. No command-line input is required. It has not yet been executed on the user's Windows machine, so this is a prepared build path, not a claim that the DLL has already been produced.
+The GUI validates exact SHA-256 fingerprints for `Assembly-CSharp.dll`, `Fika.Core.dll` and `spt-common.dll`, checks Fika client `1.2.3.0` and SPT Common `3.11.1.0`, runs MSBuild with NuGet restore, backs up an existing plugin DLL, installs the new DLL into the actual selected `BepInEx/plugins/EFTOperations` folder, and writes a build report. It never installs into the temporary dependency cache.
 
-Visual Studio must include MSBuild and the .NET Framework 4.7.2 targeting pack. Do not copy game/Unity/BepInEx binaries into this public repository.
+Visual Studio/MSBuild and the .NET Framework 4.7.2 targeting pack are required for the local GUI build. The GitHub Actions build uses the same two archives on a Windows-hosted runner and uploads the DLL plus report when the build succeeds.
 
-## Optional GitHub Windows build
-
-The public repository intentionally does not contain EFT or BepInEx assemblies. To enable the optional CI DLL build, configure a private self-hosted Windows runner on the EFT machine with labels `self-hosted`, `Windows`, `X64`, `eft-build`; set Actions variables `EFT_MANAGED_DIR` and `BEPINEX_CORE_DIR`; then set `EFT_BUILD_RUNNER_ENABLED=true`. Until that explicit flag is enabled, the client build job is skipped rather than left queued indefinitely.
+**Binary distribution caution:** the two dependency ZIPs are currently present in this repository as build inputs. They must not be copied into the installable mod package or redistributed as game files. Because EFT assemblies are copyrighted game binaries, confirm you have permission to keep them in a public repository; a private repository or local-only copies are safer.
 
 ## Tested server-mod package
 
@@ -52,4 +51,4 @@ The package is a CI-tested server-mod build, not yet a runtime-certified release
 
 ## Current validation boundary
 
-The latest server CI run, including the Fika callback identity guards, passed static checks and **28 tests, 0 failures**. The Windows PowerShell GUI helper syntax-validation job also passed. The optional GitHub DLL build was skipped because `EFT_BUILD_RUNNER_ENABLED` is not enabled; no DLL artifact exists yet. Neither result replaces a local Windows compile or an in-game SPT 3.11.1 + Fika 2.4.3 runtime test. Mission objective events (for example, AI kill attribution) are not yet authoritatively sourced by this adapter; until that is implemented, approval remains a manual admin decision.
+The dependency-archive verifier now checks CRC integrity and exact SHA-256 fingerprints against the verified target archives. The Windows client build has been enabled on GitHub-hosted Windows runners; its first attempt reached MSBuild but failed because NuGet restore had not been requested. The workflow and GUI were updated to run MSBuild with `/restore`; the next run is the acceptance check. A successful CI compile still does not replace an in-game SPT 3.11.1 + Fika 2.4.3 runtime test. The adapter links ready groups to Fika matches and moves them to manual review at match end, but it does not yet collect authoritative kill/loot/visit objective progress.
