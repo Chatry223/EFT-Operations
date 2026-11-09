@@ -363,9 +363,12 @@ class Fika243OperationsAdapter {
     resolveIdentity(sessionId) {
         const profile = safe(() => this.services.saveServer && this.services.saveServer.getProfile(sessionId), null);
         const characters = object(profile && profile.characters);
-        const pmcId = String(object(characters.pmc)._id || '');
-        const scavId = String(object(characters.scav)._id || '');
-        return { profileId: pmcId || String(sessionId || ''), pmcId, scavId };
+        const pmc = object(characters.pmc);
+        const scav = object(characters.scav);
+        const pmcId = String(pmc._id || '');
+        const scavId = String(scav._id || '');
+        const displayName = String(object(profile && profile.info).Nickname || object(pmc.Info).Nickname || object(scav.Info).Nickname || '').slice(0, 40);
+        return { profileId: pmcId || String(sessionId || ''), pmcId, scavId, displayName };
     }
 
     resolveMatchId(sessionId, identity) {
@@ -394,6 +397,7 @@ class Fika243OperationsAdapter {
             fikaServerVersion: EXPECTED_FIKA_VERSION,
             matchId,
             profileId: member ? String(member.profileId) : identity.profileId,
+            displayName: member ? String(member.displayName || '') : identity.displayName,
             reportedCharacterProfileId: requestedProfileId,
             evidenceTrust: 'authenticated_client_report',
             source: 'FikaUpdateCallbacks.handlePlayerDied',
@@ -416,6 +420,7 @@ class Fika243OperationsAdapter {
             fikaServerVersion: EXPECTED_FIKA_VERSION,
             matchId: matchId ? String(matchId) : null,
             profileId: identity.profileId,
+            displayName: identity.displayName,
             map,
             sptServerId: serverId,
             exitStatus: String(results.result || 'Unknown'),
