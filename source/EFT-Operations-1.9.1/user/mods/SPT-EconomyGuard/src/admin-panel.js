@@ -580,7 +580,7 @@ class AdminPanelServer {
                         ? String(event.groupId) === String(group.id)
                         : (!!group.raidId && String(event.matchId || '') === String(group.raidId)));
                     const raidEnds = fikaEvidence.filter(event => event.type === 'player_raid_end');
-                    const victims = raidEnds.flatMap(event => event.reportedVictims || []);
+                    const victims = raidEnds.flatMap(event => Array.isArray(event.reportedVictims) ? event.reportedVictims : []);
                     const normalizeRole = role => {
                         const value = String(role || '').toLowerCase();
                         if (value.startsWith('pmc')) return 'pmc';
