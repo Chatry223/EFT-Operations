@@ -68,6 +68,8 @@ function fixture() {
         const v5 = JSON.parse(fs.readFileSync(path.join(f.svmDir, 'Presets', 'v5.json'), 'utf8'));
         assert.strictEqual(v6.Traders.TraderMarkup.Skier, 22);
         assert.strictEqual(v6.Items.ItemPriceMult, 1.5);
+        assert.strictEqual(v6.Items.EnableItems, false, 'editing a stored multiplier must not silently enable the Items section');
+        assert.strictEqual(v6.Traders.Fence.EnableFence, false, 'editing Fence values must not silently enable the Fence section');
         assert.strictEqual(v5.Items.ItemPriceMult, 7);
         const backups = path.join(f.dataDir, 'backups', 'svm');
         assert.strictEqual(fs.readdirSync(backups).length, 1);
