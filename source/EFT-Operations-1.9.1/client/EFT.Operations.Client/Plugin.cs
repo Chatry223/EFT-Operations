@@ -515,9 +515,12 @@ namespace EFTOperations.Client
         {
             if (fikaKillHookInstalled) return true;
             Type coopPlayerType = FindLoadedType("Fika.Core.Coop.Players.CoopPlayer");
-            if (coopPlayerType == null) return false;
+            if (coopPlayerType == null || coopPlayerType.BaseType == null) return false;
+            // Patch the EFT Player base implementation, not only Fika's CoopPlayer override.
+            // Fika 1.2.3 uses CoopPlayer for the host/local player while AI actors can be native EFT Player instances.
+            Type playerType = coopPlayerType.BaseType;
             MethodInfo target = null;
-            foreach (MethodInfo candidate in coopPlayerType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+            foreach (MethodInfo candidate in playerType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
             {
                 if (candidate.Name == "OnBeenKilledByAggressor" && candidate.GetParameters().Length == 4)
                 {
@@ -532,7 +535,7 @@ namespace EFTOperations.Client
                 fikaHarmony = new Harmony("com.eft.operations.client.fika-host-evidence");
                 fikaHarmony.Patch(target, null, new HarmonyMethod(postfix), null, null);
                 fikaKillHookInstalled = true;
-                Logger.LogInfo("Fika 1.2.3 host kill telemetry hook installed on CoopPlayer.OnBeenKilledByAggressor.");
+                Logger.LogInfo("Fika 1.2.3 host kill telemetry hook installed on EFT Player.OnBeenKilledByAggressor.");
                 return true;
             }
             catch (Exception ex)
