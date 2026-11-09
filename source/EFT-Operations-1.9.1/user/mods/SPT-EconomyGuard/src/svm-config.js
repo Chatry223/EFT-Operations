@@ -61,8 +61,12 @@ class SvmConfigService {
                 compatible,
                 activePreset: active.selected,
                 presetNotes: String(active.preset.PresetNotes || ''),
+                tradersEnabled: traders.EnableTraders === true,
+                traderMarkupActive: traders.EnableTraders === true,
                 traderMarkup: Object.fromEntries(Object.entries(markup).filter(([key, value]) => TRADER_KEYS.has(key) && Number.isFinite(Number(value))).map(([key, value]) => [key, numeric(value)])),
                 traderSell: Object.fromEntries(Object.entries(sell).filter(([key, value]) => TRADER_KEYS.has(key) && Number.isFinite(Number(value))).map(([key, value]) => [key, numeric(value)])),
+                itemsEnabled: !!(active.preset.Items && active.preset.Items.EnableItems === true),
+                itemPriceMultiplierActive: !!(active.preset.Items && active.preset.Items.EnableItems === true),
                 itemPriceMultiplier: active.preset.Items && numeric(active.preset.Items.ItemPriceMult),
                 fence: {
                     priceMultiplier: numeric(fence.PriceMult),
