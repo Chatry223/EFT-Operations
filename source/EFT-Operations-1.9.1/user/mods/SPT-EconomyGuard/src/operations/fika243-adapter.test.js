@@ -134,7 +134,21 @@ class FakeFikaMatchService {
 }
 const liveMatchService = new FakeFikaMatchService();
 lifecycleAdapter.services.fikaMatchService = liveMatchService;
-lifecycleAdapter.services.saveServer = { getProfile(sessionId) { return { characters: { pmc: { _id: sessionId }, scav: { _id: sessionId === 'abcdef0123456789abcdef12' ? 'abcdef0123456789abcdef13' : 'abcdef0123456789abcdef14' } } }; } };
+const raidProfiles = new Map();
+const profileFor = (sessionId, pmcItems = [], scavItems = []) => ({
+    characters: {
+        pmc: { _id: sessionId, Info: { Nickname: 'PMC-' + sessionId.slice(-2) }, Inventory: { items: pmcItems } },
+        scav: { _id: sessionId === 'abcdef0123456789abcdef12' ? 'abcdef0123456789abcdef13' : 'abcdef0123456789abcdef14',
+            Info: { Nickname: 'Scav-' + sessionId.slice(-2) }, Inventory: { items: scavItems } }
+    }
+});
+raidProfiles.set('abcdef0123456789abcdef11', profileFor('abcdef0123456789abcdef11', [
+    { _id: 'pre-item', _tpl: 'tpl-stack', upd: { StackObjectsCount: 2 } }
+]));
+raidProfiles.set('abcdef0123456789abcdef12', profileFor('abcdef0123456789abcdef12', [], [
+    { _id: 'scav-pre', _tpl: 'tpl-scav', upd: { StackObjectsCount: 1 } }
+]));
+lifecycleAdapter.services.saveServer = { getProfile(sessionId) { return raidProfiles.get(sessionId) || null; } };
 assert.equal(lifecycleAdapter.patchMatchService(liveMatchService), true);
 assert.equal(ops.state.groups.find(x => x.id === group.id).state, 'forming', 'Fika 2.4.3 first registers the host under the synthetic serverId; this must not count as the host PMC profile');
 liveMatchService.addPlayerToMatch('match-live', 'abcdef0123456789abcdef11', { isDead: false });
@@ -144,7 +158,27 @@ assert.equal(ops.state.groups.find(x => x.id === group.id).state, 'in_raid', 'al
 assert.equal(ops.state.groups.find(x => x.id === group.id).raidId, 'match-live');
 assert.deepEqual(ops.state.groups.find(x => x.id === group.id).members.map(x => x.scavProfileId), [null, 'abcdef0123456789abcdef13']);
 ops.recordRaidEvent(group.id, { type: 'extract', amount: 1, map: 'woods', source: 'fika-server-adapter', evidenceTrust: 'server_verified' });
-lifecycleAdapter.captureRaidEnd('abcdef0123456789abcdef11', { serverId: 'woods.1', results: { result: 'Survived', exitName: 'Outskirts' } });
+assert.ok(lifecycleAdapter.captureRaidStart('abcdef0123456789abcdef11', { playerSide: 'pmc', location: 'woods' }, { location: 'woods' }));
+assert.ok(lifecycleAdapter.captureRaidStart('abcdef0123456789abcdef12', { playerSide: 'savage', location: 'woods' }, { location: 'woods' }));
+raidProfiles.set('abcdef0123456789abcdef11', profileFor('abcdef0123456789abcdef11', [
+    { _id: 'pre-item', _tpl: 'tpl-stack', upd: { StackObjectsCount: 5, SpawnedInSession: true } },
+    { _id: 'new-item', _tpl: 'tpl-new', upd: { StackObjectsCount: 1, SpawnedInSession: true } }
+]));
+raidProfiles.set('abcdef0123456789abcdef12', profileFor('abcdef0123456789abcdef12', [], [
+    { _id: 'scav-pre', _tpl: 'tpl-scav', upd: { StackObjectsCount: 1 } }
+]));
+const lootRaidEnd = lifecycleAdapter.captureRaidEnd('abcdef0123456789abcdef11', {
+    serverId: 'woods.1',
+    results: { result: 'Survived', exitName: 'Outskirts', profile: { Inventory: { items: [
+        { _id: 'pre-item', _tpl: 'tpl-stack', upd: { StackObjectsCount: 5, SpawnedInSession: true } },
+        { _id: 'new-item', _tpl: 'tpl-new', upd: { StackObjectsCount: 1, SpawnedInSession: true } }
+    ] } } }
+});
+assert.equal(lootRaidEnd.lootSnapshotAvailable, true);
+assert.equal(lootRaidEnd.serverProcessedProfileAvailable, true);
+assert.equal(lootRaidEnd.reportedLootItemCount, 4);
+assert.equal(lootRaidEnd.reportedLootByTpl['tpl-stack'], 3);
+assert.equal(lootRaidEnd.reportedLootByTpl['tpl-new'], 1);
 lifecycleAdapter.captureRaidEnd('abcdef0123456789abcdef12', { serverId: 'woods.1', results: { result: 'Survived', exitName: 'Outskirts' } });
 liveMatchService.endMatch('match-live', 'host_left');
 const finishedGroup = ops.state.groups.find(x => x.id === group.id);
@@ -171,7 +205,7 @@ const statusInstances = {
     FikaUpdateCallbacks: { handleRaidAddPlayer() {}, handlePlayerDied() {} },
     FikaRaidCallbacks: { handleRaidCreate() {}, handleRaidLeave() {} },
     FikaMatchService: statusMatchService,
-    LocationLifecycleService: { endLocalRaid() {} }
+    LocationLifecycleService: { startLocalRaid() { return { location: 'woods' }; }, endLocalRaid() {} }
 };
 const statusContainer = {
     afterResolution() {},
