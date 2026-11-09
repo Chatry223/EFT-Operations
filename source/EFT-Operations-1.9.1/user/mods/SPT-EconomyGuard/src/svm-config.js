@@ -46,7 +46,7 @@ class SvmConfigService {
             const pkgFile = path.join(this.svmDir, 'package.json');
             const pkg = fs.existsSync(pkgFile) ? this.readJson(pkgFile) : {};
             const active = this.resolveActivePreset();
-            const compatible = String(pkg.version || '') === '1.11.1' && /^3\\.11(?:\\.x)?$/.test(String(pkg.sptVersion || ''));
+            const compatible = String(pkg.version || '') === '1.11.1' && /^3\.11(?:\.x)?$/.test(String(pkg.sptVersion || ''));
             const traders = active.preset.Traders;
             const markup = isObject(traders.TraderMarkup) ? traders.TraderMarkup : {};
             const sell = isObject(traders.TraderSell) ? traders.TraderSell : {};
@@ -81,7 +81,7 @@ class SvmConfigService {
         if (!isObject(input)) throw new Error('INVALID_SVM_UPDATE');
         const active = this.resolveActivePreset();
         const pkg = this.readJson(path.join(this.svmDir, 'package.json'));
-        if (String(pkg.version || '') !== '1.11.1' || !/^3\\.11(?:\\.x)?$/.test(String(pkg.sptVersion || ''))) throw new Error('SVM_VERSION_NOT_VERIFIED');
+        if (String(pkg.version || '') !== '1.11.1' || !/^3\.11(?:\.x)?$/.test(String(pkg.sptVersion || ''))) throw new Error('SVM_VERSION_NOT_VERIFIED');
         const preset = active.preset;
         const changes = [];
         const number = (value, min, max, field, integer = false) => {
