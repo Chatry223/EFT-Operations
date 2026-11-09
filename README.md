@@ -36,7 +36,7 @@ The public repository intentionally does not contain EFT or BepInEx assemblies. 
 
 ## Tested server-mod package
 
-The latest successful Actions run publishes an installable archive named `EFT-Operations-ServerMod-<commit>`. Extract it into the SPT server root so the included `user/mods/SPT-EconomyGuard` path is preserved. Stop the SPT server first and back up the existing `user/mods/SPT-EconomyGuard` folder; the separate `SPT-EconomyGuard-Data` directory contains live server data and is not part of the package. This is one updated server mod, not a second SPT server installation. The CI package includes a ZIP integrity check and SHA-256 file.
+The latest successful Actions run publishes an installable archive named `EFT-Operations-ServerMod-<commit>`. Download the Actions artifact ZIP and extract it once; inside it is `SPT-EconomyGuard-1.9.1-<commit>.zip` plus its SHA-256 file. Extract that inner mod ZIP into the SPT server root so the included `user/mods/SPT-EconomyGuard` path is preserved. Stop the SPT server first and back up the existing `user/mods/SPT-EconomyGuard` folder; the separate `SPT-EconomyGuard-Data` directory contains live server data and is not part of the package. This is one updated server mod, not a second SPT server installation. The CI package includes a ZIP integrity check and SHA-256 file.
 
 The package is a CI-tested server-mod build, not yet a runtime-certified release. Validate it on a backed-up test server before replacing the live installation.
 
