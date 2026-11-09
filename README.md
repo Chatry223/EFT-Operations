@@ -39,8 +39,8 @@ The workflow passes these to MSBuild as `GameManagedDir` and `BepInExCoreDir`. A
 
 ## Current repository status
 
-The CI bootstrap and build-readiness audit are committed. The 1.9.1 source bundle has been located in the user's ChatGPT Library and validated locally, but its source tree is **not yet committed** to this repository. Consequently no CI test run or client DLL artifact has been produced yet.
+The CI bootstrap and build-readiness audit are committed. The 1.9.1 source bundle has been located in the user's ChatGPT Library and validated locally, but its source tree is **not yet committed** to this repository. The workflow now supports a simple browser upload: create the `source` folder in GitHub and upload `EFT-Operations-1.9.1.zip` as `source/EFT-Operations-1.9.1.zip`. CI expands this source-only archive automatically; no command line is needed for this import step.
 
-The local source checks already executed successfully: `npm run check` and `npm test` (26 passed, 0 failed). These do not replace the Windows DLL build or in-game runtime validation.
+The local source checks already executed successfully: `npm run check` and `npm test` (26 passed, 0 failed). These do not replace the GitHub CI run, Windows DLL build or in-game runtime validation.
 
 See [Compatibility and Build Readiness](docs/COMPATIBILITY-AND-BUILD-READINESS.md) for the verified archive inventory, reference mapping, audit findings and remaining work.
