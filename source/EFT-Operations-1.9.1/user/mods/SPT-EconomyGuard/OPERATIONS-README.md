@@ -41,7 +41,7 @@ Fika 2.4.3 uses `serverId` as a synthetic host player key when creating a match;
 ## Rewards
 
 - Approved points are immediately credited to the Operations points/rank ledger.
-- Rouble and item rewards are recorded as \`pending_delivery\`; this version does not mutate player inventory or automatically send reward mail. Do not advertise rouble/item delivery as active until the SPT inventory/mail delivery adapter is implemented and tested.
+- Rouble and item rewards are delivered as SPT system-mail attachments after admin approval. Stackable items are split using the SPT template stack limit. Failed or interrupted deliveries move to `delivery_attention_required`; they are not retried automatically, preventing duplicate mail. Admin must reconcile that state manually.
 - Award keys are idempotent per mission/group/player, preventing duplicate point awards.
 
 ## Storage and upgrade
@@ -60,7 +60,7 @@ The client source is at \`client/EFT.Operations.Client\`. Double-click \`BUILD-G
 
 The latest GitHub Actions server run completed:
 - Static checks: PASS
-- Unit tests: 27 passed, 0 failed
+- Unit tests: 28 passed, 0 failed
 - Windows PowerShell build-helper syntax validation: PASS
 - Server mod ZIP integrity and expected install path: PASS
 
