@@ -3,6 +3,7 @@ using BepInEx.Configuration;
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Collections;
 using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
@@ -24,6 +25,7 @@ namespace EFTOperations.Client
         private float nextRefresh;
         private readonly HashSet<string> knownMissionIds = new HashSet<string>();
         private bool hasInitialMissionSync;
+        private bool fikaStartRequested;
         private string notificationText = String.Empty;
         private float notificationUntil;
 
@@ -147,6 +149,134 @@ namespace EFTOperations.Client
             }
         }
 
+        private bool IsLocalSquadLeader()
+        {
+            if (playerState.group == null || playerState.group.members == null) return false;
+            foreach (MemberDto member in playerState.group.members) if (member.isLeader) return true;
+            return false;
+        }
+
+        private void StartFikaHost()
+        {
+            if (!playerState.canStart || !IsLocalSquadLeader())
+            {
+                status = "Only the squad leader can start after every required operator is ready.";
+                return;
+            }
+            try
+            {
+                string fikaVersion = GetFikaPluginVersion();
+                if (fikaVersion != "2.4.3")
+                {
+                    status = "Fika 2.4.3 is required for the operation host bridge. Detected: " + (fikaVersion ?? "not loaded");
+                    return;
+                }
+
+                Type scriptType = FindLoadedType("Fika.Core.UI.Custom.MatchMakerUIScript");
+                if (scriptType == null)
+                {
+                    status = "Fika host screen not found. Select the mission map and time, continue to Fika's host screen, then open Operations.";
+                    return;
+                }
+
+                UnityEngine.Object[] components = Resources.FindObjectsOfTypeAll(scriptType);
+                foreach (UnityEngine.Object component in components)
+                {
+                    if (component == null) continue;
+                    object fikaUi = ReadMember(component, "_fikaMatchMakerUi");
+                    object raidSettings = ReadMember(component, "RaidSettings");
+                    if (fikaUi == null || raidSettings == null) continue;
+
+                    object selectedLocation = ReadMember(raidSettings, "SelectedLocation");
+                    string selectedMap = ReadMember(selectedLocation, "_Id") as string;
+                    if (String.IsNullOrWhiteSpace(selectedMap)) selectedMap = ReadMember(selectedLocation, "Id") as string;
+                    if (String.IsNullOrWhiteSpace(selectedMap) || !String.Equals(selectedMap, playerState.mission == null ? "" : playerState.mission.map, StringComparison.OrdinalIgnoreCase))
+                    {
+                        status = "Selected EFT map does not match the operation map (" + (playerState.mission == null ? "unknown" : playerState.mission.map) + "). Return and select the required map.";
+                        return;
+                    }
+
+                    object dedicatedToggle = ReadMember(fikaUi, "DedicatedToggle");
+                    object dedicatedValue = ReadMember(dedicatedToggle, "isOn");
+                    if (dedicatedValue is bool && (bool)dedicatedValue)
+                    {
+                        status = "Dedicated/headless hosting is not supported by this one-click client host action. Turn off Dedicated Host in Fika.";
+                        return;
+                    }
+
+                    object startButton = ReadMember(fikaUi, "StartButton");
+                    object active = ReadMember(ReadMember(startButton, "gameObject"), "activeInHierarchy");
+                    object interactable = ReadMember(startButton, "interactable");
+                    if (startButton == null || (active is bool && !(bool)active) || (interactable is bool && !(bool)interactable))
+                    {
+                        status = "Fika Start button is not currently available.";
+                        return;
+                    }
+                    object onClick = ReadMember(startButton, "onClick");
+                    MethodInfo invoke = onClick == null ? null : onClick.GetType().GetMethod("Invoke", Type.EmptyTypes);
+                    if (invoke == null)
+                    {
+                        status = "Could not resolve Fika's native Start button event.";
+                        return;
+                    }
+
+                    // Invoke the exact Fika 2.4.3 native Start button listener. This preserves
+                    // Fika's Force IP validation, match creation, and normal EFT transition.
+                    invoke.Invoke(onClick, null);
+                    fikaStartRequested = true;
+                    status = "Fika host start requested. Waiting for the native Fika match to appear.";
+                    return;
+                }
+                status = "Fika host UI is not active. Open the native Fika Host Raid screen first.";
+            }
+            catch (Exception ex)
+            {
+                status = "Fika host bridge failed safely: " + ex.GetBaseException().Message;
+                Logger.LogWarning(status);
+            }
+        }
+
+        private static string GetFikaPluginVersion()
+        {
+            try
+            {
+                Type chainloader = typeof(BaseUnityPlugin).Assembly.GetType("BepInEx.Bootstrap.Chainloader");
+                object pluginInfos = ReadMember(chainloader, "PluginInfos");
+                if (pluginInfos is IDictionary)
+                {
+                    object pluginInfo = ((IDictionary)pluginInfos)["com.fika.core"];
+                    object metadata = ReadMember(pluginInfo, "Metadata");
+                    object version = ReadMember(metadata, "Version");
+                    return version == null ? null : version.ToString();
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        private static Type FindLoadedType(string fullName)
+        {
+            foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                Type found = assembly.GetType(fullName, false);
+                if (found != null) return found;
+            }
+            return null;
+        }
+
+        private static object ReadMember(object instance, string name)
+        {
+            if (instance == null) return null;
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
+            Type type = instance as Type ?? instance.GetType();
+            FieldInfo field = type.GetField(name, flags);
+            if (field != null) return field.GetValue(instance is Type ? null : instance);
+            PropertyInfo property = type.GetProperty(name, flags);
+            if (property != null && property.GetIndexParameters().Length == 0)
+                return property.GetValue(instance is Type ? null : instance, null);
+            return null;
+        }
+
         private void Accept(string missionId)
         {
             StartCoroutine(Request("/client/eft/operations/accept", "{\"missionId\":\"" + Escape(missionId) + "\"}", delegate(string body)
@@ -215,13 +345,25 @@ namespace EFTOperations.Client
 
             if (playerState.group != null)
             {
-                GUILayout.Label("YOUR SQUAD  ·  " + playerState.group.state.ToUpperInvariant(), HeaderStyle());
-                foreach (MemberDto member in playerState.group.members)
-                    GUILayout.Label((member.ready ? "[READY] " : "[WAIT]  ") + member.displayName, SmallStyle());
+                GroupDto group = playerState.group;
+                int memberCount = group.members == null ? 0 : group.members.Length;
+                int readyCount = group.readyCount;
+                GUILayout.Label("YOUR SQUAD  ·  " + group.state.ToUpperInvariant(), HeaderStyle());
+                GUILayout.Label(memberCount + " / " + group.maxPlayers + " OPERATORS  ·  " + readyCount + " READY  ·  MINIMUM " + group.minPlayers, SmallStyle());
+                if (group.members != null) foreach (MemberDto member in group.members)
+                    GUILayout.Label((member.isLeader ? "[SQUAD LEADER] " : "") + (member.ready ? "[READY] " : "[WAITING] ") + member.displayName, SmallStyle());
+                if (group.state == "forming" && playerState.canStart && IsLocalSquadLeader())
+                {
+                    GUILayout.Label("All required operators are ready. Continue through EFT's map/time selection and Fika host screen.", SmallStyle());
+                    GUI.enabled = !fikaStartRequested;
+                    if (GUILayout.Button(fikaStartRequested ? "FIKA HOST REQUEST SENT" : "START OPERATION THROUGH FIKA", GUILayout.Height(38f)))
+                        StartFikaHost();
+                    GUI.enabled = true;
+                }
                 GUILayout.BeginHorizontal();
                 if (GUILayout.Button("READY", GUILayout.Height(32f))) Ready(true);
                 if (GUILayout.Button("NOT READY", GUILayout.Height(32f))) Ready(false);
-                GUI.enabled = playerState.group.state == "forming";
+                GUI.enabled = group.state == "forming";
                 if (GUILayout.Button("LEAVE SQUAD", GUILayout.Height(32f))) Leave();
                 GUI.enabled = true;
                 GUILayout.EndHorizontal();
@@ -388,13 +530,13 @@ namespace EFTOperations.Client
     }
 
     [Serializable] internal class MissionListResponse { public bool ok; public string error; public MissionDto[] missions; }
-    [Serializable] internal class PlayerStateResponse { public bool ok; public string error; public PlayerDto player; public GroupDto group; public MissionDto mission; }
+    [Serializable] internal class PlayerStateResponse { public bool ok; public string error; public bool canStart; public PlayerDto player; public GroupDto group; public MissionDto mission; }
     [Serializable] internal class ActionResponse { public bool ok; public string error; public GroupDto group; public bool canStart; }
     [Serializable] internal class PlayerDto { public int points; public string rank; }
     [Serializable] internal class MissionDto { public string id; public string title; public string description; public BriefingDto briefing; public RewardDto rewards; public string map; public string mode; public int minPlayers; public int maxPlayers; public ObjectiveDto[] objectives; }
     [Serializable] internal class BriefingDto { public string kind; public string media; public string body; }
     [Serializable] internal class RewardDto { public int points; public int roubles; }
     [Serializable] internal class ObjectiveDto { public string id; public string type; public string target; public int count; public bool required; }
-    [Serializable] internal class GroupDto { public string id; public string missionId; public string state; public MemberDto[] members; }
-    [Serializable] internal class MemberDto { public string displayName; public bool ready; }
+    [Serializable] internal class GroupDto { public string id; public string missionId; public string state; public int minPlayers; public int maxPlayers; public int readyCount; public MemberDto[] members; }
+    [Serializable] internal class MemberDto { public string displayName; public bool ready; public bool isLeader; }
 }
