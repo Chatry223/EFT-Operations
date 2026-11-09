@@ -454,6 +454,48 @@ class Fika243OperationsAdapter {
         const matchId = this.resolveMatchId(sessionId, identity);
         const serverId = String(object(request).serverId || '');
         const map = serverId.split('.')[0] || '';
+        const profile = object(results.profile);
+        const eftStats = object(object(profile.Stats).Eft);
+        const reportedVictims = Array.isArray(eftStats.Victims) ? eftStats.Victims.slice(0, 100) : [];
+        const deathReports = matchId
+            ? this.getRecentEvents(500).filter(item => item.type === 'fika_player_died' && String(item.matchId || '') === String(matchId))
+            : [];
+        const victims = reportedVictims.map(victim => {
+            const victimProfileId = String(object(victim).ProfileId || '');
+            const role = String(object(victim).Role || '').slice(0, 40);
+            return {
+                profileId: victimProfileId,
+                name: String(object(victim).Name || '').slice(0, 48),
+                role,
+                side: String(object(victim).Side || '').slice(0, 20),
+                level: Number.isFinite(Number(object(victim).Level)) ? Number(victim.Level) : null,
+                distance: Number.isFinite(Number(object(victim).Distance)) ? Number(victim.Distance) : null,
+                weapon: String(object(victim).Weapon || '').slice(0, 80),
+                location: String(object(victim).Location || '').slice(0, 40),
+                corroboratedByFikaDeathReport: !!victimProfileId && deathReports.some(report =>
+                    String(report.profileId || '') === victimProfileId ||
+                    String(report.reportedCharacterProfileId || '') === victimProfileId)
+            };
+        });
+        const killCountsByRole = {};
+        for (const victim of victims) {
+            const role = victim.role || 'unknown';
+            killCountsByRole[role] = (killCountsByRole[role] || 0) + 1;
+        }
+        const counters = object(eftStats.SessionCounters);
+        const counterItems = Array.isArray(counters.Items) ? counters.Items.slice(0, 80).map(item => ({
+            key: Array.isArray(object(item).Key) ? item.Key.map(value => String(value).slice(0, 40)).slice(0, 6) : [],
+            value: Number.isFinite(Number(object(item).Value)) ? Number(item.Value) : 0
+        })) : [];
+        const foundInRaidItems = Array.isArray(eftStats.FoundInRaidItems) ? eftStats.FoundInRaidItems.slice(0, 100).map(item => ({
+            questId: String(object(item).QuestId || '').slice(0, 40),
+            itemId: String(object(item).ItemId || '').slice(0, 40)
+        })) : [];
+        const droppedQuestItems = Array.isArray(eftStats.DroppedItems) ? eftStats.DroppedItems.slice(0, 100).map(item => ({
+            questId: String(object(item).QuestId || '').slice(0, 40),
+            itemId: String(object(item).ItemId || '').slice(0, 40),
+            zoneId: String(object(item).ZoneId || '').slice(0, 60)
+        })) : [];
         const event = {
             eventId: `${Date.now()}-${Math.random().toString(16).slice(2, 10)}`,
             type: 'player_raid_end',
@@ -467,6 +509,13 @@ class Fika243OperationsAdapter {
             exitStatus: String(results.result || 'Unknown'),
             exitName: String(results.exitName || ''),
             playTimeSeconds: Number.isFinite(Number(results.playTime)) ? Number(results.playTime) : null,
+            reportedVictimCount: victims.length,
+            reportedVictims: victims,
+            reportedKillCountsByRole: killCountsByRole,
+            corroboratedVictimCount: victims.filter(victim => victim.corroboratedByFikaDeathReport).length,
+            reportedSessionCounters: counterItems,
+            reportedFoundInRaidQuestItems: foundInRaidItems,
+            reportedDroppedQuestItems: droppedQuestItems,
             evidenceTrust: 'untrusted_client_report',
             rewardEligible: false
         };
