@@ -90,10 +90,14 @@
           const summary = raidEnds.length
             ? raidEnds.length + ' raid reports · ' + victimCount + ' victims · ' + corroboratedCount + ' Fika corroborated · ' + lootCount + ' accepted loot units · ' + deathReports + ' death reports'
             : events.length + ' Fika events · ' + deathReports + ' death reports';
+          const objectiveRows = Array.isArray(g.objectiveEvidence) ? g.objectiveEvidence : [];
+          const objectiveHtml = objectiveRows.length
+            ? '<details><summary>' + esc((g.reviewData?.requiredDone ? 'Verified complete' : 'Not server-verified') + ' · ' + objectiveRows.length + ' objectives') + '</summary><pre>' + esc(JSON.stringify(objectiveRows, null, 2)) + '</pre></details>'
+            : (g.reviewData?.requiredDone ? 'Verified complete' : 'Not server-verified');
           const evidence = events.length
-            ? '<details><summary>' + esc(summary) + '</summary><pre>' + esc(JSON.stringify(safeEvidence, null, 2)) + '</pre></details>'
+            ? '<details><summary>' + esc(summary) + '</summary><pre>' + esc(JSON.stringify({ raidEvents: safeEvidence, objectiveEvidence: objectiveRows }, null, 2)) + '</pre></details>'
             : 'No linked Fika evidence';
-          return `<tr><td class="mono">${esc(String(g.id).slice(0, 12))}</td><td>${esc(g.missionTitle || g.missionId)}</td><td>${(g.members || []).map(m => esc(m.displayName || 'Unknown operator')).join(', ')}</td><td>${g.reviewData?.requiredDone ? 'Complete' : 'Incomplete'}</td><td>${evidence}</td><td>${dateValue(g.finishedAt)}</td><td><button class="action-btn" data-op-review="approve" data-group="${esc(g.id)}">Approve</button> <button class="action-btn danger" data-op-review="deny" data-group="${esc(g.id)}">Deny</button></td></tr>`;
+          return `<tr><td class="mono">${esc(String(g.id).slice(0, 12))}</td><td>${esc(g.missionTitle || g.missionId)}</td><td>${(g.members || []).map(m => esc(m.displayName || 'Unknown operator')).join(', ')}</td><td>${objectiveHtml}</td><td>${evidence}</td><td>${dateValue(g.finishedAt)}</td><td><button class="action-btn" data-op-review="approve" data-group="${esc(g.id)}">Approve</button> <button class="action-btn danger" data-op-review="deny" data-group="${esc(g.id)}">Deny</button></td></tr>`;
         }).join('');
         $('#opReviews').innerHTML = `<div class="table-wrap"><table><thead><tr><th>GROUP</th><th>MISSION</th><th>MEMBERS</th><th>OBJECTIVES</th><th>FIKA EVIDENCE</th><th>SUBMITTED</th><th>ACTION</th></tr></thead><tbody>${rowHtml || '<tr><td colspan="7" class="empty">No raids waiting for review.</td></tr>'}</tbody></table></div>`;
       } catch (e) { toast(e.message, true); }
