@@ -681,7 +681,8 @@ class Fika243OperationsAdapter {
                         map: mission.map,
                         matchId: String(matchId || ''),
                         source: 'spt-server-adapter',
-                        evidenceTrust: 'server_verified'
+                        acceptedBySpt: true,
+                        evidenceTrust: 'spt_accepted_client_delta'
                     });
                 } catch (err) {
                     this.log('warn', `Could not record SPT-accepted loot objective for ${tpl}: ${err.message}`);
