@@ -93,8 +93,10 @@
           const objectiveRows = Array.isArray(g.objectiveEvidence) ? g.objectiveEvidence : [];
           const hostEvidence = Array.isArray(g.hostEvidence) ? g.hostEvidence : [];
           const hasHostAttested = objectiveRows.some(item => Number(item.hostAttestedCount || 0) > 0);
+          const hasSptAccepted = objectiveRows.some(item => Number(item.sptAcceptedCount || 0) > 0);
           const objectiveLabel = hasHostAttested ? 'Host-attested progress · admin review required'
-            : (g.reviewData?.requiredDone ? 'Objective counts met · outcome review required' : 'Objectives incomplete');
+            : hasSptAccepted ? 'SPT-accepted client inventory delta · admin review required'
+              : (g.reviewData?.requiredDone ? 'Objective counts met · outcome review required' : 'Objectives incomplete');
           const objectiveHtml = objectiveRows.length
             ? '<details><summary>' + esc(objectiveLabel + ' · ' + objectiveRows.length + ' objectives') + '</summary><pre>' + esc(JSON.stringify(objectiveRows, null, 2)) + '</pre></details>'
             : objectiveLabel;
