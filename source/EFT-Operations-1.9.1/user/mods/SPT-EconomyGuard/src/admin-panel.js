@@ -72,6 +72,7 @@ class AdminPanelServer {
         this.operations = this.serverContext.operations || null;
         this.fikaOperationsAdapter = this.serverContext.fikaOperationsAdapter || null;
         this.rewardDelivery = this.serverContext.rewardDelivery || null;
+        this.svmConfig = this.serverContext.svmConfig || null;
         this.dataDir = guard.storage.baseDir;
         this.webDir = path.join(modDir, 'web');
         this.tokenFile = path.join(this.dataDir, 'admin.token');
@@ -612,6 +613,7 @@ class AdminPanelServer {
             if (req.method === 'GET' && pathname === '/api/access') return this.send(res, 200, this.getAccessData());
             if (req.method === 'GET' && pathname === '/api/online') return this.send(res, 200, this.getOnlinePlayers());
             if (req.method === 'GET' && pathname === '/api/board') return this.send(res, 200, this.requireBoard().getAdminState());
+            if (req.method === 'GET' && pathname === '/api/svm') return this.send(res, 200, this.svmConfig ? this.svmConfig.getStatus() : { installed: false, available: false, reason: 'SVM_SERVICE_UNAVAILABLE' });
             if (req.method === 'GET' && pathname === '/api/operations') return this.send(res, 200, this.requireOperations().list());
             if (req.method === 'GET' && pathname === '/api/operations/awards') {
                 const operations = this.requireOperations();
@@ -747,6 +749,12 @@ class AdminPanelServer {
             });
             if (req.method === 'POST') {
                 const body = await this.readBody(req);
+                if (pathname === '/api/svm/update') {
+                    if (!this.svmConfig) throw new Error('SVM_SERVICE_UNAVAILABLE');
+                    const result = this.svmConfig.update(body);
+                    this.log('info', `SVM active preset ${result.status.activePreset || 'unknown'} updated: ${(result.changes || []).join(', ') || 'no changes'}`);
+                    return this.send(res, 200, result);
+                }
                 if (pathname === '/api/operations/save') return this.send(res, 200, { ok: true, mission: this.requireOperations().save(body) });
                 if (pathname === '/api/operations/publish') { const o = this.requireOperations(); const draft = o.get(body.id); if (!draft || draft.status !== 'draft') throw new Error('MISSION_NOT_FOUND'); let announcement = null; try { if (this.board) announcement = this.board.saveNews({ title: draft.title, text: draft.description.slice(0,400), kind: 'event', enabled: true, startsAt: draft.startAt, endsAt: draft.endAt, media: { source: 'none', value: '' } }); if (announcement) o.setAnnouncementId(body.id, announcement.id); const mission = o.setStatus(body.id, 'published'); return this.send(res, 200, { ok: true, mission, announcement }); } catch (err) { if (announcement && this.board) { try { this.board.deleteNews(announcement.id); } catch (_) { /* retain original publish error */ } try { o.setAnnouncementId(body.id, null); } catch (_) { /* retain original publish error */ } } throw err; } }
                 if (pathname === '/api/operations/close') { const o = this.requireOperations(); const current = o.get(body.id); if (!current) throw new Error('MISSION_NOT_FOUND'); let event = null; if (this.board && current.announcementId && this.board.store) event = this.board.store.listNews().find(x => x.id === current.announcementId) || null; if (event) this.board.saveNews({ ...event, enabled: false }); try { const mission = o.setStatus(body.id, 'closed'); return this.send(res, 200, { ok: true, mission }); } catch (err) { if (event) { try { this.board.saveNews({ ...event, enabled: true }); } catch (_) { /* preserve original lifecycle error */ } } throw err; } }
