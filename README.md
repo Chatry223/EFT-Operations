@@ -45,4 +45,4 @@ The public repository intentionally does not contain EFT or BepInEx assemblies. 
 
 ## Current validation boundary
 
-The latest server CI run for the Scav-aware Fika lifecycle bridge passed static checks and **27 tests, 0 failures**. The PowerShell GUI helper has a Windows syntax-validation job. Neither result replaces a local Windows compile or an in-game SPT 3.11.1 + Fika 2.4.3 runtime test. Mission objective events (for example, AI kill attribution) are not yet authoritatively sourced by this adapter; until that is implemented, approval remains a manual admin decision.
+The latest server CI run, including the Fika callback identity guards, passed static checks and **27 tests, 0 failures**. The Windows PowerShell GUI helper syntax-validation job also passed. The optional GitHub DLL build was skipped because `EFT_BUILD_RUNNER_ENABLED` is not enabled; no DLL artifact exists yet. Neither result replaces a local Windows compile or an in-game SPT 3.11.1 + Fika 2.4.3 runtime test. Mission objective events (for example, AI kill attribution) are not yet authoritatively sourced by this adapter; until that is implemented, approval remains a manual admin decision.
