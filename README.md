@@ -11,7 +11,7 @@ Mission / campaign operations and EconomyGuard integration for SPT.
 - Client plugin: .NET Framework 4.7.2 / C# 7.3 / BepInEx 5.4.22.0.
 - The supplied BepInEx `BepInEx.dll`, `Fika.Core.dll` and `spt-common.dll` metadata declare `.NETFramework,Version=v4.7.1`; the project intentionally targets the higher compatible `net472` framework for these pinned references. The game executable's adjacent `UnityPlayer.dll` reports Unity `2022.3.43f1`; the EFT Data archive also contains `mscorlib.dll`, `netstandard.dll`, `System.Runtime.dll` and Unity managed modules. BepInEx's current TFM guidance recommends `netstandard2.1` for Unity 2021.2+ when references allow it, and `net472` as a fallback when reference compatibility requires it. Here the selected Fika/SPT/BepInEx references are .NET Framework assemblies, so switching blindly to `netstandard2.1` would be unsafe. Archive inspection and successful compilation do **not** replace loading the plugin under the actual EFT Mono runtime.
 
-A detailed evidence-based version and integration matrix is maintained in [docs/COMPATIBILITY-AUDIT.md](docs/COMPATIBILITY-AUDIT.md). It distinguishes manifest-level compatibility from actual runtime validation.
+A detailed evidence-based version and integration matrix is maintained in [docs/COMPATIBILITY-AUDIT.md](docs/COMPATIBILITY-AUDIT.md). It distinguishes manifest-level compatibility from actual runtime validation. The active SVM preset reader/editor and its backup/version-gating behavior are documented in [docs/SVM-ADMIN.md](docs/SVM-ADMIN.md).
 
 ## Project layout
 
