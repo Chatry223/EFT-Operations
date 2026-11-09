@@ -79,6 +79,12 @@ class OperationsService {
         const title = text(input.title, 100, 'TITLE', true);
         const description = text(input.description, 4000, 'DESCRIPTION');
         const map = text(input.map, 40, 'MAP', true).toLowerCase();
+        const campaignRaw = text(input.campaignId, 60, 'CAMPAIGN_ID').toLowerCase();
+        const campaignId = campaignRaw ? campaignRaw.replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') : '';
+        if (campaignRaw && !campaignId) throw new Error('INVALID_CAMPAIGN_ID');
+        const campaignOrder = integer(input.campaignOrder, 0, 1000, 'CAMPAIGN_ORDER', 0);
+        if (!campaignId && campaignOrder > 0) throw new Error('CAMPAIGN_ORDER_REQUIRES_ID');
+        const requiredPoints = integer(input.requiredPoints, 0, 1000000, 'REQUIRED_POINTS', 0);
         const mode = input.mode || 'solo';
         if (!['solo', 'squad', 'either'].includes(mode)) throw new Error('INVALID_MODE');
         const minPlayers = integer(input.minPlayers, 1, 8, 'MIN_PLAYERS', mode === 'squad' ? 2 : 1);
@@ -107,6 +113,7 @@ class OperationsService {
             title, description, briefing: { kind: ['letter', 'video', 'audio', 'scene'].includes(input.briefing && input.briefing.kind) ? input.briefing.kind : 'letter',
                 media: text(input.briefing && input.briefing.media, 300, 'BRIEFING_MEDIA'), body: text(input.briefing && input.briefing.body, 8000, 'BRIEFING_BODY') },
             map, mode, minPlayers, maxPlayers, objectives: cleanObjectives,
+            campaignId, campaignOrder, requiredPoints,
             rewards: { points: integer(rewards.points, 0, 1000000, 'REWARD_POINTS', 0), roubles: integer(rewards.roubles, 0, 50000000, 'REWARD_ROUBLES', 0), items },
             status: existing ? existing.status : 'draft', startAt, endAt,
             createdAt: existing ? existing.createdAt : new Date().toISOString(), updatedAt: new Date().toISOString(),
@@ -139,6 +146,33 @@ class OperationsService {
         m.status = status; m.updatedAt = new Date().toISOString(); this.persist(); return clone(m);
     }
 
+    getMissionEligibility(missionId, profileId) {
+        const mission = this.state.missions.find(item => item.id === missionId);
+        if (!mission) return { available: false, reason: 'MISSION_NOT_FOUND', missingPrerequisites: [] };
+        const stats = this.state.playerStats[profileId] || { points: 0 };
+        const currentPoints = Number(stats.points || 0);
+        const requiredPoints = Number(mission.requiredPoints || 0);
+        if (currentPoints < requiredPoints) return {
+            available: false, reason: 'RANK_REQUIREMENT_NOT_MET', currentPoints, requiredPoints, missingPrerequisites: []
+        };
+        const completedMissionIds = new Set(this.state.awards
+            .filter(award => award && award.profileId === profileId && award.missionId)
+            .map(award => award.missionId));
+        const previousCampaignMissions = mission.campaignId && Number(mission.campaignOrder || 0) > 0
+            ? this.state.missions.filter(item => item.id !== mission.id && item.campaignId === mission.campaignId
+                && Number(item.campaignOrder || 0) > 0 && Number(item.campaignOrder || 0) < Number(mission.campaignOrder))
+            : [];
+        const missingPrerequisites = previousCampaignMissions
+            .filter(item => !completedMissionIds.has(item.id))
+            .sort((a, b) => Number(a.campaignOrder || 0) - Number(b.campaignOrder || 0))
+            .map(item => ({ id: item.id, title: item.title, campaignOrder: item.campaignOrder }));
+        return {
+            available: missingPrerequisites.length === 0,
+            reason: missingPrerequisites.length ? 'CAMPAIGN_PREREQUISITES_NOT_MET' : null,
+            currentPoints, requiredPoints, missingPrerequisites
+        };
+    }
+
     accept(missionId, profileId, displayName = '', scavProfileId = null) {
         profileId = requireProfileId(profileId);
         scavProfileId = scavProfileId ? requireProfileId(scavProfileId) : null;
@@ -155,6 +189,8 @@ class OperationsService {
             if (existingGroup.state === 'review') throw new Error('PLAYER_REVIEW_PENDING');
             throw new Error('PLAYER_ALREADY_ASSIGNED');
         }
+        const eligibility = this.getMissionEligibility(missionId, profileId);
+        if (!eligibility.available) throw new Error(eligibility.reason || 'MISSION_LOCKED');
         let group = this.state.groups.find(g => g.missionId === missionId && g.state === 'forming' && g.members.length < m.maxPlayers);
         if (!group) { group = { id: id('grp'), missionId, state: 'forming', members: [], createdAt: new Date().toISOString(), raidId: null }; this.state.groups.push(group); }
         if (group.members.some(x => x.profileId === profileId || (scavProfileId && x.scavProfileId === scavProfileId))) return clone(group);
