@@ -129,6 +129,10 @@ assert.equal(campaignOps.getMissionEligibility(campaignMission2.id, playerA).ava
 campaignOps.accept(campaignMission2.id, playerA, 'Alpha');
 campaignOps.award(campaignMission2, { id: 'approved-blackout-02' }, playerA);
 assert.equal(campaignOps.getPlayer(playerA).points, 700);
+assert.equal(campaignOps.getPlayer(playerA).rank, 'Recruit');
+assert.equal(campaignOps.getPlayer(playerA).nextRank, 'Private');
+assert.equal(campaignOps.getPlayer(playerA).pointsToNextRank, 300);
+assert.equal(campaignOps.getPlayer(playerA).rankProgressPercent, 70);
 assert.equal(campaignOps.getMissionEligibility(campaignMission3.id, playerA).available, true);
 const unlockedCampaignList = campaignApi.listMissions('', {}, 'session-a').wrapped;
 assert.equal(unlockedCampaignList.missions.find(item => item.id === campaignMission3.id).locked, false);
