@@ -11,8 +11,8 @@ const operations = new OperationsService(root, { info() {}, warn() {} });
 const playerA = 'abcdef0123456789abcdef01';
 const playerB = 'abcdef0123456789abcdef02';
 const saveServer = { getProfile(sessionId) {
-    if (sessionId === 'session-a') return { info: { Nickname: 'Alpha' }, characters: { pmc: { _id: playerA }, scav: { _id: 'abcdef0123456789abcdef09' } } };
-    if (sessionId === 'session-b') return { info: { Nickname: 'Bravo' }, characters: { pmc: { _id: playerB }, scav: { _id: 'abcdef0123456789abcdef10' } } };
+    if (sessionId === 'session-a') return { info: { Nickname: 'AccountAlpha' }, characters: { pmc: { _id: playerA, Info: { Nickname: 'Alpha' } }, scav: { _id: 'abcdef0123456789abcdef09', Info: { Nickname: 'Alpha-Scav' } } } };
+    if (sessionId === 'session-b') return { info: { Nickname: 'AccountBravo' }, characters: { pmc: { _id: playerB, Info: { Nickname: 'Bravo' } }, scav: { _id: 'abcdef0123456789abcdef10', Info: { Nickname: 'Bravo-Scav' } } } };
     throw new Error('NO_PROFILE');
 } };
 const responses = { noBody: value => ({ wrapped: value }) };
