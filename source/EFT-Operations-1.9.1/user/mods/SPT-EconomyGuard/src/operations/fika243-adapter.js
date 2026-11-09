@@ -79,7 +79,7 @@ class Fika243OperationsAdapter {
             const raw = fs.readFileSync(configPath, 'utf8');
             // Fika's JSONC may contain comments; the setting is a single boolean
             // and this narrow extraction avoids a new JSONC parser dependency.
-            const match = raw.match(/"allowItemSending"\\s*:\\s*(true|false)/i);
+            const match = raw.match(/"allowItemSending"\s*:\s*(true|false)/i);
             if (!match) return { configured: false, enabled: null, configPath, reason: 'SETTING_NOT_FOUND' };
             return { configured: true, enabled: match[1].toLowerCase() === 'true', configPath, reason: null };
         } catch (err) {
