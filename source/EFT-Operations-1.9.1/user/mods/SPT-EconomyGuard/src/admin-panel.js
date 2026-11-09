@@ -628,8 +628,19 @@ class AdminPanelServer {
                 if (!realFile.startsWith(serverRoot + path.sep) || !fs.statSync(realFile).isFile() || path.extname(realFile).toLowerCase() !== '.zip') {
                     return this.send(res, 400, { error: 'ARCHIVE_OUTSIDE_SERVER_ROOT' });
                 }
-                const entries = readZipJsonEntries(realFile);
-                return this.send(res, 200, { archive: path.relative(serverRoot, realFile).split(path.sep).join('/'), entries });
+                const entries = readZipJsonEntries(realFile, { maxEntries: 50, maxTotalJsonBytes: 4 * 1024 * 1024 });
+                return this.send(res, 200, {
+                    archive: path.relative(serverRoot, realFile).split(path.sep).join('/'),
+                    entries,
+                    preview: {
+                        truncated: entries.truncated === true,
+                        totalMatchingEntries: entries.totalMatchingEntries || entries.length,
+                        previewedEntries: entries.previewedEntries || entries.length,
+                        previewBytes: entries.previewBytes || 0,
+                        maxEntries: 50,
+                        maxTotalBytes: 4 * 1024 * 1024
+                    }
+                });
             }
             if (req.method === 'GET' && pathname === '/api/operations') return this.send(res, 200, this.requireOperations().list());
             if (req.method === 'GET' && pathname === '/api/operations/awards') {
