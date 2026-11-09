@@ -21,6 +21,7 @@ class Fika243OperationsAdapter {
         this.dataDir = this.operations && this.operations.dataDir ? this.operations.dataDir : path.join(modDir || '.', 'SPT-EconomyGuard-Data', 'operations');
         this.eventsFile = path.join(this.dataDir, 'fika-events.jsonl');
         this.events = [];
+        this.finishedMatchIds = new Set();
         this.patched = new Set();
         this.status = this.detectVersion();
         this.status.saveServerHook = false;
@@ -28,10 +29,12 @@ class Fika243OperationsAdapter {
         this.status.raidIdentityHook = false;
         this.status.playerJoinHook = false;
         this.status.matchEndHook = false;
+        this.status.matchDeleteHook = false;
+        this.status.matchCreateHook = false;
         this.status.lifecycleHook = false;
         this.status.observerInstalled = false;
         this.status.hookState = 'not_installed';
-        this.status.missingHooks = ['saveServer', 'updateIdentity', 'raidIdentity', 'playerJoin', 'matchEnd', 'lifecycle'];
+        this.status.missingHooks = ['saveServer', 'updateIdentity', 'raidIdentity', 'playerJoin', 'matchEnd', 'matchDelete', 'matchCreate', 'lifecycle'];
     }
 
     log(level, message) {
@@ -121,6 +124,8 @@ class Fika243OperationsAdapter {
             raidIdentity: this.status.raidIdentityHook === true,
             playerJoin: this.status.playerJoinHook === true,
             matchEnd: this.status.matchEndHook === true,
+            matchDelete: this.status.matchDeleteHook === true,
+            matchCreate: this.status.matchCreateHook === true,
             lifecycle: this.status.lifecycleHook === true
         };
         this.status.hooks = hooks;
@@ -259,6 +264,42 @@ class Fika243OperationsAdapter {
             this.status.matchEndHook = false;
         }
 
+        // Fika can delete a match directly (e.g. duplicate serverId during createMatch)
+        // without calling endMatch. Observe deletion too, with a per-match dedupe guard.
+        if (typeof target.deleteMatch === 'function') {
+            if (!target.__egFika243DeleteMatchHook) {
+                const original = target.deleteMatch;
+                target.deleteMatch = function (matchId, ...rest) {
+                    safe(() => adapter.captureMatchEnd(this, matchId, 'deleteMatch'));
+                    return original.call(this, matchId, ...rest);
+                };
+                Object.defineProperty(target, '__egFika243DeleteMatchHook', { value: true, enumerable: false });
+                patched = true;
+            }
+            this.status.matchDeleteHook = true;
+        } else {
+            this.status.matchDeleteHook = false;
+        }
+
+        // A reused serverId denotes a new match; clear the old match's dedupe marker after
+        // Fika's createMatch has replaced the previous match in its internal Map.
+        if (typeof target.createMatch === 'function') {
+            if (!target.__egFika243CreateMatchHook) {
+                const original = target.createMatch;
+                target.createMatch = function (data, ...rest) {
+                    const result = original.call(this, data, ...rest);
+                    const matchId = String(object(data).serverId || '');
+                    if (matchId) adapter.finishedMatchIds.delete(matchId);
+                    return result;
+                };
+                Object.defineProperty(target, '__egFika243CreateMatchHook', { value: true, enumerable: false });
+                patched = true;
+            }
+            this.status.matchCreateHook = true;
+        } else {
+            this.status.matchCreateHook = false;
+        }
+
         // Fika 2.4.3 updates IFikaMatch.players after the in-raid registration path.
         // Bind a mission only after every accepted, ready member appears in this match.
         if (typeof target.addPlayerToMatch === 'function') {
@@ -276,7 +317,7 @@ class Fika243OperationsAdapter {
         } else {
             this.status.playerJoinHook = false;
         }
-        return patched || this.status.matchEndHook || this.status.playerJoinHook;
+        return patched || this.status.matchEndHook || this.status.matchDeleteHook || this.status.matchCreateHook || this.status.playerJoinHook;
     }
 
     tryStartMissionGroup(service, matchId) {
@@ -434,8 +475,13 @@ class Fika243OperationsAdapter {
     }
 
     captureMatchEnd(service, matchId, reason) {
-        const match = safe(() => service.getMatch && service.getMatch(matchId), null);
-        const players = match && match.players instanceof Map ? [...match.players.keys()].map(String) : [];
+        const id = String(matchId || '');
+        if (!id || this.finishedMatchIds.has(id)) return null;
+        const match = safe(() => service.getMatch && service.getMatch(id), null);
+        if (!match) return null;
+        this.finishedMatchIds.add(id);
+        if (this.finishedMatchIds.size > 1000) this.finishedMatchIds.delete(this.finishedMatchIds.values().next().value);
+        const players = match.players instanceof Map ? [...match.players.keys()].map(String) : [];
         const event = {
             eventId: `${Date.now()}-${Math.random().toString(16).slice(2, 10)}`,
             type: 'fika_match_end',
