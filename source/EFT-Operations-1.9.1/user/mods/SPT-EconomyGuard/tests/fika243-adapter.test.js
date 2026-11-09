@@ -65,6 +65,9 @@ async function testFika243LifecycleAndAcceptedLootEvidence() {
     assert.strictEqual(adapter.install(container), true);
     assert.strictEqual(adapter.getStatus().serverVersion, '2.4.3');
     assert.strictEqual(adapter.getStatus().fikaClientTargetVersion, '1.2.3');
+    container.resolve('SaveServer');
+    container.resolve('FikaMatchService');
+    container.resolve('LocationLifecycleService');
 
     const startResult = await lifecycle.startLocalRaid('session-id', { playerSide: 'pmc', serverId: 'woods.pmc.123' });
     assert.strictEqual(startResult, 'start-result');
