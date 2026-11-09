@@ -78,13 +78,13 @@ The version-gated adapter:
 - validates Fika server `2.4.3` and SPT `~3.11`;
 - binds a mission group only after all accepted, Ready members are present in the same Fika match and map;
 - calls `OperationsService.startGroup` to move that group into `in_raid`;
-- observes Fika `endMatch` before the match roster is deleted;
+- observes Fika `endMatch` and direct `deleteMatch` paths before the roster is deleted; `createMatch` clears the dedupe marker if a server ID is reused;
 - calls `OperationsService.finishGroup` with roster/death flags and any matching raid-end reports, but explicitly sets `verified: false`;
 - moves the group to manual review; it never automatically awards points/items from these events.
 
 Important limitations:
 1. Production code does not yet call `recordRaidEvent`; objective counters do not advance from real game events. The test suite manually injects a synthetic extract event, which is not proof that the live adapter collects it.
-2. Fika's `handlePlayerDied` callback contains `serverId` and `profileId`, but not a killer identity. The current adapter validates the profile/session relationship; it does not yet use that callback to progress kill objectives.
+2. Fika's `handlePlayerDied` callback contains `serverId` and `profileId`, but not a killer identity. The adapter validates the profile/session relationship and stores an `authenticated_client_report` death event for admin review; it does not progress kill objectives.
 3. SPT `IEndLocalRaidRequestData.results` includes `result`, `killerId`, `killerAid`, and `profile`, but these fields originate from the client request. They are useful for review evidence only, not authoritative reward triggers.
 4. A server-authoritative kill/loot/visit objective feed has not yet been implemented. Admin review remains mandatory.
 
