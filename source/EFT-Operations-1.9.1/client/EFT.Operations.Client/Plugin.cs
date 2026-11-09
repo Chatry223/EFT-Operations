@@ -1,5 +1,6 @@
 using BepInEx;
 using BepInEx.Configuration;
+using HarmonyLib;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -16,7 +17,12 @@ namespace EFTOperations.Client
     {
         private ConfigEntry<KeyCode> toggleKey;
         private ConfigEntry<float> refreshSeconds;
+        private static Plugin instance;
         private static bool inputLookupAttempted;
+        private Harmony fikaHarmony;
+        private bool fikaKillHookInstalled;
+        private readonly HashSet<string> reportedHostKillKeys = new HashSet<string>();
+        private readonly Queue<string> reportedHostKillOrder = new Queue<string>();
         private static MethodInfo inputGetKeyDown;
         private bool visible;
         private bool busy;
@@ -35,6 +41,7 @@ namespace EFTOperations.Client
 
         private void Awake()
         {
+            instance = this;
             toggleKey = Config.Bind("Interface", "ToggleKey", KeyCode.F8, "Open or close the mission interface.");
             refreshSeconds = Config.Bind("Interface", "RefreshSeconds", 12f, "Automatic status refresh interval.");
             Version bepinexVersion = typeof(BaseUnityPlugin).Assembly.GetName().Version;
@@ -49,6 +56,7 @@ namespace EFTOperations.Client
             EnsureInputBridge();
             Logger.LogInfo("Authentication bridge: SPT 3.11.1 RequestHandler (SessionId + native HttpClient).");
             StartCoroutine(RefreshLoop());
+            StartCoroutine(FikaKillHookBootstrap());
         }
 
         private void Update()
@@ -454,8 +462,9 @@ namespace EFTOperations.Client
             if (mission.rewards != null)
                 GUILayout.Label("AUTHORIZED REWARD  /  " + mission.rewards.points + " PTS  ·  " + mission.rewards.roubles.ToString("N0") + " RUB", SmallStyle());
 
-            GUILayout.Label("OBJECTIVES  /  MANUAL VERIFICATION", HeaderStyle());
+            GUILayout.Label("OBJECTIVES  /  LIVE HOST TELEMETRY", HeaderStyle());
             raidHudScroll = GUILayout.BeginScrollView(raidHudScroll, GUILayout.Height(Mathf.Max(64f, hud.height - 145f)));
+            bool hasHostEvidence = false;
             if (mission.objectives == null || mission.objectives.Length == 0)
                 GUILayout.Label("No objectives listed.", SmallStyle());
             else
@@ -463,13 +472,188 @@ namespace EFTOperations.Client
                 foreach (ObjectiveDto objective in mission.objectives)
                 {
                     if (objective == null) continue;
+                    ObjectiveProgressDto progress = null;
+                    if (playerState.group.objectiveProgress != null)
+                        foreach (ObjectiveProgressDto item in playerState.group.objectiveProgress)
+                            if (item != null && item.id == objective.id) { progress = item; break; }
+                    int current = progress == null ? 0 : progress.progress;
+                    string trust = progress == null ? "none" : progress.trust;
+                    string trustLabel = trust == "server_verified" ? "VERIFIED" : (trust == "host_attested" ? "HOST REPORTED" : "AWAITING EVENT");
+                    if (trust == "host_attested") hasHostEvidence = true;
                     string objectiveName = !String.IsNullOrEmpty(objective.target) ? objective.target : (objective.type ?? "OBJECTIVE");
-                    GUILayout.Label((objective.required ? "[REQUIRED] " : "[OPTIONAL] ") + objectiveName + "  ×" + objective.count, SmallStyle());
+                    GUILayout.Label((objective.required ? "[REQUIRED] " : "[OPTIONAL] ") + objectiveName + "  " + current + "/" + objective.count + "  ·  " + trustLabel, SmallStyle());
                 }
             }
             GUILayout.EndScrollView();
-            GUILayout.Label("Completion and rewards are not auto-confirmed. Check the Operations Admin review.", SmallStyle());
+            GUILayout.Label(hasHostEvidence
+                ? "Host-reported evidence is visible. Final completion and rewards still require admin review."
+                : "Progress updates require the Fika 1.2.3 host bridge. Rewards are never granted from client-only claims.", SmallStyle());
             GUILayout.EndArea();
+        }
+
+        private IEnumerator FikaKillHookBootstrap()
+        {
+            float deadline = Time.realtimeSinceStartup + 90f;
+            while (Time.realtimeSinceStartup < deadline)
+            {
+                string version = GetFikaPluginVersion();
+                if (version == "1.2.3" || version == "1.2.3.0")
+                {
+                    if (TryInstallFikaKillHook()) yield break;
+                }
+                else if (!String.IsNullOrEmpty(version))
+                {
+                    Logger.LogWarning("Fika host telemetry is disabled: expected client 1.2.3, detected " + version + ".");
+                    yield break;
+                }
+                yield return new WaitForSecondsRealtime(2f);
+            }
+            Logger.LogWarning("Fika host telemetry hook was not installed. Mission progress will remain pending.");
+        }
+
+        private bool TryInstallFikaKillHook()
+        {
+            if (fikaKillHookInstalled) return true;
+            Type coopPlayerType = FindLoadedType("Fika.Core.Coop.Players.CoopPlayer");
+            if (coopPlayerType == null) return false;
+            MethodInfo target = null;
+            foreach (MethodInfo candidate in coopPlayerType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+            {
+                if (candidate.Name == "OnBeenKilledByAggressor" && candidate.GetParameters().Length == 4)
+                {
+                    target = candidate;
+                    break;
+                }
+            }
+            MethodInfo postfix = typeof(Plugin).GetMethod("FikaKillPostfix", BindingFlags.Static | BindingFlags.NonPublic);
+            if (target == null || postfix == null) return false;
+            try
+            {
+                fikaHarmony = new Harmony("com.eft.operations.client.fika-host-evidence");
+                fikaHarmony.Patch(target, null, new HarmonyMethod(postfix), null, null);
+                fikaKillHookInstalled = true;
+                Logger.LogInfo("Fika 1.2.3 host kill telemetry hook installed on CoopPlayer.OnBeenKilledByAggressor.");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning("Fika host telemetry hook could not be installed: " + ex.GetBaseException().Message);
+                return false;
+            }
+        }
+
+        private static void FikaKillPostfix(object __instance, object[] __args)
+        {
+            Plugin current = instance;
+            if (current == null || __args == null || __args.Length < 1) return;
+            current.CaptureFikaHostKill(__instance, __args[0]);
+        }
+
+        private bool IsFikaServer()
+        {
+            Type backendUtils = FindLoadedType("Fika.Core.Coop.Utils.FikaBackendUtils");
+            object isServer = ReadMember(backendUtils, "IsServer");
+            return isServer is bool && (bool)isServer;
+        }
+
+        private string GetFikaMatchId()
+        {
+            Type coopHandlerType = FindLoadedType("Fika.Core.Coop.Components.CoopHandler");
+            MethodInfo getServerId = coopHandlerType == null ? null : coopHandlerType.GetMethod("GetServerId", BindingFlags.Public | BindingFlags.Static);
+            if (getServerId == null) return null;
+            try { return getServerId.Invoke(null, null) as string; }
+            catch { return null; }
+        }
+
+        private void CaptureFikaHostKill(object victim, object aggressor)
+        {
+            try
+            {
+                if (!IsFikaServer() || victim == null || aggressor == null) return;
+                object victimAiValue = ReadMember(victim, "IsAI");
+                object aggressorAiValue = ReadMember(aggressor, "IsAI");
+                if (!(victimAiValue is bool) || !(bool)victimAiValue || (aggressorAiValue is bool && (bool)aggressorAiValue)) return;
+
+                string killerProfileId = ReadMember(aggressor, "ProfileId") as string;
+                string victimProfileId = ReadMember(victim, "ProfileId") as string;
+                if (!IsProfileId(killerProfileId) || !IsProfileId(victimProfileId)) return;
+
+                object profile = ReadMember(victim, "Profile");
+                object info = ReadMember(profile, "Info");
+                object settings = ReadMember(info, "Settings");
+                string victimRole = ReadMember(settings, "Role") == null ? String.Empty : ReadMember(settings, "Role").ToString();
+                string victimSide = ReadMember(victim, "Side") == null ? String.Empty : ReadMember(victim, "Side").ToString();
+                if (String.IsNullOrWhiteSpace(victimRole)) victimRole = "unknown";
+
+                string matchId = GetFikaMatchId();
+                if (String.IsNullOrWhiteSpace(matchId)) return;
+                string dedupeKey = matchId + ":" + victimProfileId;
+                if (!reportedHostKillKeys.Add(dedupeKey)) return;
+                reportedHostKillOrder.Enqueue(dedupeKey);
+                while (reportedHostKillOrder.Count > 1000)
+                    reportedHostKillKeys.Remove(reportedHostKillOrder.Dequeue());
+
+                string groupId = playerState != null && playerState.group != null ? playerState.group.id : String.Empty;
+                string payload = "{\"eventId\":\"" + Guid.NewGuid().ToString("N")
+                    + "\",\"groupId\":\"" + Escape(groupId)
+                    + "\",\"matchId\":\"" + Escape(matchId)
+                    + "\",\"killerProfileId\":\"" + Escape(killerProfileId)
+                    + "\",\"victimProfileId\":\"" + Escape(victimProfileId)
+                    + "\",\"victimRole\":\"" + Escape(victimRole)
+                    + "\",\"victimSide\":\"" + Escape(victimSide)
+                    + "\",\"victimIsAi\":true}";
+                StartCoroutine(PostFikaHostEvent(payload));
+            }
+            catch (Exception ex)
+            {
+                Logger.LogDebug("Fika host kill telemetry skipped safely: " + ex.GetBaseException().Message);
+            }
+        }
+
+        private static bool IsProfileId(string value)
+        {
+            if (String.IsNullOrEmpty(value) || value.Length != 24) return false;
+            for (int i = 0; i < value.Length; i++)
+            {
+                char ch = value[i];
+                if (!((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F'))) return false;
+            }
+            return true;
+        }
+
+        private IEnumerator PostFikaHostEvent(string jsonBody)
+        {
+            string sessionId;
+            string host;
+            object nativeClient;
+            string error;
+            if (!SptBackendBridge.TryGetContext(out sessionId, out host, out nativeClient, out error))
+            {
+                Logger.LogDebug("Fika host telemetry not sent: " + error);
+                yield break;
+            }
+
+            Task<byte[]> task;
+            try
+            {
+                task = SptBackendBridge.Send(nativeClient, "/EFTOperations/client/eft/operations/host-event", Encoding.UTF8.GetBytes(jsonBody));
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning("Could not start Fika host telemetry request: " + ex.GetBaseException().Message);
+                yield break;
+            }
+            while (!task.IsCompleted) yield return null;
+            if (task.IsCanceled || task.IsFaulted)
+            {
+                Exception taskError = task.Exception == null ? null : task.Exception.GetBaseException();
+                Logger.LogWarning("Fika host telemetry request failed: " + (taskError == null ? "REQUEST_CANCELLED" : taskError.Message));
+                yield break;
+            }
+            string responseBody = Encoding.UTF8.GetString(task.Result ?? new byte[0]);
+            ActionResponse response = JsonUtility.FromJson<ActionResponse>(responseBody);
+            if (response == null || !response.ok)
+                Logger.LogDebug("Fika host telemetry was rejected: " + (response == null ? "INVALID_RESPONSE" : response.error));
         }
 
         private void EnsureInputBridge()
@@ -644,6 +828,7 @@ namespace EFTOperations.Client
     [Serializable] internal class BriefingDto { public string kind; public string media; public string body; }
     [Serializable] internal class RewardDto { public int points; public int roubles; }
     [Serializable] internal class ObjectiveDto { public string id; public string type; public string target; public int count; public bool required; }
-    [Serializable] internal class GroupDto { public string id; public string missionId; public string state; public bool isLeader; public string leaderName; public int minPlayers; public int maxPlayers; public int readyCount; public MemberDto[] members; }
+    [Serializable] internal class GroupDto { public string id; public string missionId; public string state; public bool isLeader; public string leaderName; public int minPlayers; public int maxPlayers; public int readyCount; public MemberDto[] members; public ObjectiveProgressDto[] objectiveProgress; }
+    [Serializable] internal class ObjectiveProgressDto { public string id; public int progress; public int count; public bool required; public string trust; }
     [Serializable] internal class MemberDto { public string displayName; public bool ready; }
 }
