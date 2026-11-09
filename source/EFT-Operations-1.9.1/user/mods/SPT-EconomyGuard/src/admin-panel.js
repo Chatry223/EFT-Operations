@@ -14,7 +14,6 @@ function safeArray(value) { return Array.isArray(value) ? value : []; }
 function sanitizeFikaEvent(event) {
     const item = event || {};
     return {
-        eventId: item.eventId || '',
         type: item.type || '',
         timestamp: item.timestamp || '',
         displayName: item.displayName || '',
@@ -673,8 +672,27 @@ class AdminPanelServer {
                         };
                     });
                     return {
-                        ...group,
+                        id: group.id,
+                        missionId: group.missionId,
                         missionTitle: mission ? mission.title : group.missionId,
+                        state: group.state,
+                        createdAt: group.createdAt,
+                        finishedAt: group.finishedAt,
+                        minPlayers: group.minPlayers,
+                        maxPlayers: group.maxPlayers,
+                        readyCount: group.readyCount,
+                        members: safeArray(group.members).map(member => ({
+                            displayName: member.displayName || 'Unknown operator',
+                            ready: member.ready === true,
+                            result: member.result || 'review'
+                        })),
+                        progress: group.progress || {},
+                        reviewData: {
+                            requiredDone: group.reviewData && group.reviewData.requiredDone === true,
+                            evidenceTrust: group.reviewData && group.reviewData.evidenceTrust || '',
+                            source: group.reviewData && group.reviewData.source || '',
+                            submittedAt: group.reviewData && group.reviewData.submittedAt || ''
+                        },
                         fikaEvidence: fikaEvidence.map(sanitizeFikaEvent),
                         objectiveEvidence
                     };
