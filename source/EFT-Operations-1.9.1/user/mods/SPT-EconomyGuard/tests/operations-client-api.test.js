@@ -11,8 +11,8 @@ const operations = new OperationsService(root, { info() {}, warn() {} });
 const playerA = 'abcdef0123456789abcdef01';
 const playerB = 'abcdef0123456789abcdef02';
 const saveServer = { getProfile(sessionId) {
-    if (sessionId === 'session-a') return { info: { Nickname: 'Alpha' }, characters: { pmc: { _id: playerA } } };
-    if (sessionId === 'session-b') return { info: { Nickname: 'Bravo' }, characters: { pmc: { _id: playerB } } };
+    if (sessionId === 'session-a') return { info: { Nickname: 'Alpha' }, characters: { pmc: { _id: playerA }, scav: { _id: 'abcdef0123456789abcdef09' } } };
+    if (sessionId === 'session-b') return { info: { Nickname: 'Bravo' }, characters: { pmc: { _id: playerB }, scav: { _id: 'abcdef0123456789abcdef10' } } };
     throw new Error('NO_PROFILE');
 } };
 const responses = { noBody: value => ({ wrapped: value }) };
@@ -31,6 +31,7 @@ const acceptedA = api.acceptMission('', { missionId: mission.id, profileId: play
 assert.equal(acceptedA.ok, true);
 assert.equal(acceptedA.group.members[0].displayName, 'Alpha');
 assert.equal(acceptedA.group.members[0].profileId, undefined, 'private profile IDs are not exposed to clients');
+assert.equal(operations.state.groups[0].members[0].scavProfileId, 'abcdef0123456789abcdef09', 'Scav identity is resolved server-side and stored privately');
 const acceptedB = api.acceptMission('', { missionId: mission.id }, 'session-b').wrapped;
 assert.equal(acceptedB.ok, true);
 assert.equal(acceptedB.group.id, acceptedA.group.id);
