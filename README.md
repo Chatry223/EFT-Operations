@@ -7,7 +7,7 @@ Mission / campaign operations and EconomyGuard integration for SPT.
 - EFT build: `0.16.1.3.35392-P2P`
 - SPT: `3.11.1`
 - Fika Server: `2.4.3`
-- Fika client plugin target: `2.4.3` (the BepInEx config's hidden `Last Version` value is not authoritative)
+- Fika client plugin target: `1.2.3` (the BepInEx config's hidden `Last Version` value is advisory; loaded plugin metadata is authoritative)
 - Client plugin: .NET Framework 4.7.2 / C# 7.3 / BepInEx
 
 ## Project layout
