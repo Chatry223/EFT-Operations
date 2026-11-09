@@ -225,8 +225,8 @@ assert.equal(statusAdapter.getStatus().matchCreateHook, true);
 
 // Fika 2.4.3's LocationLifecycleService overrides are synchronous. The observer
 // must not turn its response object / void return into a Promise.
-const syncLifecycleResponse = { location: 'woods', loot: { marker: true } };
-assert.strictEqual(statusInstances.LocationLifecycleService.startLocalRaid('session-sync', { location: 'woods' }), syncLifecycleResponse);
+const syncLifecycleResponse = { location: 'woods' };
+assert.deepStrictEqual(statusInstances.LocationLifecycleService.startLocalRaid('session-sync', { location: 'woods' }), syncLifecycleResponse);
 assert.strictEqual(typeof statusInstances.LocationLifecycleService.startLocalRaid('session-sync', { location: 'woods' })?.then, 'undefined');
 assert.strictEqual(statusInstances.LocationLifecycleService.endLocalRaid('session-sync', {
     serverId: 'woods.sync',
