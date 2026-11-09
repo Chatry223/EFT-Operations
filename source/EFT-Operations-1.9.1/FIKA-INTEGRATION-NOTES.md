@@ -25,12 +25,14 @@ The version-gated adapter activates only when the sibling `fika-server/package.j
 
 - Observes `FikaUpdateCallbacks.handleRaidAddPlayer` and `handlePlayerDied`, validating each profile against the authenticated SPT session's PMC/Scav profiles.
 - Observes `FikaRaidCallbacks.handleRaidCreate` and `handleRaidLeave`; validates the host nickname or member profile against the authenticated account. Fika's synthetic host `serverId` sentinel is handled separately from normal member profile IDs.
-- Observes `FikaMatchService.addPlayerToMatch`. An Operations group is linked only after all accepted, Ready members appear in the same Fika match and the match map equals the mission map.
-- Observes `FikaMatchService.endMatch` while the match roster is still available.
+- Observes `FikaMatchService.addPlayerToMatch`. An Operations group is linked only after all accepted, Ready members appear in the same Fika match and the match map equals the mission map. It then calls `OperationsService.startGroup` to move the group into `in_raid`.
+- Observes `FikaMatchService.endMatch` while the match roster is still available, then calls `OperationsService.finishGroup` with the roster/death flags and matching raid-end reports. The group moves to `review` with `verified: false`.
 - Observes SPT/Fika `LocationLifecycleService.endLocalRaid`, retaining the client-supplied raid-end fields for review with the trust label `untrusted_client_report`.
 - Stores a bounded Fika evidence stream in `SPT-EconomyGuard-Data/operations/fika-events.jsonl`.
-- At match end, the group moves to `review`; no automatic points or item rewards are issued from client-originated extraction data or match-end lifecycle evidence.
+- No automatic points or item rewards are issued from client-originated extraction data or match-end lifecycle evidence.
 - The protected admin Fika Link tab shows observer state, hook status, event records, and evidence trust labels.
+
+**Important objective-progress gap:** the production adapter does not yet call `OperationsService.recordRaidEvent`. The current test manually injects a synthetic extract event to test the service; it does not prove live objective telemetry. Therefore the HUD can display objectives, but real kill/loot/visit/extract counters do not yet advance automatically.
 
 ## Operations client plugin source
 
@@ -45,6 +47,6 @@ The version-gated adapter activates only when the sibling `fika-server/package.j
 Fika 2.4.3's server callbacks expose match creation/join/leave, roster registration, and match-end lifecycle. They do not provide independent server-authoritative proof of every in-raid kill, extraction, or mission objective. A client-supplied raid-end payload is not enough to grant rewards.
 
 Still required:
-1. Build the client DLL on Windows using Visual Studio/MSBuild and the exact local EFT Managed + BepInEx assemblies. The graphical builder now checks SPT Common `3.11.1.0` and Fika Core `1.2.3.0` before building. No compiled DLL has yet been produced in this environment.
+1. Complete the Windows client DLL build using the two verified source ZIPs or the actual local EFT Managed + BepInEx folders. The graphical builder checks exact SHA-256 fingerprints, SPT Common `3.11.1.0`, and Fika Core `1.2.3.0`, then installs only into the separately selected actual BepInEx root. The first Windows CI attempt reached MSBuild but failed because restore was omitted; `/restore` has now been added and the next run is the compile acceptance check.
 2. Run a live disposable SPT `3.11.1` + Fika Server `2.4.3` + Fika client `1.2.3` test covering host/client, PMC/Scav, map matching, Ready Check, match linking, raid end, and review.
 3. Implement and independently validate objective evidence before enabling automatic mission completion or rewards. Admin review remains mandatory.
