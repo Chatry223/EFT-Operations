@@ -569,7 +569,7 @@ namespace EFTOperations.Client
         {
             if (fikaVisitHookInstalled) return true;
             // EFT 0.16.1.3.35392: ExperienceTrigger.TriggerEnter calls Player.SpecialPlaceVisited(string, int)
-            // with the map place ID, so this hook observes the actual game visit callback rather than guessing collider names.
+            // with its place key; hook the game's visit callback instead of guessing collider names.
             Type playerType = FindLoadedType("EFT.Player");
             if (playerType == null) return false;
             MethodInfo target = null;
