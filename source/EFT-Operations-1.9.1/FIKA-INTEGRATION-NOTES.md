@@ -60,3 +60,16 @@ The bridge does not submit objective progress, raid outcomes, review decisions, 
 The BepInEx client source now uses the exact SPT 3.11.1 public contract: `SPT.Common.Http.RequestHandler.SessionId`, `Host`, and `HttpClient`. The native `Client.GetAsync` / `PostAsync` methods supply the `PHPSESSID` cookie, POST zlib compression, and SPT's configured TLS behavior. Calls include the `/EFTOperations` static-router prefix. The plugin no longer scans arbitrary assemblies for guessed `Session` or `BackendConfig` members.
 
 The C# source remains uncompiled and has not yet been exercised inside the user's EFT installation; the server-side Node test suite does not validate BepInEx runtime loading.
+
+
+## 2026-11-09 — Fika 2.4.3 mission lifecycle bridge
+
+The adapter now uses the exact v2.4.3 FikaMatchService methods verified from upstream source:
+- `addPlayerToMatch(matchId, playerId, data)` — after each server-side player registration, the adapter checks whether every accepted and ready mission member is present in the same Fika match and map. Only then does it bind the Operations group to that match and transition it to `in_raid`.
+- `endMatch(matchId, reason)` — before Fika deletes its match, the adapter captures the server-side player roster/death flags and correlates the match with the linked Operations group. It creates a manual review record using lifecycle evidence plus client-reported extraction data; it does not auto-award.
+
+The Fika server's `IFikaPlayer.isDead` is server-side match state. The raid-end `results` payload still comes from the player's request and is therefore treated as untrusted. Extraction and mission objective proof are not fully authoritative yet. The admin review action now requires an explicit confirmation in addition to a non-empty evidence reference; approvals and denials are recorded in the review record.
+
+The adapter deliberately requires exact map ID equality between the mission and Fika match location. If the server's configured map label differs from Fika's `locationData.Id`, the group will not auto-link; this is fail-safe and should be handled by an explicit map-alias setting after the installed map IDs are confirmed.
+
+This is source-level integration and regression coverage, not yet a runtime validation on the user's Windows SPT 3.11.1 + Fika 2.4.3 server.
