@@ -671,12 +671,17 @@ class Fika243OperationsAdapter {
         this.finishedMatchIds.add(id);
         if (this.finishedMatchIds.size > 1000) this.finishedMatchIds.delete(this.finishedMatchIds.values().next().value);
         const players = match.players instanceof Map ? [...match.players.keys()].map(String) : [];
+        const missionGroup = this.operations && this.operations.state && Array.isArray(this.operations.state.groups)
+            ? this.operations.state.groups.find(group => String(group.raidId || '') === id)
+            : null;
         const event = {
             eventId: `${Date.now()}-${Math.random().toString(16).slice(2, 10)}`,
             type: 'fika_match_end',
             timestamp: new Date().toISOString(),
             fikaServerVersion: EXPECTED_FIKA_VERSION,
             matchId: String(matchId || ''),
+            groupId: missionGroup ? missionGroup.id : null,
+            missionId: missionGroup ? missionGroup.missionId : null,
             reason: String(reason || ''),
             players,
             evidenceTrust: 'fika_match_end_lifecycle_with_authenticated_roster',
