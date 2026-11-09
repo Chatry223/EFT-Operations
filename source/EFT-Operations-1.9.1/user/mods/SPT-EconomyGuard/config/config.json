@@ -1,0 +1,96 @@
+{
+  "enabled": true,
+  "mode": "audit",
+  "dataDirectory": "SPT-EconomyGuard-Data",
+  "priceOverrides": {},
+  "price": {
+    "maxOvervalueRatio": 20,
+    "minUndervalueRatio": 0.05,
+    "referenceDisagreementRatio": 5,
+    "allowSingleReferenceSourceForBlocking": false,
+    "minimumReferenceRoubles": 100,
+    "unknownItemReviewThresholdRoubles": 1000000,
+    "marketReviewOvervalueRatio": 10,
+    "marketReviewUndervalueRatio": 0.1
+  },
+  "trader": {
+    "blockInvalidPaymentScheme": true,
+    "blockInsufficientFunds": true,
+    "maxSellPayoutMultiplier": 3,
+    "sellPayoutSafetyFactor": 1.35
+  },
+  "flea": {
+    "blockSelfPurchase": true,
+    "blockPaymentMismatch": true,
+    "blockExtremePrice": true,
+    "maxTrackedEventsInMemory": 20000,
+    "pairWindowMinutes": 10,
+    "pairCaseThreshold": 5,
+    "cycleWindowHours": 24
+  },
+  "restrictions": {
+    "enabled": true
+  },
+  "fence": {
+    "absoluteMaxPayoutRoubles": 50000000,
+    "blockAbsoluteCap": true
+  },
+  "diagnostics": {
+    "traceTransactions": true
+  },
+  "integrations": {
+    "sptPaymentHelperMoneyTpls": "discover-native-and-custom-money-tpls",
+    "svm": "read-live-database-and-runtime-trader-config",
+    "liveFleaPrices": "read-dynamic-price-or-database-price-when-available",
+    "packNStrap": "recursive-item-tree",
+    "fikaItemSending": "not-hooked"
+  },
+  "storage": {
+    "auditRetentionDays": 60,
+    "ledgerRetentionDays": 180,
+    "caseRetentionDays": 90,
+    "maxFileSizeMb": 8,
+    "pruneOnStartup": true
+  },
+  "notifications": {
+    "enabled": true,
+    "prefix": "BRONSON IS WATCHING YOU",
+    "separator": "\\n",
+    "includeCaseId": true,
+    "messages": {
+      "FLEA_MISSING_PAYMENT_ITEMS": "Purchase blocked: the request omitted its payment items. Required: {requiredPayment}. Available: {availablePayment}.",
+      "INSUFFICIENT_FLEA_FUNDS": "Purchase blocked: insufficient funds. Required: {requiredPayment}. Available: {availablePayment}.",
+      "FLEA_PAYMENT_SCHEME_MISMATCH": "Purchase blocked: the submitted payment does not match the server-required offer payment ({requiredPayment}).",
+      "FLEA_INVALID_PAYMENT_ASSET": "Purchase blocked: payment contains an item that is not owned or not valid.",
+      "FLEA_OFFER_NOT_FOUND": "Purchase blocked: this offer no longer exists.",
+      "FLEA_INVALID_QUANTITY": "Purchase blocked: requested quantity is invalid or exceeds the offer quantity.",
+      "FLEA_PAYMENT_REQUIREMENTS_UNKNOWN": "Purchase blocked: the server could not verify this offer's payment requirements.",
+      "FLEA_SELF_PURCHASE": "Purchase blocked: you cannot purchase your own offer.",
+      "FLEA_PRICE_TOO_HIGH": "Purchase blocked: {itemTpl} is listed at {priceRatio}x its trusted reference ({transactionValueRub} vs {assetValueRub} RUB).",
+      "FLEA_PRICE_TOO_LOW": "Purchase blocked: {itemTpl} is priced far below its trusted reference range.",
+      "TRADER_PAYMENT_SCHEME_MISMATCH": "Purchase blocked: payment does not match the trader's live server-side scheme.",
+      "TRADER_STOCK_INSUFFICIENT": "Purchase blocked: the trader has insufficient stock for the requested quantity.",
+      "TRADER_BUY_RESTRICTION_EXCEEDED": "Purchase blocked: the trader's native purchase limit has been reached.",
+      "TRADER_SELL_PAYOUT_TOO_HIGH": "Sale blocked: the payout exceeds the server-side valuation limit.",
+      "FENCE_ABSOLUTE_PAYOUT_CAP": "Sale blocked: the Fence payout exceeds the configured safety cap.",
+      "PLAYER_PURCHASE_POLICY_RESTRICTED": "Purchase blocked: this item has a temporary administrator restriction for your profile.",
+      "PLAYER_BLOCKLISTED": "Purchase blocked: this profile is suspended from all purchases by the server administrator. {caseId}",
+      "ITEM_BLOCKLISTED": "Purchase blocked: this item is restricted by the server administrator. {caseId}"
+    }
+  },
+  "adminPanel": {
+    "enabled": true,
+    "host": "127.0.0.1",
+    "port": 6970
+  },
+  "statusBoard": {
+    "enabled": true,
+    "host": "0.0.0.0",
+    "port": 1234
+  },
+  "operations": {
+    "enabled": true,
+    "clientApiEnabled": true,
+    "ranks": []
+  }
+}

@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>EconomyGuard Admin Center</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand"><div class="brand-mark">EG</div><div><b>ECONOMYGUARD</b><small>ADMIN CENTER · 3.11</small></div></div>
+      <div class="server-pill"><span class="pulse"></span><span id="connectionText">Connecting</span><span class="server-dot" id="serverDot"></span></div>
+      <nav id="mainNav">
+        <button class="nav-item active" data-view="overview"><span class="nav-icon">◫</span>Overview</button>
+        <button class="nav-item" data-view="online"><span class="nav-icon">◉</span>Online Players <em id="onlineNavCount">0</em></button>
+        <button class="nav-item" data-view="cases"><span class="nav-icon">▤</span>Evidence & Cases <em id="caseNavCount">0</em></button>
+        <button class="nav-item" data-view="players"><span class="nav-icon">◉</span>Player Blocklist</button>
+        <button class="nav-item" data-view="items"><span class="nav-icon">⬡</span>Item Blocklist</button>
+        <button class="nav-item" data-view="access"><span class="nav-icon">⌑</span>Security & Access</button>
+        <button class="nav-item" data-view="activity"><span class="nav-icon">⌁</span>Transaction Activity</button>
+        <button class="nav-item" data-view="settings"><span class="nav-icon">⚙</span>Settings</button>
+      </nav>
+      <div class="sidebar-bottom"><div class="side-note">LOCAL ADMIN SESSION<br><span>Loopback only · Token protected</span></div><button id="lockBtn" class="ghost-btn">Lock panel ↗</button></div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar"><div><div class="eyebrow">SERVER MANAGEMENT / ECONOMIC SECURITY</div><h1 id="pageTitle">Overview</h1></div><div class="top-actions"><span class="mode-chip" id="modeChip">AUDIT</span><button id="refreshBtn" class="icon-btn" title="Refresh">↻</button><span class="avatar">EG</span></div></header>
+
+      <section id="loginGate" class="login-gate hidden">
+        <div class="login-card"><div class="brand-mark large">EG</div><div class="eyebrow">SECURE LOCAL ACCESS</div><h2>Unlock Admin Center</h2><p>Paste the administrator token from <code>SPT-EconomyGuard-Data/admin.token</code>.</p><input id="tokenInput" type="password" autocomplete="off" placeholder="64-character access token"><button id="loginBtn" class="primary-btn full">Unlock panel</button><div id="loginError" class="error-text"></div><small>Do not share this token. The panel only listens on localhost.</small></div>
+      </section>
+
+      <section id="appContent">
+        <div class="view active" id="view-overview">
+          <div class="welcome-row"><div><h2>Server economic overview</h2><p>Live view of transaction controls, evidence and administrator restrictions.</p></div><div class="updated" id="lastUpdated">Not synced</div></div>
+          <div class="stat-grid">
+            <div class="stat-card"><div class="stat-label">OPEN CASES <span class="stat-icon red">!</span></div><div class="stat-value" id="statOpen">0</div><div class="stat-foot">Require administrator review</div></div>
+            <div class="stat-card"><div class="stat-label">BLOCKED · 24H <span class="stat-icon red">⛨</span></div><div class="stat-value" id="statBlocked">0</div><div class="stat-foot">Transactions stopped before execution</div></div>
+            <div class="stat-card"><div class="stat-label">LEDGER EVENTS <span class="stat-icon blue">↔</span></div><div class="stat-value" id="statLedger">0</div><div class="stat-foot">Recorded completed player trades</div></div>
+            <div class="stat-card"><div class="stat-label">RESTRICTED PROFILES <span class="stat-icon amber">◉</span></div><div class="stat-value" id="statPlayers">0</div><div class="stat-foot">Active player purchase blocks</div></div>
+            <div class="stat-card online-stat-card"><div class="stat-label">ONLINE PLAYERS <span class="stat-icon green">●</span></div><div class="stat-value" id="statOnline">0</div><div class="stat-foot">Fika presence connections now</div></div>
+          </div>
+          <div class="content-grid">
+            <div class="panel span-2"><div class="panel-head"><div><h3>Security activity</h3><p>Recent audit volume and transaction blocks</p></div><span class="tiny-label">LAST 30 DAYS</span></div><div class="chart-wrap"><canvas id="timelineChart" height="210"></canvas></div></div>
+            <div class="panel"><div class="panel-head"><div><h3>Case distribution</h3><p>Open and historical evidence</p></div></div><div class="donut-wrap"><canvas id="caseChart" width="190" height="190"></canvas><div class="donut-center"><b id="caseTotal">0</b><small>CASES</small></div></div><div id="caseLegend" class="legend"></div></div>
+          </div>
+          <div class="panel"><div class="panel-head"><div><h3>Latest alerts</h3><p>Most recent cases created by EconomyGuard</p></div><button class="text-btn" data-goto="cases">View all cases →</button></div><div class="table-wrap"><table><thead><tr><th>CASE</th><th>TYPE</th><th>PLAYER</th><th>SEVERITY</th><th>STATUS</th><th>DATE</th></tr></thead><tbody id="overviewCases"></tbody></table></div></div>
+          <div class="health-strip" id="healthStrip"><span class="pulse"></span><span>Waiting for health check…</span></div>
+        </div>
+
+        <div class="view" id="view-online">
+          <div class="view-intro"><div><h2>Online Players</h2><p>Live player presence reported by Fika's notification WebSocket.</p></div><div class="online-header-status"><span class="online-live-dot"></span><span id="onlineSourceStatus">Waiting for Fika presence</span><span class="tiny-label" id="onlineUpdatedAt">NOT SYNCED</span></div></div>
+          <div id="onlineUnavailable" class="security-warning hidden"><b>FIKA PRESENCE UNAVAILABLE</b><span>FikaPresenceService connection/disconnect hooks are not active. The panel will not guess online status from old HTTP requests. Check health.json and the server startup log.</span></div>
+          <div class="stat-grid online-stats">
+            <div class="stat-card"><div class="stat-label">ONLINE NOW <span class="stat-icon green">●</span></div><div class="stat-value" id="onlineCount">0</div><div class="stat-foot">Active Fika notification sessions</div></div>
+            <div class="stat-card"><div class="stat-label">IN RAID <span class="stat-icon amber">⚔</span></div><div class="stat-value" id="onlineRaidCount">0</div><div class="stat-foot">Players currently reporting raid activity</div></div>
+            <div class="stat-card"><div class="stat-label">IN MENU <span class="stat-icon blue">⌂</span></div><div class="stat-value" id="onlineMenuCount">0</div><div class="stat-foot">Launcher / game menu activity</div></div>
+            <div class="stat-card"><div class="stat-label">OTHER ACTIVITIES <span class="stat-icon amber">◈</span></div><div class="stat-value" id="onlineOtherCount">0</div><div class="stat-foot">Stash, Hideout or Flea</div></div>
+          </div>
+          <div class="filter-row"><input id="onlineSearch" placeholder="Search nickname, username, Profile ID, IP or map…"><button id="onlineRefreshBtn" class="secondary-btn" type="button">↻ Refresh</button></div>
+          <div class="panel"><div class="panel-head"><div><h3>Connected players</h3><p>Players are removed when Fika closes their notification WebSocket. This list is refreshed automatically every 15 seconds.</p></div><span class="pill green-pill">LIVE PRESENCE</span></div>
+            <div class="table-wrap"><table><thead><tr><th>PLAYER</th><th>ACTIVITY</th><th>RAID DETAILS</th><th>CONNECTED SINCE</th><th>LAST SEEN</th><th>LAST IP</th><th>PROFILE ID</th></tr></thead><tbody id="onlinePlayersTable"></tbody></table></div>
+          </div>
+          <div class="callout online-note"><b>Presence source</b><p>Online means the Fika Notification WebSocket is connected. It is not inferred from Flea requests or an old login record. The displayed IP is the last source IP seen by the SPT HTTP server for that Profile ID; it may differ from Fika's direct UDP peer address when NAT or VPN is in use.</p></div>
+        </div>
+
+        <div class="view" id="view-cases">
+          <div class="view-intro"><div><h2>Evidence & Cases</h2><p>Review flagged transactions, inspect supporting evidence and close cases after investigation.</p></div><button id="exportBtn" class="secondary-btn">⇩ Export HTML report</button></div>
+          <div class="filter-row"><input id="caseSearch" placeholder="Search case, player, offer or reason…"><select id="caseStatus"><option value="all">All statuses</option><option>OPEN</option><option>PENDING</option><option>RESOLVED</option><option>DISMISSED</option></select><select id="caseSeverity"><option value="all">All severity</option><option>HIGH</option><option>MEDIUM</option><option>LOW</option></select></div>
+          <div class="panel"><div class="table-wrap"><table><thead><tr><th>CASE ID</th><th>PLAYER / PROFILE</th><th>TYPE</th><th>SEVERITY</th><th>STATUS</th><th>CREATED</th><th></th></tr></thead><tbody id="casesTable"></tbody></table></div></div>
+          <div class="panel detail-panel hidden" id="caseDetail"></div>
+        </div>
+
+        <div class="view" id="view-players">
+          <div class="view-intro"><div><h2>Player Blocklist</h2><p>Block all purchases for a profile permanently or until a chosen date. Selling is not disabled by this purchase block.</p></div><span class="pill red-pill">MANUAL ADMIN ACTION</span></div>
+          <div class="content-grid">
+            <div class="panel span-2"><div class="panel-head"><div><h3>Add profile restriction</h3><p>Use the profile ID, not the editable nickname.</p></div></div>
+              <form id="playerBlockForm" class="form-grid">
+                <label class="field span-2">Profile ID (24 hex characters)<input name="profileId" required minlength="24" maxlength="24" placeholder="67f370d8000377760f38bef8"></label>
+                <label class="field">Nickname (optional)<input name="playerName" maxlength="64" placeholder="Player nickname"></label>
+                <label class="field">Expiry<select name="duration"><option value="permanent">Permanent</option><option value="1h">1 hour</option><option value="24h">24 hours</option><option value="7d">7 days</option><option value="30d">30 days</option><option value="custom">Custom date/time</option></select></label>
+                <label class="field span-2 hidden" id="playerExpiryField">Expires at<input name="expiresAt" type="datetime-local"></label>
+                <label class="field span-2">Reason / staff note<textarea name="reason" rows="2" maxlength="300" placeholder="Reason for purchase suspension"></textarea></label>
+                <div class="form-actions span-2"><button class="danger-btn" type="submit">⛨ Block all purchases</button><span class="muted">Permanent blocks remain until manually removed.</span></div>
+              </form>
+            </div>
+            <div class="panel"><div class="panel-head"><div><h3>How it works</h3><p>Purchase-only enforcement</p></div></div><ul class="info-list"><li>Blocks Trader money and barter purchases.</li><li>Blocks player and trader-origin Flea purchases.</li><li>Does not auto-ban, kick or delete profile items.</li><li>Expired restrictions stop applying automatically.</li><li>Admin can remove any restriction here.</li></ul></div>
+          </div>
+          <div class="panel"><div class="panel-head"><div><h3>Known profiles</h3><p>Profiles found in cases and transaction ledger</p></div><span id="playerCountLabel" class="tiny-label">0 PROFILES</span></div><div class="table-wrap"><table><thead><tr><th>PROFILE / NAME</th><th>CASES</th><th>LEDGER EVENTS</th><th>LAST SEEN</th><th>RESTRICTION</th><th></th></tr></thead><tbody id="playersTable"></tbody></table></div></div>
+          <div class="panel"><div class="panel-head"><div><h3>Per-profile purchase rule</h3><p>Optional item-specific block or transaction/daily quantity limit.</p></div></div><form id="playerRuleForm" class="form-grid"><label class="field">Profile ID<input name="profileId" required maxlength="24" minlength="24" placeholder="24-character profile ID"></label><label class="field">Item TPL (blank = all items in channel)<input name="tpl" maxlength="24" placeholder="Optional 24-character TPL"></label><label class="field">Channel<select name="channel"><option value="any">All channels</option><option value="trader-money">Trader money</option><option value="trader-barter">Trader barter</option><option value="flea-money">Flea money</option><option value="flea-barter">Flea barter</option></select></label><label class="field">Rule type<select name="ruleType"><option value="block">Block this scope</option><option value="max">Max per transaction</option><option value="daily">Daily quantity limit</option></select></label><label class="field" id="ruleLimitField">Quantity limit<input name="limit" type="number" min="1" step="1" placeholder="e.g. 1"></label><label class="field">Expiry<select name="duration"><option value="permanent">Permanent</option><option value="24h">24 hours</option><option value="7d">7 days</option><option value="30d">30 days</option></select></label><label class="field span-2">Reason<textarea name="reason" rows="2" maxlength="300" placeholder="Administrator rule reason"></textarea></label><div class="form-actions span-2"><button class="secondary-btn" type="submit">Save profile rule</button></div></form></div>
+          <div class="panel"><div class="panel-head"><div><h3>Active per-profile rules</h3><p>Specific item blocks and purchase limits currently saved.</p></div></div><div class="table-wrap"><table><thead><tr><th>PROFILE</th><th>ITEM TPL</th><th>CHANNEL</th><th>LIMIT</th><th>EXPIRY</th><th>REASON</th><th></th></tr></thead><tbody id="playerRulesTable"></tbody></table></div></div>
+        </div>
+
+        <div class="view" id="view-items">
+          <div class="view-intro"><div><h2>Item Blocklist</h2><p>Block purchases of a specific item template globally. A block can be permanent or temporary.</p></div><span class="pill amber-pill">GLOBAL TPL POLICY</span></div>
+          <div class="panel"><div class="panel-head"><div><h3>Restrict item template</h3><p>Enter the 24-character template ID (TPL).</p></div></div>
+            <form id="itemBlockForm" class="form-grid">
+              <label class="field span-2">Item TPL<input name="tpl" required minlength="24" maxlength="24" placeholder="5e81f423763d9f754677bf2e"></label>
+              <label class="field">Expiry<select name="duration"><option value="permanent">Permanent</option><option value="1h">1 hour</option><option value="24h">24 hours</option><option value="7d">7 days</option><option value="30d">30 days</option><option value="custom">Custom date/time</option></select></label>
+              <label class="field">Channels<select name="channels"><option value="any">All purchases</option><option value="trader-money">Trader money</option><option value="trader-barter">Trader barter</option><option value="flea-money">Flea money</option><option value="flea-barter">Flea barter</option></select></label>
+              <label class="field span-2 hidden" id="itemExpiryField">Expires at<input name="expiresAt" type="datetime-local"></label>
+              <label class="field span-2">Reason<textarea name="reason" rows="2" maxlength="300" placeholder="Why is this item restricted?"></textarea></label>
+              <div class="form-actions span-2"><button class="danger-btn" type="submit">⬡ Block item purchases</button></div>
+            </form>
+          </div>
+          <div class="panel"><div class="panel-head"><div><h3>Active item restrictions</h3><p>Expired entries are shown as inactive until removed.</p></div></div><div class="table-wrap"><table><thead><tr><th>TPL</th><th>CHANNELS</th><th>REASON</th><th>EXPIRY</th><th>STATUS</th><th></th></tr></thead><tbody id="itemsTable"></tbody></table></div></div>
+        </div>
+
+        <div class="view" id="view-access">
+          <div class="view-intro"><div><h2>Security & Access Control</h2><p>Server login bans, approved accounts, controlled registration and IP allowlisting.</p></div><span class="pill red-pill">SERVER ACCESS GATE</span></div>
+          <div id="accessDegradedBanner" class="security-warning hidden"><b>SECURITY REGISTRY DEGRADED</b><span>The access-control file could not be parsed. Remote HTTP access is fail-closed. Restore the preserved .bak file or remove the damaged file while the server is stopped to initialize an empty registry. Do not overwrite it blindly.</span></div>
+          <div class="stat-grid access-stats">
+            <div class="stat-card"><div class="stat-label">ACTIVE BANS <span class="stat-icon red">⛨</span></div><div class="stat-value" id="accessBanCount">0</div><div class="stat-foot">Permanent or time-limited</div></div>
+            <div class="stat-card"><div class="stat-label">APPROVED ACCOUNTS <span class="stat-icon blue">✓</span></div><div class="stat-value" id="accessApprovedCount">0</div><div class="stat-foot">Eligible when approval-only mode is on</div></div>
+            <div class="stat-card"><div class="stat-label">IP ALLOWLIST <span class="stat-icon amber">⌖</span></div><div class="stat-value" id="accessIpCount">0</div><div class="stat-foot" id="accessIpMode">Disabled</div></div>
+            <div class="stat-card"><div class="stat-label">LAUNCHER REGISTRATION <span class="stat-icon green">＋</span></div><div class="stat-value" id="registrationModeValue">ADMIN</div><div class="stat-foot">New accounts are panel-provisioned</div></div>
+          </div>
+          <div class="content-grid">
+            <div class="panel span-2"><div class="panel-head"><div><h3>Create server account</h3><p>Provision an SPT launcher account here; public launcher registration is blocked by default.</p></div><span class="pill green-pill">ADMIN CREATED</span></div>
+              <form id="createAccountForm" class="form-grid">
+                <label class="field">Launcher username<input name="username" required minlength="3" maxlength="32" pattern="[A-Za-z0-9_.-]{3,32}" placeholder="friend_01"></label>
+                <label class="field">Password<input name="password" id="newAccountPassword" required minlength="12" maxlength="128" autocomplete="new-password" placeholder="At least 12 characters"></label>
+                <label class="field">Edition<select name="edition" id="editionSelect" required><option value="">Loading available editions…</option></select></label>
+                <div class="field"><span>Credential generator</span><button type="button" class="secondary-btn" id="generatePasswordBtn">Generate secure password</button></div>
+                <div class="form-actions span-2"><button type="submit" class="primary-btn">＋ Create account & approve</button><span class="muted">Password is returned once and is not stored in EconomyGuard.</span></div>
+              </form>
+              <div id="createdCredentials" class="credentials-box hidden"></div>
+            </div>
+            <div class="panel"><div class="panel-head"><div><h3>Access policy</h3><p>These controls affect the SPT backend.</p></div></div>
+              <form id="accessSettingsForm" class="access-settings-form">
+                <label class="switch-row"><span><b>Allow standard launcher registration</b><small>OFF blocks new launcher registration. Existing accounts still log in unless approval-only mode is also enabled.</small></span><input type="checkbox" name="allowLauncherRegistration"></label>
+                <label class="switch-row"><span><b>Require approved account</b><small>When ON, every profile must be approved in the table below. Approve your own/admin profile first to avoid locking yourself out.</small></span><input type="checkbox" name="requireApprovedLogin"></label>
+                <label class="switch-row"><span><b>Enforce IP allowlist</b><small>Blocks SPT HTTP requests from IPs not listed below. Loopback stays allowed.</small></span><input type="checkbox" name="enforceIpAllowlist"></label>
+                <div class="field"><span>Trusted reverse proxies (optional, exact IP or CIDR)</span><input name="trustedProxyIps" placeholder="Only set this behind a proxy you control"></div>
+                <button type="submit" class="primary-btn">Save access policy</button>
+              </form>
+              <div class="callout"><b>Important</b><p>IP allowlisting can lock out remote players if their public/VPN IP changes. Add your current server-client IP first, then enable it. Do not trust forwarded IP headers unless the proxy is yours. This gates SPT HTTP traffic; Fika's direct UDP raid traffic is not an IP firewall in this plugin.</p></div>
+            </div>
+          </div>
+          <div class="content-grid">
+            <div class="panel"><div class="panel-head"><div><h3>Ban a profile</h3><p>Denies launcher login and blocks subsequent SPT backend HTTP requests for this profile.</p></div></div>
+              <form id="accountBanForm" class="form-grid">
+                <label class="field span-2">Profile ID<input name="profileId" required minlength="24" maxlength="24" placeholder="24-character profile ID"></label>
+                <label class="field">Duration<select name="duration"><option value="permanent">Permanent</option><option value="1h">1 hour</option><option value="24h">24 hours</option><option value="7d">7 days</option><option value="30d">30 days</option><option value="custom">Custom date/time</option></select></label>
+                <label class="field hidden" id="banExpiryField">Expires at<input name="expiresAt" type="datetime-local"></label>
+                <label class="field span-2">Reason<textarea name="reason" rows="2" maxlength="500" placeholder="Confirmed abuse / ban reason"></textarea></label>
+                <div class="form-actions span-2"><button type="submit" class="danger-btn">⛨ Ban account</button></div>
+              </form>
+            </div>
+            <div class="panel"><div class="panel-head"><div><h3>IP allowlist</h3><p>Exact IPv4/IPv6 address or CIDR network.</p></div></div>
+              <form id="ipAllowForm" class="form-grid"><label class="field span-2">Allowed address / network<input name="ip" required placeholder="203.0.113.25 or 203.0.113.0/24"></label><label class="field span-2">Note (optional)<input name="note" maxlength="100" placeholder="Home / VPN / friend"></label><div class="form-actions span-2"><button class="secondary-btn" type="submit">＋ Add IP to allowlist</button></div></form>
+              <div id="ipAllowList" class="access-list"></div>
+            </div>
+          </div>
+          <div class="panel"><div class="panel-head"><div><h3>Server accounts</h3><p>All accounts currently loaded by SPT.SaveServer. Approve, revoke, ban or unban each profile.</p></div><span class="tiny-label" id="accountCountLabel">0 ACCOUNTS</span></div><div class="table-wrap"><table><thead><tr><th>USERNAME / NICKNAME</th><th>PROFILE ID</th><th>EDITION</th><th>LOGIN ACCESS</th><th></th></tr></thead><tbody id="accountsTable"></tbody></table></div></div>
+          <div class="panel"><div class="panel-head"><div><h3>Active and expired bans</h3><p>Unbanning does not delete a profile or its items.</p></div></div><div class="table-wrap"><table><thead><tr><th>PROFILE</th><th>REASON</th><th>CREATED</th><th>EXPIRES</th><th>STATUS</th><th></th></tr></thead><tbody id="bansTable"></tbody></table></div></div>
+          <div class="panel"><div class="panel-head"><div><h3>Recent connection IPs</h3><p>Seen by the SPT HTTP server. Select an IP to add it to the allowlist.</p></div></div><div id="recentIpsList" class="recent-ips"></div></div>
+        </div>
+
+        <div class="view" id="view-activity">
+          <div class="view-intro"><div><h2>Transaction Activity</h2><p>Audit events and completed player-to-player Flea ledger entries.</p></div><button id="refreshActivity" class="secondary-btn">↻ Refresh data</button></div>
+          <div class="tab-row"><button class="subtab active" data-activity="audit">Audit events</button><button class="subtab" data-activity="ledger">Completed ledger</button></div>
+          <div class="filter-row"><input id="activitySearch" placeholder="Filter by player, event, TPL or offer…"><span class="tiny-label" id="activityCount"></span></div>
+          <div class="panel"><div class="table-wrap"><table><thead id="activityHead"></thead><tbody id="activityTable"></tbody></table></div></div>
+        </div>
+
+        <div class="view" id="view-settings">
+          <div class="view-intro"><div><h2>Panel & Protection Settings</h2><p>Manage protection mode, notification text and price thresholds.</p></div><span class="pill green-pill">CHANGES APPLY LIVE</span></div>
+          <div class="content-grid">
+            <div class="panel span-2"><div class="panel-head"><div><h3>Protection mode</h3><p>Protect blocks eligible high-confidence violations. Audit records only.</p></div></div><form id="settingsForm" class="form-grid">
+              <label class="field">Operating mode<select name="mode"><option value="audit">AUDIT · log only</option><option value="protect">PROTECT · block confirmed violations</option></select></label>
+              <label class="field">Maximum overvalue ratio<input name="maxOvervalueRatio" type="number" min="1" max="100000" step="0.5"></label>
+              <label class="field">Minimum undervalue ratio<input name="minUndervalueRatio" type="number" min="0.001" max="1" step="0.01"></label>
+              <label class="field">Market review overvalue ratio<input name="marketReviewOvervalueRatio" type="number" min="1" max="100000" step="0.5"></label>
+              <label class="field">Notification prefix<input name="prefix" maxlength="120" placeholder="BRONSON IS WATCHING YOU"></label>
+              <label class="field">Message separator<input name="separator" maxlength="12" placeholder="\n"></label>
+              <label class="field">Allow one price reference for automatic blocking<select name="allowSingleReferenceSourceForBlocking"><option value="false">No · safer</option><option value="true">Yes · more aggressive</option></select></label>
+              <label class="field span-2">Default notification<textarea name="defaultMessage" rows="2" maxlength="500"></textarea></label>
+              <label class="field span-2">Per-event notification messages (JSON object)<textarea name="messagesJson" rows="7" spellcheck="false"></textarea><small>Example keys: PLAYER_BLOCKLISTED, ITEM_BLOCKLISTED, FLEA_MISSING_PAYMENT_ITEMS. Invalid JSON is rejected.</small></label>
+              <div class="form-actions span-2"><button class="primary-btn" type="submit">Save settings</button><span class="muted">The panel does not modify SVM or LiveFleaPrices.</span></div>
+            </form></div>
+            <div class="panel"><div class="panel-head"><div><h3>Remote access</h3><p>Secure access from another computer</p></div></div><div class="callout"><b>Local-only by default</b><p>The admin API binds to 127.0.0.1 and requires a random token. Do not expose this HTTP port directly to the internet.</p><code>ssh -L 6970:127.0.0.1:6970 admin@SERVER</code><p>Then open <b>http://127.0.0.1:6970</b> on your computer. The tunnel keeps the panel private.</p></div></div>
+          </div>
+          <div class="panel"><div class="panel-head"><div><h3>Protection coverage</h3><p>Current runtime hook state</p></div></div><div id="coverageGrid" class="coverage-grid"></div></div>
+        </div>
+      </section>
+      <footer class="footer"><span>SPT ECONOMYGUARD ENTERPRISE</span><span>LOCAL CONTROL PLANE · PROFILE PURCHASE RESTRICTIONS ONLY</span></footer>
+    </main>
+  </div>
+  <div id="toast" class="toast"></div>
+  <script src="/app.js" defer></script>
+  <script src="/board-admin.js" defer></script>
+  <script src="/operations-admin.js" defer></script>
+</body>
+</html>

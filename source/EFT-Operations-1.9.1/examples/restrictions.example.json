@@ -1,0 +1,33 @@
+{
+  "enabled": true,
+  "players": {
+    "0123456789abcdef01234567": {
+      "blocked": true,
+      "reason": "Repeated confirmed economic abuse; administrator-reviewed",
+      "createdAt": "2026-11-03T10:00:00.000Z",
+      "blockedUntil": null,
+      "playerName": "ExamplePlayer",
+      "rules": [
+        {
+          "ruleId": "example-rule-001",
+          "tpl": "5e81f423763d9f754677bf2e",
+          "channel": "trader-barter",
+          "block": false,
+          "maxPerTransaction": 1,
+          "dailyLimit": 2,
+          "expiresAt": "2026-11-10T10:00:00.000Z",
+          "reason": "Temporary restriction on a specific barter item"
+        }
+      ]
+    }
+  },
+  "items": {
+    "5e81f423763d9f754677bf2e": {
+      "blocked": true,
+      "reason": "Temporarily disabled pending custom-item validation",
+      "channels": ["any"],
+      "createdAt": "2026-11-03T10:00:00.000Z",
+      "expiresAt": "2026-11-10T10:00:00.000Z"
+    }
+  }
+}

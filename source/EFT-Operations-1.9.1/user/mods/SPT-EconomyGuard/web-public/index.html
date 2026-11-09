@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="color-scheme" content="dark">
+  <title>%%TITLE%%</title>
+  <link rel="stylesheet" href="/static/board.css">
+</head>
+<body>
+  <div id="bg" class="bg"></div>
+  <div id="shade" class="shade"></div>
+  <div class="app">
+    <header class="hero glass">
+      <div class="brand">
+        <div class="mark" id="mark">B</div>
+        <div class="brand-text"><h1 id="serverName">…</h1><p id="tagline"></p></div>
+      </div>
+      <div class="hero-right">
+        <div class="ochip" id="onlineChip" hidden>
+          <div class="ochip-main"><span class="pulse"></span><small id="onlineLabel">ONLINE</small><b id="onlineNum">0</b></div>
+          <ul class="ochip-lines" id="onlineLines"></ul>
+        </div>
+        <div class="hero-meta">
+          <span class="live" id="livePill"><i></i><b id="liveText">…</b></span>
+          <span class="updated" id="updatedAt"></span>
+          <button class="lang" id="langBtn" type="button">FA</button>
+        </div>
+      </div>
+    </header>
+    <div id="top" class="top"></div>
+    <nav class="tabs" id="tabs" role="tablist"></nav>
+    <main id="view" class="view"><div class="empty">…</div></main>
+    <footer class="foot" id="foot"></footer>
+  </div>
+  <script src="/static/board.js" defer></script>
+</body>
+</html>

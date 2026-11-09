@@ -1,0 +1,23 @@
+{
+  "title": "OPERATION NORTH CLEARANCE",
+  "description": "Clear the designated area, secure the evidence and extract as a squad.",
+  "map": "woods",
+  "mode": "squad",
+  "minPlayers": 2,
+  "maxPlayers": 4,
+  "briefing": {
+    "kind": "letter",
+    "media": "",
+    "body": "CLASSIFIED // TASK FORCE\n\nYour squad is ordered to clear the designated area, secure the evidence and return alive. All members must extract for a successful operation."
+  },
+  "objectives": [
+    { "id": "hostiles", "type": "kill", "target": "", "count": 10, "required": true, "params": {} },
+    { "id": "evidence", "type": "collect", "target": "REPLACE_WITH_ITEM_TPL", "count": 1, "required": true, "params": {} },
+    { "id": "extraction", "type": "extract", "target": "", "count": 1, "required": true, "params": {} }
+  ],
+  "rewards": {
+    "points": 2500,
+    "roubles": 500000,
+    "items": []
+  }
+}

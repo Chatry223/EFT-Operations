@@ -1,0 +1,50 @@
+SPT EconomyGuard Enterprise 1.6.0
+---------------------------------
+
+1) SPT Server را خاموش کن و از user/profiles، پوشه مود، order.json و کل user/mods/SPT-EconomyGuard/SPT-EconomyGuard-Data بکاپ بگیر.
+2) ZIP را در ریشه SPT استخراج کن و user/mods/SPT-EconomyGuard را جایگزین کن.
+3) پوشه user/mods/SPT-EconomyGuard/SPT-EconomyGuard-Data قبلی را حذف نکن.
+4) سرور را اجرا کن.
+5) در user/mods/SPT-EconomyGuard/SPT-EconomyGuard-Data/health.json بررسی کن:
+   - accessControl.hooks.launcherRegistration = true
+   - accessControl.hooks.login = true
+   - accessControl.hooks.httpSessionAndIpGate = true
+   - onlinePlayers.available = true
+   - FikaPresenceService.addPlayerPresence و FikaPresenceService.removePlayerPresence در hooks فعال باشند.
+   اگر فقط onlinePlayers.available false بود، فهرست آنلاین در دسترس نیست؛ سایر قابلیت‌ها ممکن است فعال باشند. اگر Hookهای Ban/Login/IP false بودند، به آن‌ها تکیه نکن.
+6) http://127.0.0.1:6970/ را باز و توکن user/mods/SPT-EconomyGuard/SPT-EconomyGuard-Data/admin.token را وارد کن.
+7) در Security & Access حساب بساز، حساب‌های قدیمی را در صورت نیاز Approve کن، Ban یا IP Allowlist مدیریت کن.
+8) برای مشاهده افراد متصل، از منوی پنل وارد Online Players شو؛ فهرست هر ۱۵ ثانیه به‌روزرسانی می‌شود.
+9) برای ساخت مأموریت، از منوی Operations وارد شو؛ هدف‌ها را اضافه کن، Draft را ذخیره کن و برای ساخت Event در سایت عمومی Publish را بزن.
+10) راهنمای فارسی مأموریت‌ها: user/mods/SPT-EconomyGuard/OPERATIONS-README_FA.md
+
+پیش‌فرض‌ها:
+- ساخت حساب عادی از لانچر بسته است.
+- حساب‌های قبلی تا زمانی که Require approved account را روشن نکنی می‌توانند Login کنند.
+- IP Allowlist خاموش است.
+- Banهای ورود حتی در Audit فعال‌اند.
+
+برای سرور دعوتی، ثبت‌نام لانچر را بسته نگه دار؛ حساب را از پنل بساز. قبل از فعال‌کردن Require approved account، حساب مدیر را Approve کن. پیش از IP Allowlist، IP/VPN همه اعضا را ثبت کن.
+
+Online Players از Fika Notification WebSocket Presence تغذیه می‌شود؛ اگر Hookهای FikaPresenceService فعال نباشند، وضعیت آنلاین در پنل Unavailable خواهد بود. IP نمایش‌داده‌شده آخرین IP درخواست HTTP در SPT است، نه لزوماً IP UDP Raid.
+
+محدودیت مهم: Ban ورود و Backend HTTP را می‌بندد؛ Kick فوری از Raid فعال Fika 2.4.6 تضمین نشده است. IP Allowlist فقط SPT HTTP است و UDP مستقیم Raid را فایروال نمی‌کند. در لاگ قبلی شماره Fika 2.4.3 دیده شد، با اینکه نام بسته اعلام‌شده 2.4.6 بود؛ نسخه واقعاً بارگذاری‌شده را در لاگ Startup دوباره بررسی کن.
+
+سایت عمومی وضعیت سرور (1.3.0، تکمیل‌شده در 1.4.0 با اعلان‌ها و ویرایشگر چیدمان):
+- بعد از اجرای سرور، آدرس http://IP-فیکا:1234 را باز کن (مثلاً http://10.1.1.1:1234). پورت 1234 TCP را در فایروال ویندوز باز کن.
+- مدیریت آن از پنل ادمین، منوی Status Site: روشن/خاموش، IP، پورت، نام، پس‌زمینه، نمایش بخش‌ها و مخفی‌کردن بازیکن.
+- در user/mods/SPT-EconomyGuard/SPT-EconomyGuard-Data/health.json بخش statusBoard را ببین: running = true و collector.hooks.botGeneration / raidEnd / fikaMatches / offers.
+- راهنمای کامل: STATUS_BOARD_GUIDE_FA.md
+
+EFT Operations 1.6.0:
+- مأموریت‌ها، JSON Import/Export، رتبه‌بندی و دفتر پاداش در منوی Operations.
+- انتشار مأموریت، Event متناظر را در Status Site ایجاد می‌کند.
+- Adapter واقعی Fika، HUD بازی و تحویل خودکار روبل/آیتم هنوز تکمیل نشده‌اند؛ پاداش پول/آیتم در وضعیت pending_delivery ثبت می‌شود.
+- تست: npm test (24/24) و npm run check.
+
+راهنما:
+- README_FA.md
+- STATUS_BOARD_GUIDE_FA.md
+- ADMIN_PANEL_GUIDE_FA.md
+- REFERENCES.md
+- OPERATIONS-README_FA.md

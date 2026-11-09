@@ -1,0 +1,13 @@
+{
+  "name": "spt-economyguard-enterprise",
+  "author": "EconomyGuard",
+  "version": "1.9.1",
+  "license": "MIT",
+  "sptVersion": "~3.11.0",
+  "main": "src/mod.js",
+  "description": "SPT 3.11.x economic transaction firewall with exact trader and Flea payment validation, GP/custom currency support, bulk/PACK normalization, cautious unknown-item handling, account and item blocklists, launcher login bans, admin-provisioned accounts, approval and IP allowlists, local authenticated security dashboard, Fika live online player presence, audit evidence, and an isolated public status site (leaderboard, online list, raids, flea market); EFT Operations mission authoring UI, JSON import/export, event publishing, squad readiness, objective tracking interface, verified award ledger and leaderboard; mission scheduling and solo/squad validation, pending raid review queue with admin evidence decisions, linked public event lifecycle, safer corrupt-store recovery, version-gated read-only Fika Server 2.4.3 raid lifecycle observer and audit tab; authenticated SPT player API for mission listing, acceptance, squad readiness, leave and player state; BepInEx client plugin source for mission board, squad readiness and native SPT 3.11.1 RequestHandler session bridge",
+  "scripts": {
+    "test": "node tools/run-tests.js",
+    "check": "node --check src/mod.js && node --check src/admin-panel.js && node --check src/operations/service.js && node --check src/operations/fika243-adapter.js && node --check src/operations/client-api.js && node --check web/operations-admin.js"
+  }
+}

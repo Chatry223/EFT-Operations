@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "degraded": false,
+  "settings": {
+    "allowLauncherRegistration": false,
+    "requireApprovedLogin": true,
+    "enforceIpAllowlist": false,
+    "allowLoopback": true,
+    "allowedIps": [
+      "203.0.113.25",
+      "198.51.100.0/24"
+    ],
+    "trustedProxyIps": []
+  },
+  "bans": {
+    "0123456789abcdef01234567": {
+      "active": true,
+      "reason": "Administrator-reviewed repeated economic abuse",
+      "createdAt": "2026-11-04T20:00:00.000Z",
+      "expiresAt": null,
+      "actor": "ADMIN_PANEL"
+    }
+  },
+  "approvedProfiles": {
+    "abcdef0123456789abcdef01": {
+      "username": "approved_friend",
+      "nickname": "ExamplePlayer",
+      "edition": "Edge Of Darkness",
+      "source": "ADMIN_CREATED",
+      "createdAt": "2026-11-04T20:05:00.000Z",
+      "approvedAt": "2026-11-04T20:05:00.000Z"
+    }
+  },
+  "recentIps": [],
+  "audit": []
+}
