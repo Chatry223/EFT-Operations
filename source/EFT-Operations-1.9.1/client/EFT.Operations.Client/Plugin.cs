@@ -477,7 +477,6 @@ namespace EFTOperations.Client
         private const string RequestHandlerTypeName = "SPT.Common.Http.RequestHandler";
         private const BindingFlags StaticFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
         private static Type cachedType;
-        private static bool typeResolved;
 
         public static bool TryGetContext(out string sessionId, out string host, out object client, out string error)
         {
@@ -552,8 +551,7 @@ namespace EFTOperations.Client
 
         private static Type GetRequestHandlerType()
         {
-            if (typeResolved) return cachedType;
-            typeResolved = true;
+            if (cachedType != null) return cachedType;
 
             cachedType = Type.GetType(RequestHandlerTypeName + ", SPT.Common", false);
             if (cachedType != null) return cachedType;
