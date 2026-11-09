@@ -63,10 +63,10 @@ const fakeRaidCallbacks = {
     handleRaidLeave(url, info, sessionId) { acceptedRaidCalls++; return 'left'; }
 };
 assert.equal(adapter.patchRaidCallbacks(fakeRaidCallbacks), true);
-assert.equal(fakeRaidCallbacks.handleRaidCreate('', { serverId: 'abcdef0123456789abcdef01' }, 'session-1'), 'created');
+assert.equal(fakeRaidCallbacks.handleRaidCreate('', { serverId: 'match-1', hostUsername: 'pmc-name' }, 'session-1'), 'created');
 assert.equal(fakeRaidCallbacks.handleRaidLeave('', { serverId: 'match-1', profileId: 'abcdef0123456789abcdef02' }, 'session-1'), 'left');
 assert.equal(acceptedRaidCalls, 2);
-assert.throws(() => fakeRaidCallbacks.handleRaidCreate('', { serverId: 'abcdef0123456789abcdef99' }, 'session-1'), /FIKA_SESSION_PROFILE_MISMATCH/);
+assert.throws(() => fakeRaidCallbacks.handleRaidCreate('', { serverId: 'match-2', hostUsername: 'someone-else' }, 'session-1'), /FIKA_HOST_SESSION_IDENTITY_MISMATCH/);
 assert.throws(() => fakeRaidCallbacks.handleRaidLeave('', { serverId: 'match-1', profileId: 'abcdef0123456789abcdef99' }, 'session-1'), /FIKA_SESSION_PROFILE_MISMATCH/);
 assert.equal(acceptedRaidCalls, 2, 'spoofed create/leave requests must be rejected before Fika mutates matches');
 
