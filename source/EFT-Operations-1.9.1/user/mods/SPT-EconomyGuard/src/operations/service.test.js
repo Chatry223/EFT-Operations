@@ -71,13 +71,13 @@ reloaded.recordRaidEvent(reviewGroup.id, { type: 'kill', target: 'scav', amount:
 reloaded.recordRaidEvent(reviewGroup.id, { type: 'extract', amount: 1 });
 const pendingReview = reloaded.finishGroup(reviewGroup.id, { verified: false, aliveProfileIds: ['abcdef0123456789abcdef05', 'abcdef0123456789abcdef06'], extractedProfileIds: ['abcdef0123456789abcdef05', 'abcdef0123456789abcdef06'] });
 assert.equal(pendingReview.state, 'review');
-assert.equal(reloaded.reviewQueue().length, 1);
+assert.ok(reloaded.reviewQueue().some(x => x.id === reviewGroup.id));
 assert.throws(() => reloaded.accept(reviewMission.id, 'abcdef0123456789abcdef05'), /PLAYER_REVIEW_PENDING/);
 assert.throws(() => reloaded.resolveReview(reviewGroup.id, 'approve', ''), /INVALID_REVIEW_NOTE/);
 assert.throws(() => reloaded.resolveReview(reviewGroup.id, 'approve', 'Verified against server raid log: raid-review'), /REVIEW_ATTESTATION_REQUIRED/);
 const reviewed = reloaded.resolveReview(reviewGroup.id, 'approve', 'Verified against server raid log: raid-review', 'ADMIN', { confirmed: true });
 assert.equal(reviewed.state, 'completed');
 assert.equal(reloaded.getPlayer('abcdef0123456789abcdef05').points, 250);
-assert.equal(reloaded.reviewQueue().length, 0);
+assert.equal(reloaded.reviewQueue().length, 1, 'the unrelated untrusted outcome remains pending review');
 fs.rmSync(root, { recursive: true, force: true });
 console.log('OperationsService: all tests passed');
