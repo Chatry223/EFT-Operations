@@ -477,6 +477,8 @@ namespace EFTOperations.Client
             GUILayout.Label("ACTIVE FIELD OPERATION", HeaderStyle());
             GUILayout.Label(mission.title ?? "UNTITLED OPERATION", NotificationStyle());
             GUILayout.Label((mission.map ?? "UNKNOWN MAP").ToUpperInvariant(), SmallStyle());
+            if (!String.IsNullOrEmpty(mission.campaignId))
+                GUILayout.Label("CAMPAIGN  /  " + mission.campaignId.ToUpperInvariant() + (mission.campaignOrder > 0 ? "  ·  OPERATION " + mission.campaignOrder : ""), SmallStyle());
             if (playerState.player != null)
                 GUILayout.Label("OPERATOR RANK  /  " + (playerState.player.rank ?? "UNRANKED") + "  ·  " + playerState.player.points + " PTS", SmallStyle());
 
