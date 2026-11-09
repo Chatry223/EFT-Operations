@@ -716,11 +716,11 @@ class AdminPanelServer {
                             const seen = new Set();
                             for (const event of raidEnds) {
                                 const exitMatches = objective.type === 'survive' || !target || String(event.exitName || '').toLowerCase() === target;
-                                if (exitMatches && String(event.exitStatus || '').toLowerCase() === 'survived') seen.add(String(event.profileId || event.displayName || 'unknown'));
+                                if (exitMatches && ['survived', 'runner'].includes(String(event.exitStatus || '').toLowerCase())) seen.add(String(event.profileId || event.displayName || 'unknown'));
                             }
                             reportedCount = seen.size;
                         } else if (objective.type === 'raid_complete') {
-                            reportedCount = fikaEvidence.filter(event => event.type === 'fika_match_end').length;
+                            reportedCount = raidEnds.filter(event => !!String(event.exitStatus || '').trim()).length;
                         }
                         const progressCount = Number((group.progress || {})[objective.id] || 0);
                         const progressTrust = String((group.progressTrust || {})[objective.id] || 'none');
