@@ -129,8 +129,11 @@ class Fika243OperationsAdapter {
             if (target[flag]) continue;
             const original = target[methodName];
             target[methodName] = function (url, info, sessionId, ...rest) {
-                const field = methodName === 'handleRaidCreate' ? 'serverId' : 'profileId';
-                adapter.assertProfileBelongsToSession(sessionId, object(info)[field], methodName);
+                if (methodName === 'handleRaidCreate') {
+                    adapter.assertRaidHostBelongsToSession(sessionId, object(info).hostUsername);
+                } else {
+                    adapter.assertProfileBelongsToSession(sessionId, object(info).profileId, methodName);
+                }
                 return original.call(this, url, info, sessionId, ...rest);
             };
             Object.defineProperty(target, flag, { value: true, enumerable: false });
@@ -138,6 +141,24 @@ class Fika243OperationsAdapter {
         }
         this.status.raidIdentityHook = patched;
         return patched;
+    }
+
+    assertRaidHostBelongsToSession(sessionId, hostUsername) {
+        const sid = String(sessionId || '').trim();
+        const requestedName = String(hostUsername || '').trim().toLowerCase();
+        if (!sid || !requestedName || !this.services.saveServer || typeof this.services.saveServer.getProfile !== 'function') {
+            throw new Error('FIKA_HOST_SESSION_IDENTITY_UNAVAILABLE');
+        }
+        const profile = safe(() => this.services.saveServer.getProfile(sid), null);
+        const characters = object(profile && profile.characters);
+        const names = [object(characters.pmc).Info, object(characters.scav).Info]
+            .map(info => String(object(info).Nickname || '').trim().toLowerCase())
+            .filter(Boolean);
+        if (!names.includes(requestedName)) {
+            this.log('warn', `Rejected Fika raid create for session ${sid}: host username does not match its authenticated PMC/Scav profile.`);
+            throw new Error('FIKA_HOST_SESSION_IDENTITY_MISMATCH');
+        }
+        return true;
     }
 
     assertProfileBelongsToSession(sessionId, requestedProfileId, methodName) {
