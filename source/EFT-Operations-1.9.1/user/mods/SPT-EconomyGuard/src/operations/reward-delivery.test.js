@@ -64,7 +64,7 @@ const failedAward = { id: 'award-3', groupId: 'group-3', missionId: 'mission-1',
 operations.state.awards.push(failedAward);
 const failing = new RewardDeliveryService({
     operations,
-    saveServer: { getProfiles() { return { 'session-1': { characters: { pmc: { _id: 'profile-1' } } }; } },
+    saveServer: { getProfiles() { return { 'session-1': { characters: { pmc: { _id: 'profile-1' } } } }; } },
     mailSendService: { sendSystemMessageToPlayer() { throw new Error('mail unavailable'); } },
     hashUtil,
     databaseService: { getItems() { return templates; } },
