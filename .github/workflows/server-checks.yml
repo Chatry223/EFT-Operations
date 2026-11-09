@@ -68,3 +68,24 @@ jobs:
       - name: Unit tests
         working-directory: user/mods/SPT-EconomyGuard
         run: npm test
+
+  windows-build-helper-validation:
+    name: Validate graphical Windows build helper
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse PowerShell GUI builder
+        shell: pwsh
+        run: |
+          $script = 'source/EFT-Operations-1.9.1/client/EFT.Operations.Client/BUILD-GUI.ps1'
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script), [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            throw 'PowerShell GUI builder has syntax errors.'
+          }
+          if (-not (Test-Path 'source/EFT-Operations-1.9.1/client/EFT.Operations.Client/BUILD-GUI.bat')) {
+            throw 'One-click GUI launcher batch file is missing.'
+          }
+          Write-Host 'Graphical build helper syntax validated.'
