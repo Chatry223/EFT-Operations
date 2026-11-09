@@ -37,7 +37,8 @@ class OperationsClientApi {
         const scav = profile && profile.characters && profile.characters.scav;
         const scavId = String(scav && scav._id || '');
         const info = profile && profile.info || {};
-        return { profileId, scavProfileId: PROFILE_ID_RE.test(scavId) && scavId !== profileId ? scavId : null, displayName: String(info.Nickname || info.username || 'Operator').slice(0, 40) };
+        const displayName = pmc && pmc.Info && pmc.Info.Nickname || scav && scav.Info && scav.Info.Nickname || info.Nickname || info.username || 'Operator';
+        return { profileId, scavProfileId: PROFILE_ID_RE.test(scavId) && scavId !== profileId ? scavId : null, displayName: String(displayName).slice(0, 40) };
     }
 
     publicMission(mission) {
