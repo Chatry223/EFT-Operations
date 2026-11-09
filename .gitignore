@@ -1,0 +1,23 @@
+# Build output
+**/bin/
+**/obj/
+*.pdb
+*.cache
+
+# Local game/runtime dependencies (never publish proprietary assemblies)
+**/lib-local/
+**/GameAssemblies/
+**/BepInExLocal/
+**/EscapeFromTarkov_Data/
+*.dll
+!**/*.example.dll
+
+# Local/runtime data and secrets
+**/SPT-EconomyGuard-Data/
+**/user/profiles/
+**/user/logs/
+**/user/mods/**/config/private*.json
+.env
+.env.*
+*.key
+*.conf
