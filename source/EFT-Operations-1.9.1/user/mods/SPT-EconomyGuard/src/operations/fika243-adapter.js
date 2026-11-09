@@ -22,6 +22,7 @@ class Fika243OperationsAdapter {
         this.eventsFile = path.join(this.dataDir, 'fika-events.jsonl');
         this.events = [];
         this.finishedMatchIds = new Set();
+        this.raidSnapshots = new Map();
         this.patched = new Set();
         this.status = this.detectVersion();
         this.status.saveServerHook = false;
@@ -228,17 +229,31 @@ class Fika243OperationsAdapter {
         const proto = Object.getPrototypeOf(instance);
         const target = proto && Object.prototype.hasOwnProperty.call(proto, 'endLocalRaid') ? proto : instance;
         if (!target || typeof target.endLocalRaid !== 'function') return false;
-        if (target.__egFika243LifecycleHook) { this.status.lifecycleHook = true; return true; }
         const adapter = this;
-        const original = target.endLocalRaid;
-        target.endLocalRaid = function (sessionId, request, ...rest) {
-            const result = original.call(this, sessionId, request, ...rest);
-            safe(() => adapter.captureRaidEnd(sessionId, request));
-            return result;
-        };
-        Object.defineProperty(target, '__egFika243LifecycleHook', { value: true, enumerable: false });
-        this.status.lifecycleHook = true;
-        return true;
+
+        if (typeof target.startLocalRaid === 'function' && !target.__egFika243StartLifecycleHook) {
+            const originalStart = target.startLocalRaid;
+            target.startLocalRaid = function (sessionId, request, ...rest) {
+                const result = originalStart.call(this, sessionId, request, ...rest);
+                safe(() => adapter.captureRaidStart(sessionId, request, result));
+                return result;
+            };
+            Object.defineProperty(target, '__egFika243StartLifecycleHook', { value: true, enumerable: false });
+        }
+
+        if (!target.__egFika243LifecycleHook) {
+            const originalEnd = target.endLocalRaid;
+            target.endLocalRaid = function (sessionId, request, ...rest) {
+                let result;
+                try { result = originalEnd.call(this, sessionId, request, ...rest); }
+                finally { safe(() => adapter.captureRaidEnd(sessionId, request)); }
+                return result;
+            };
+            Object.defineProperty(target, '__egFika243LifecycleHook', { value: true, enumerable: false });
+        }
+
+        this.status.lifecycleHook = !!(target.__egFika243StartLifecycleHook && target.__egFika243LifecycleHook);
+        return this.status.lifecycleHook;
     }
 
     patchMatchService(instance) {
@@ -446,6 +461,58 @@ class Fika243OperationsAdapter {
         };
         this.appendEvent(event);
         return event;
+    }
+
+    captureRaidStart(sessionId, request, response) {
+        const identity = this.resolveIdentity(sessionId);
+        const matchId = this.resolveMatchId(sessionId, identity);
+        if (!matchId || !this.services.saveServer || typeof this.services.saveServer.getProfile !== 'function') return null;
+        const groups = this.operations && this.operations.state && Array.isArray(this.operations.state.groups) ? this.operations.state.groups : [];
+        const hasMissionGroup = groups.some(group => ['forming', 'in_raid'].includes(group.state)
+            && (group.members || []).some(member => String(member.profileId || '') === identity.profileId));
+        if (!hasMissionGroup) return null;
+        const profile = this.services.saveServer.getProfile(sessionId);
+        const characters = object(profile && profile.characters);
+        const side = String(object(request).playerSide || object(request).side || 'pmc').toLowerCase();
+        const isScav = side === 'savage' || side === 'scav' || side === 'scavenger';
+        const activeProfile = isScav ? object(characters.scav) : object(characters.pmc);
+        const inventory = object(activeProfile.Inventory);
+        const items = Array.isArray(inventory.items) ? inventory.items.slice(0, 2500) : [];
+        const itemSnapshot = {};
+        for (const item of items) {
+            const id = String(object(item)._id || '');
+            if (!id) continue;
+            itemSnapshot[id] = {
+                tpl: String(object(item)._tpl || ''),
+                count: Math.max(1, Number(object(object(item).upd).StackObjectsCount) || 1)
+            };
+        }
+        const key = `${matchId}:${identity.profileId}`;
+        const snapshot = {
+            matchId: String(matchId),
+            profileId: identity.profileId,
+            displayName: identity.displayName,
+            map: String(object(request).location || object(response).location || '').toLowerCase(),
+            side: isScav ? 'scav' : 'pmc',
+            startedAt: Date.now(),
+            items: itemSnapshot
+        };
+        this.raidSnapshots.set(key, snapshot);
+        while (this.raidSnapshots.size > 200) this.raidSnapshots.delete(this.raidSnapshots.keys().next().value);
+        this.appendEvent({
+            eventId: `raid-start-${Date.now()}-${identity.profileId}`,
+            type: 'fika_raid_start',
+            timestamp: new Date().toISOString(),
+            matchId: String(matchId),
+            profileId: identity.profileId,
+            displayName: identity.displayName,
+            map: snapshot.map,
+            playerSide: snapshot.side,
+            startingInventoryItemCount: items.length,
+            evidenceTrust: 'fika_server_lifecycle',
+            rewardEligible: false
+        });
+        return { matchId: String(matchId), itemCount: items.length, side: snapshot.side };
     }
 
     captureRaidEnd(sessionId, request) {
