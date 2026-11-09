@@ -9,6 +9,8 @@ const MAX_ENTRIES_PER_ARCHIVE = 20000;
 const MAX_ARCHIVE_BYTES = 512 * 1024 * 1024;
 const MAX_DIRECTORY_BYTES = 64 * 1024 * 1024;
 const MAX_JSON_BYTES = 2 * 1024 * 1024;
+const MAX_PREVIEW_ENTRIES = 50;
+const MAX_PREVIEW_TOTAL_BYTES = 4 * 1024 * 1024;
 const TARGET = /(?:^|\\/)(?:Loader\\/loader\\.json|Presets\\/v[1-9][0-9]*\\.json)$/i;
 
 function crc32(buffer) {
@@ -76,8 +78,8 @@ function parseDirectory(fd, stat) {
         const next = nameStart + nameLength + extraLength + commentLength;
         if (next > directory.length) throw new Error('ZIP_DIRECTORY_CORRUPT');
         if (compressedSize === 0xffffffff || uncompressedSize === 0xffffffff || localOffset === 0xffffffff) throw new Error('ZIP64_NOT_SUPPORTED');
-        const name = directory.toString(flags & 0x0800 ? 'utf8' : 'latin1', nameStart, nameStart + nameLength).replace(/\\\\/g, '/');
-        if (TARGET.test(name) && !name.endsWith('/')) entries.push({ name, flags, method, crc, compressedSize, uncompressedSize, localOffset });
+        const name = directory.toString(flags & 0x0800 ? 'utf8' : 'latin1', nameStart, nameStart + nameLength).replace(/\\/g, '/');
+        if (TARGET.test(name) && !name.endsWith('/')) entries.push({ name, flags, method, crc, compressedSize, uncompressedSize, localOffset, directoryOffset });
         offset = next;
     }
     if (offset !== directory.length) throw new Error('ZIP_DIRECTORY_SIZE_MISMATCH');
@@ -96,37 +98,68 @@ function listZipEntries(file) {
 
 function readZipJsonEntries(file, options = {}) {
     const maxJsonBytes = Math.min(MAX_JSON_BYTES, Math.max(1024, Number(options.maxJsonBytes) || MAX_JSON_BYTES));
+    const maxEntries = Math.min(MAX_PREVIEW_ENTRIES, Math.max(1, Number(options.maxEntries) || MAX_PREVIEW_ENTRIES));
+    const maxTotalJsonBytes = Math.min(MAX_PREVIEW_TOTAL_BYTES, Math.max(1024, Number(options.maxTotalJsonBytes) || MAX_PREVIEW_TOTAL_BYTES));
     const fd = fs.openSync(file, 'r');
     try {
         const stat = fs.fstatSync(fd);
-        const entries = parseDirectory(fd, stat);
-        return entries.map(entry => {
-            if (entry.flags & 1) return { name: entry.name, ok: false, error: 'ZIP_ENTRY_ENCRYPTED' };
-            if (![0, 8].includes(entry.method)) return { name: entry.name, ok: false, error: 'ZIP_COMPRESSION_UNSUPPORTED' };
-            if (entry.uncompressedSize > maxJsonBytes || entry.compressedSize > MAX_JSON_BYTES) return { name: entry.name, ok: false, error: 'ZIP_JSON_SIZE_LIMIT' };
-            if (entry.localOffset + 30 > stat.size) return { name: entry.name, ok: false, error: 'ZIP_LOCAL_HEADER_INVALID' };
+        const allEntries = parseDirectory(fd, stat);
+        const selectedEntries = allEntries.slice(0, maxEntries);
+        const results = [];
+        let totalBytes = 0;
+        let truncated = allEntries.length > selectedEntries.length;
+        for (const entry of selectedEntries) {
+            if (entry.flags & 1) { results.push({ name: entry.name, ok: false, error: 'ZIP_ENTRY_ENCRYPTED' }); continue; }
+            if (![0, 8].includes(entry.method)) { results.push({ name: entry.name, ok: false, error: 'ZIP_COMPRESSION_UNSUPPORTED' }); continue; }
+            if (entry.uncompressedSize > maxJsonBytes || entry.compressedSize > MAX_JSON_BYTES) { results.push({ name: entry.name, ok: false, error: 'ZIP_JSON_SIZE_LIMIT' }); continue; }
+            if (totalBytes + entry.uncompressedSize > maxTotalJsonBytes) {
+                truncated = true;
+                results.push({ name: entry.name, ok: false, error: 'ZIP_PREVIEW_TOTAL_LIMIT' });
+                break;
+            }
+            totalBytes += entry.uncompressedSize;
+            if (entry.localOffset + 30 > stat.size || entry.localOffset >= entry.directoryOffset) {
+                results.push({ name: entry.name, ok: false, error: 'ZIP_LOCAL_HEADER_INVALID' });
+                continue;
+            }
             const local = readAt(fd, 30, entry.localOffset);
-            if (local.readUInt32LE(0) !== 0x04034b50) return { name: entry.name, ok: false, error: 'ZIP_LOCAL_HEADER_INVALID' };
+            if (local.readUInt32LE(0) !== 0x04034b50) { results.push({ name: entry.name, ok: false, error: 'ZIP_LOCAL_HEADER_INVALID' }); continue; }
             const localFlags = local.readUInt16LE(6);
             const localMethod = local.readUInt16LE(8);
-            if (localMethod !== entry.method || !!(localFlags & 1) !== !!(entry.flags & 1)) return { name: entry.name, ok: false, error: 'ZIP_LOCAL_METADATA_MISMATCH' };
+            if (localMethod !== entry.method || localFlags !== entry.flags) {
+                results.push({ name: entry.name, ok: false, error: 'ZIP_LOCAL_METADATA_MISMATCH' });
+                continue;
+            }
             const localNameLength = local.readUInt16LE(26);
             const localExtraLength = local.readUInt16LE(28);
             const dataOffset = entry.localOffset + 30 + localNameLength + localExtraLength;
-            if (dataOffset + entry.compressedSize > stat.size) return { name: entry.name, ok: false, error: 'ZIP_DATA_RANGE_INVALID' };
-            const localName = readAt(fd, localNameLength, entry.localOffset + 30).toString(local.readUInt16LE(6) & 0x0800 ? 'utf8' : 'latin1').replace(/\\\\/g, '/');
-            if (localName !== entry.name) return { name: entry.name, ok: false, error: 'ZIP_LOCAL_NAME_MISMATCH' };
+            if (dataOffset < entry.localOffset + 30 || dataOffset > entry.directoryOffset
+                || dataOffset + entry.compressedSize > entry.directoryOffset) {
+                results.push({ name: entry.name, ok: false, error: 'ZIP_DATA_RANGE_INVALID' });
+                continue;
+            }
+            const localName = readAt(fd, localNameLength, entry.localOffset + 30)
+                .toString(localFlags & 0x0800 ? 'utf8' : 'latin1').replace(/\\/g, '/');
+            if (localName !== entry.name) { results.push({ name: entry.name, ok: false, error: 'ZIP_LOCAL_NAME_MISMATCH' }); continue; }
             const compressed = readAt(fd, entry.compressedSize, dataOffset);
             let data;
             try {
                 data = entry.method === 0 ? compressed : zlib.inflateRawSync(compressed, { maxOutputLength: maxJsonBytes });
-            } catch (_) { return { name: entry.name, ok: false, error: 'ZIP_DECOMPRESSION_FAILED' }; }
-            if (data.length !== entry.uncompressedSize || crc32(data) !== entry.crc) return { name: entry.name, ok: false, error: 'ZIP_CRC_OR_SIZE_MISMATCH' };
+            } catch (_) { results.push({ name: entry.name, ok: false, error: 'ZIP_DECOMPRESSION_FAILED' }); continue; }
+            if (data.length !== entry.uncompressedSize || crc32(data) !== entry.crc) {
+                results.push({ name: entry.name, ok: false, error: 'ZIP_CRC_OR_SIZE_MISMATCH' });
+                continue;
+            }
             try {
                 const parsed = JSON.parse(data.toString('utf8'));
-                return { name: entry.name, ok: true, data: parsed };
-            } catch (_) { return { name: entry.name, ok: false, error: 'ZIP_JSON_INVALID' }; }
-        });
+                results.push({ name: entry.name, ok: true, data: parsed });
+            } catch (_) { results.push({ name: entry.name, ok: false, error: 'ZIP_JSON_INVALID' }); }
+        }
+        results.truncated = truncated;
+        results.totalMatchingEntries = allEntries.length;
+        results.previewedEntries = results.length;
+        results.previewBytes = totalBytes;
+        return results;
     } finally { fs.closeSync(fd); }
 }
 
