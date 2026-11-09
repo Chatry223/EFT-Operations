@@ -13,7 +13,9 @@ const fikaDir = path.join(root, 'user', 'mods', 'fika-server');
 const dataDir = path.join(root, 'operations-data');
 fs.mkdirSync(modDir, { recursive: true });
 fs.mkdirSync(fikaDir, { recursive: true });
+fs.mkdirSync(path.join(fikaDir, 'assets', 'configs'), { recursive: true });
 fs.writeFileSync(path.join(fikaDir, 'package.json'), JSON.stringify({ version: '2.4.3', sptVersion: '~3.11.0' }));
+fs.writeFileSync(path.join(fikaDir, 'assets', 'configs', 'fika.jsonc'), JSON.stringify({ server: { allowItemSending: false } }));
 
 const adapter = new Fika243OperationsAdapter({ modDir, operations: { dataDir }, logger: { info() {}, warn() {}, debug() {} } });
 assert.equal(adapter.getStatus().enabled, true, 'only the configured Fika 2.4.3 / SPT 3.11 line should enable hooks');
@@ -22,6 +24,8 @@ assert.equal(adapter.getStatus().fikaClientTargetVersion, '1.2.3');
 assert.equal(adapter.getStatus().fikaClientConfigLastVersion, '1.2.3');
 assert.match(adapter.getStatus().fikaClientConfigEvidence, /advisory only/);
 assert.equal(adapter.getStatus().operationsClientPluginVersion, '0.1.0');
+assert.deepEqual(adapter.getStatus().itemSending.configured, true);
+assert.equal(adapter.getStatus().itemSending.enabled, false, 'disabled Fika item sending should be reported as a closed transfer route');
 
 const matchService = {
     getMatch(id) { return id === 'match-1' ? { players: new Map([['profile-a', {}], ['profile-b', {}]]) } : null; },
