@@ -57,6 +57,12 @@ assert.equal(adapter.patchUpdateCallbacks(fakeUpdateCallbacks), true);
 assert.equal(fakeUpdateCallbacks.handleRaidAddPlayer('', { profileId: 'abcdef0123456789abcdef01' }, 'session-1'), 'added');
 assert.equal(fakeUpdateCallbacks.handlePlayerDied('', { profileId: 'abcdef0123456789abcdef02' }, 'session-1'), 'dead');
 assert.equal(acceptedUpdateCalls, 2);
+const deathEvidence = adapter.getRecentEvents(20).find(event => event.type === 'fika_player_died');
+assert.ok(deathEvidence, 'authenticated Fika player-death reports should be retained for review');
+assert.equal(deathEvidence.profileId, 'abcdef0123456789abcdef01');
+assert.equal(deathEvidence.reportedCharacterProfileId, 'abcdef0123456789abcdef02');
+assert.equal(deathEvidence.evidenceTrust, 'authenticated_client_report');
+assert.equal(deathEvidence.rewardEligible, false, 'player-death reports must not auto-award');
 assert.throws(() => fakeUpdateCallbacks.handleRaidAddPlayer('', { profileId: 'abcdef0123456789abcdef99' }, 'session-1'), /FIKA_SESSION_PROFILE_MISMATCH/);
 assert.throws(() => fakeUpdateCallbacks.handlePlayerDied('', { profileId: 'abcdef0123456789abcdef99' }, 'session-1'), /FIKA_SESSION_PROFILE_MISMATCH/);
 assert.equal(acceptedUpdateCalls, 2, 'mismatched account IDs must be rejected before Fika mutates its match registry');
@@ -124,6 +130,34 @@ assert.deepEqual(finishedGroup.reviewData.extractedProfileIds.sort(), ['abcdef01
 assert.equal(ops.state.awards.length, 0, 'untrusted extraction reports must never issue rewards');
 assert.equal(lifecycleAdapter.getRecentEvents(20).some(x => x.type === 'mission_group_linked'), true);
 assert.equal(lifecycleAdapter.getRecentEvents(20).some(x => x.type === 'mission_group_review_created'), true);
+
+// Installation status must only say ready when every expected Fika/SPT hook is present.
+const statusAdapter = new Fika243OperationsAdapter({ modDir, operations: { dataDir }, logger: { info() {}, warn() {}, debug() {} } });
+const statusContainer = {
+    afterResolution() {},
+    resolve(token) {
+        const instances = {
+            SaveServer: { getProfile() { return null; } },
+            FikaUpdateCallbacks: { handleRaidAddPlayer() {}, handlePlayerDied() {} },
+            FikaRaidCallbacks: { handleRaidCreate() {}, handleRaidLeave() {} },
+            FikaMatchService: { addPlayerToMatch() {}, endMatch() {} },
+            LocationLifecycleService: { endLocalRaid() {} }
+        };
+        if (!instances[token]) throw new Error('not registered');
+        return instances[token];
+    }
+};
+assert.equal(statusAdapter.install(statusContainer), true);
+assert.equal(statusAdapter.getStatus().observerInstalled, true);
+assert.equal(statusAdapter.getStatus().hookState, 'ready');
+assert.deepEqual(statusAdapter.getStatus().missingHooks, []);
+
+// Partial DI availability must never be reported as fully installed.
+const partialAdapter = new Fika243OperationsAdapter({ modDir, operations: { dataDir }, logger: { info() {}, warn() {}, debug() {} } });
+const partialContainer = { afterResolution() {}, resolve(token) { if (token === 'SaveServer') return { getProfile() {} }; throw new Error('not registered yet'); } };
+assert.equal(partialAdapter.install(partialContainer), true);
+assert.equal(partialAdapter.getStatus().observerInstalled, false);
+assert.equal(partialAdapter.getStatus().hookState, 'pending_or_partial');
 
 // Unsupported Fika versions must remain disabled.
 fs.writeFileSync(path.join(fikaDir, 'package.json'), JSON.stringify({ version: '2.4.4', sptVersion: '~3.11.0' }));
