@@ -37,7 +37,15 @@ namespace EFTOperations.Client
         {
             toggleKey = Config.Bind("Interface", "ToggleKey", KeyCode.F8, "Open or close the mission interface.");
             refreshSeconds = Config.Bind("Interface", "RefreshSeconds", 12f, "Automatic status refresh interval.");
+            Version bepinexVersion = typeof(BaseUnityPlugin).Assembly.GetName().Version;
             Logger.LogInfo("EFT Operations client loaded. UI key: " + toggleKey.Value);
+            Logger.LogInfo("Runtime fingerprint: Unity " + Application.unityVersion
+                + " / CLR " + Environment.Version
+                + " / BepInEx " + (bepinexVersion == null ? "unknown" : bepinexVersion.ToString()));
+            if (!String.Equals(Application.unityVersion, "2022.3.43f1", StringComparison.Ordinal))
+                Logger.LogWarning("EFT Operations was built for Unity 2022.3.43f1; detected " + Application.unityVersion + ". Continue only after compatibility review.");
+            if (bepinexVersion == null || bepinexVersion.Major != 5 || bepinexVersion.Minor != 4 || bepinexVersion.Build != 22)
+                Logger.LogWarning("EFT Operations was validated against BepInEx 5.4.22.0; detected " + (bepinexVersion == null ? "unknown" : bepinexVersion.ToString()) + ".");
             EnsureInputBridge();
             Logger.LogInfo("Authentication bridge: SPT 3.11.1 RequestHandler (SessionId + native HttpClient).");
             StartCoroutine(RefreshLoop());
