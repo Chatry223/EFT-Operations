@@ -383,6 +383,8 @@ namespace EFTOperations.Client
             GUILayout.Label(status, SmallStyle());
             if (playerState.player != null)
                 GUILayout.Label("OPERATOR RANK  /  " + (playerState.player.rank ?? "Recruit").ToUpperInvariant() + "     ·     " + playerState.player.points + " POINTS", SmallStyle());
+                if (!String.IsNullOrEmpty(playerState.player.nextRank))
+                    GUILayout.Label("PROMOTION  /  " + playerState.player.nextRank.ToUpperInvariant() + "  ·  " + playerState.player.pointsToNextRank.ToString("N0") + " PTS REMAINING  ·  " + playerState.player.rankProgressPercent + "%", SmallStyle());
             GUILayout.Space(8f);
 
             if (playerState.group != null)
@@ -481,6 +483,8 @@ namespace EFTOperations.Client
                 GUILayout.Label("CAMPAIGN  /  " + mission.campaignId.ToUpperInvariant() + (mission.campaignOrder > 0 ? "  ·  OPERATION " + mission.campaignOrder : ""), SmallStyle());
             if (playerState.player != null)
                 GUILayout.Label("OPERATOR RANK  /  " + (playerState.player.rank ?? "UNRANKED") + "  ·  " + playerState.player.points + " PTS", SmallStyle());
+                if (!String.IsNullOrEmpty(playerState.player.nextRank))
+                    GUILayout.Label("NEXT RANK  /  " + playerState.player.nextRank.ToUpperInvariant() + "  ·  " + playerState.player.pointsToNextRank.ToString("N0") + " PTS  ·  " + playerState.player.rankProgressPercent + "%", SmallStyle());
 
             string briefing = mission.briefing == null ? String.Empty : mission.briefing.body;
             if (!String.IsNullOrEmpty(briefing))
@@ -950,7 +954,7 @@ namespace EFTOperations.Client
     [Serializable] internal class MissionListResponse { public bool ok; public string error; public MissionDto[] missions; }
     [Serializable] internal class PlayerStateResponse { public bool ok; public string error; public bool canStart; public PlayerDto player; public GroupDto group; public MissionDto mission; }
     [Serializable] internal class ActionResponse { public bool ok; public string error; public GroupDto group; public bool canStart; }
-    [Serializable] internal class PlayerDto { public int points; public string rank; }
+    [Serializable] internal class PlayerDto { public int points; public string rank; public string nextRank; public int nextRankPoints; public int pointsToNextRank; public int rankProgressPercent; }
     [Serializable] internal class MissionDto { public string id; public string title; public string description; public BriefingDto briefing; public RewardDto rewards; public string map; public string mode; public int minPlayers; public int maxPlayers; public string campaignId; public int campaignOrder; public int requiredPoints; public bool locked; public string lockReason; public int currentPoints; public PrerequisiteDto[] missingPrerequisites; public ObjectiveDto[] objectives; }
     [Serializable] internal class PrerequisiteDto { public string id; public string title; public int campaignOrder; }
     [Serializable] internal class BriefingDto { public string kind; public string media; public string body; }
