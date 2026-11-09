@@ -727,6 +727,7 @@ class AdminPanelServer {
                         const verifiedCount = progressTrust === 'server_verified' ? progressCount : 0;
                         hostAttestedCount = progressTrust === 'host_attested' ? progressCount : 0;
                         const sptAcceptedCount = progressTrust === 'spt_accepted_client_delta' ? progressCount : 0;
+                        const clientReportedCount = progressTrust === 'client_report_only' ? progressCount : 0;
                         return {
                             objectiveId: objective.id,
                             type: objective.type,
@@ -738,11 +739,13 @@ class AdminPanelServer {
                             verifiedCount,
                             hostAttestedCount,
                             sptAcceptedCount,
+                            clientReportedCount,
                             reportedCount,
                             evidenceStatus: verifiedCount >= objective.count ? 'server_verified'
                                 : hostAttestedCount > 0 ? 'host_attested_admin_review'
                                     : sptAcceptedCount > 0 ? 'spt_accepted_client_delta_review'
-                                        : reportedCount > 0 && objective.type === 'raid_complete' ? 'fika_lifecycle_observed_unverified'
+                                        : clientReportedCount > 0 ? 'client_report_only'
+                                            : reportedCount > 0 && objective.type === 'raid_complete' ? 'fika_lifecycle_observed_unverified'
                                         : reportedCount > 0 ? 'client_report_only' : 'no_evidence'
                         };
                     });
