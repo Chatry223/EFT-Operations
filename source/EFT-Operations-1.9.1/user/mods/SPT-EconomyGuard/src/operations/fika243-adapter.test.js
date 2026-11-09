@@ -282,6 +282,26 @@ async function verifyAsyncLifecycleWrappers() {
         }
     };
     assert.equal(asyncAdapter.patchLifecycle(asyncLifecycleService), true);
+    // Simulate Fika's Always afterResolution callback replacing the overrides again.
+    const resetStart = async function () { await Promise.resolve(); return { location: 'woods' }; };
+    const resetEnd = async function () {
+        await Promise.resolve();
+        profileState = {
+            characters: {
+                pmc: { _id: 'abcdef0123456789abcdef21', Info: { Nickname: 'Async-PMC' }, Inventory: { items: [
+                    { _id: 'async-pre', _tpl: 'tpl-async', upd: { StackObjectsCount: 4, SpawnedInSession: true } },
+                    { _id: 'async-new', _tpl: 'tpl-new', upd: { StackObjectsCount: 1, SpawnedInSession: true } }
+                ] } },
+                scav: { _id: 'abcdef0123456789abcdef22', Inventory: { items: [] } }
+            }
+        };
+        return { accepted: true };
+    };
+    asyncLifecycleService.startLocalRaid = resetStart;
+    asyncLifecycleService.endLocalRaid = resetEnd;
+    assert.equal(asyncAdapter.patchLifecycle(asyncLifecycleService), true);
+    assert.notEqual(asyncLifecycleService.startLocalRaid, resetStart, 'lifecycle start hook must be re-applied after Fika resets the method');
+    assert.notEqual(asyncLifecycleService.endLocalRaid, resetEnd, 'lifecycle end hook must be re-applied after Fika resets the method');
     await asyncLifecycleService.startLocalRaid('session-async', { playerSide: 'pmc', location: 'woods' });
     assert.equal(asyncAdapter.raidSnapshots.size, 1, 'raid-start snapshot must be captured after the async start handler resolves');
     const result = await asyncLifecycleService.endLocalRaid('session-async', {
