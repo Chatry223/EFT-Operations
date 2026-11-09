@@ -74,6 +74,32 @@ try {
     assert.ok(result.archives.some(item => item.path === 'user/mods/nested.zip'));
     assert.ok(!result.archives.some(item => item.path === 'ordinary.zip'));
 
+    // Windows-style separators in archive entry names are normalized before matching.
+    const windowsPath = path.join(root, 'windows-path.zip');
+    fs.writeFileSync(windowsPath, makeZip([{ name: 'SVM\\\\Presets\\\\v7.json', data: { preset: 'windows-path' } }]));
+    const windowsPreview = readZipJsonEntries(windowsPath);
+    assert.strictEqual(windowsPreview.length, 1);
+    assert.strictEqual(windowsPreview[0].ok, true);
+    assert.strictEqual(windowsPreview[0].name, 'SVM/Presets/v7.json');
+
+    // A hostile archive with many matching JSON files must produce a bounded preview.
+    const manyEntries = path.join(root, 'many-presets.zip');
+    fs.writeFileSync(manyEntries, makeZip(Array.from({ length: 75 }, (_, i) => ({
+        name: 'Presets/v' + (i + 1) + '.json', data: { preset: i + 1 }
+    }))));
+    const bounded = readZipJsonEntries(manyEntries);
+    assert.strictEqual(bounded.length, 50);
+    assert.strictEqual(bounded.truncated, true);
+    assert.strictEqual(bounded.totalMatchingEntries, 75);
+    assert.ok(bounded.previewBytes <= 4 * 1024 * 1024);
+
+    // Local and central directory flags must agree, including the data-descriptor bit.
+    const mismatched = path.join(root, 'mismatched-flags.zip');
+    const mismatchedBytes = makeZip([{ name: 'Presets/v8.json', data: { safe: true } }]);
+    mismatchedBytes.writeUInt16LE(0x0808, 6);
+    fs.writeFileSync(mismatched, mismatchedBytes);
+    assert.strictEqual(readZipJsonEntries(mismatched)[0].error, 'ZIP_LOCAL_METADATA_MISMATCH');
+
     const corrupt = path.join(root, 'corrupt.zip');
     const bytes = makeZip([{ name: 'Presets/v9.json', data: { safe: true } }]);
     const localNameLength = bytes.readUInt16LE(26);
