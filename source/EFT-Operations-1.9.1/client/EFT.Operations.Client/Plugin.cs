@@ -677,7 +677,7 @@ namespace EFTOperations.Client
                 if (!IsFikaServer() || victim == null || aggressor == null) return;
                 object victimAiValue = ReadMember(victim, "IsAI");
                 object aggressorAiValue = ReadMember(aggressor, "IsAI");
-                if (!(victimAiValue is bool) || !(bool)victimAiValue || (aggressorAiValue is bool && (bool)aggressorAiValue)) return;
+                if (!(victimAiValue is bool) || !(bool)victimAiValue || !(aggressorAiValue is bool) || (bool)aggressorAiValue) return;
 
                 string killerProfileId = ReadMember(aggressor, "ProfileId") as string;
                 string victimProfileId = ReadMember(victim, "ProfileId") as string;
