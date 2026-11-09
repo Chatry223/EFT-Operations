@@ -4,24 +4,35 @@ on:
   push:
     branches: [main]
     paths:
-      - 'source/**'
-      - 'user/mods/SPT-EconomyGuard/**'
+      - 'source/EFT-Operations-1.9.1/client/**'
+      - 'source/EFT-Operations-1.9.1/tools/verify-dependency-archives.py'
+      - 'source/EFT-Operations-1.9.1.zip'
+      - 'source/EscapeFromTarkov_Data.zip'
+      - 'source/BepInEx.zip'
       - 'client/**'
       - '.github/workflows/build-client.yml'
   pull_request:
     branches: [main]
+    paths:
+      - 'source/EFT-Operations-1.9.1/client/**'
+      - 'source/EFT-Operations-1.9.1/tools/verify-dependency-archives.py'
+      - 'source/EFT-Operations-1.9.1.zip'
+      - 'source/EscapeFromTarkov_Data.zip'
+      - 'source/BepInEx.zip'
+      - 'client/**'
+      - '.github/workflows/build-client.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: eft-operations-client-${{ github.ref }}-${{ github.sha }}
+  group: eft-operations-client-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  source-status:
-    name: Source bundle readiness
+  prepare:
+    name: Source and dependency verification
     runs-on: ubuntu-latest
     outputs:
       source_ready: ${{ steps.detect.outputs.source_ready }}
@@ -44,19 +55,13 @@ jobs:
             echo "source_ready=false" >> "$GITHUB_OUTPUT"
             echo "Expected source folder or archive was not found."
           fi
-
-  dependency-archive-check:
-    name: Verify bundled EFT / BepInEx dependency archives
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Verify archive integrity, target hashes and Fika config
+      - name: Verify dependency archive integrity and target hashes
         run: python3 source/EFT-Operations-1.9.1/tools/verify-dependency-archives.py
 
   client-build:
     name: Build BepInEx client plugin (Windows + EFT assemblies)
-    needs: [source-status, dependency-archive-check]
-    if: needs.source-status.outputs.source_ready == 'true' && needs.dependency-archive-check.result == 'success' && github.event_name != 'pull_request'
+    needs: prepare
+    if: needs.prepare.outputs.source_ready == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -73,6 +78,20 @@ jobs:
           }
           if (-not (Test-Path 'client/EFT.Operations.Client/EFT.Operations.Client.csproj')) {
             throw 'Client source project is missing after source preparation.'
+          }
+      - name: Validate graphical Windows build helper
+        shell: pwsh
+        run: |
+          $script = 'client/EFT.Operations.Client/BUILD-GUI.ps1'
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script), [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            throw 'PowerShell GUI builder has syntax errors.'
+          }
+          if (-not (Test-Path 'client/EFT.Operations.Client/BUILD-GUI.bat')) {
+            throw 'One-click GUI launcher batch file is missing.'
           }
       - name: Prepare bundled build dependencies
         shell: pwsh
