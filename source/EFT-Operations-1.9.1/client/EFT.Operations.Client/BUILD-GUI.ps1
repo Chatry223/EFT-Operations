@@ -61,7 +61,9 @@ function Resolve-BepInExCore([string]$selected) {
 function Find-MSBuild {
     $cmd = Get-Command msbuild.exe -ErrorAction SilentlyContinue
     if ($cmd) { return $cmd.Source }
-    $vswhere = Join-Path \${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+    $programFilesX86 = [Environment]::GetFolderPath('ProgramFilesX86')
+    if ([string]::IsNullOrWhiteSpace($programFilesX86)) { return $null }
+    $vswhere = Join-Path $programFilesX86 'Microsoft Visual Studio\Installer\vswhere.exe'
     if (Test-Path $vswhere) {
         $vs = & $vswhere -latest -products '*' -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\MSBuild.exe' | Select-Object -First 1
         if ($vs -and (Test-Path $vs)) { return $vs }
@@ -105,10 +107,20 @@ $buildButton.Add_Click({
         if (-not (Test-Path $project)) { throw 'EFT.Operations.Client.csproj is missing.' }
         $msbuild = Find-MSBuild
         if (-not $msbuild) { throw 'MSBuild was not found. Install Visual Studio with the .NET desktop development workload and .NET Framework 4.7.2 targeting pack.' }
-        $requiredGame = @('UnityEngine.dll','UnityEngine.CoreModule.dll','UnityEngine.IMGUIModule.dll','UnityEngine.UnityWebRequestModule.dll','UnityEngine.JSONSerializeModule.dll')
+        $requiredGame = @('Assembly-CSharp.dll','UnityEngine.dll','UnityEngine.CoreModule.dll','UnityEngine.IMGUIModule.dll','UnityEngine.UnityWebRequestModule.dll','UnityEngine.JSONSerializeModule.dll')
         foreach ($name in $requiredGame) { if (-not (Test-Path (Join-Path $managed $name))) { throw "Missing EFT reference: $name" } }
+        $bepInExRoot = Split-Path $core -Parent
+        $fikaDll = Join-Path $bepInExRoot 'plugins\Fika.Core.dll'
+        $sptCommonDll = Join-Path $bepInExRoot 'plugins\spt\spt-common.dll'
+        $fikaConfig = Join-Path $bepInExRoot 'config\com.fika.core.cfg'
+        foreach ($dependency in @($fikaDll,$sptCommonDll,$fikaConfig)) {
+            if (-not (Test-Path -LiteralPath $dependency -PathType Leaf)) { throw "Missing required target dependency: $dependency" }
+        }
+        $fikaHeader = Get-Content -LiteralPath $fikaConfig -TotalCount 2 -ErrorAction Stop | Select-Object -First 1
+        if ($fikaHeader -notmatch 'Fika\.Core v1\.2\.3') { throw "Expected Fika client 1.2.3 config marker; found: $fikaHeader" }
         Write-Log "EFT references: $managed"
         Write-Log "BepInEx references: $core"
+        Write-Log 'Fika client marker: 1.2.3; SPT common bridge assembly found.'
         Write-Log "MSBuild: $msbuild"
         Write-Log 'Building Release / net472...'
         $output = & $msbuild $project '/m' '/p:Configuration=Release' "/p:GameManagedDir=$managed" "/p:BepInExCoreDir=$core" '/verbosity:minimal' 2>&1
@@ -119,7 +131,12 @@ $buildButton.Add_Click({
         $pluginDir = Join-Path (Split-Path $core -Parent) 'plugins\EFTOperations'
         New-Item -ItemType Directory -Path $pluginDir -Force | Out-Null
         $destination = Join-Path $pluginDir 'EFTOperations.Client.dll'
-        Copy-Item -LiteralPath $dll -Destination $destination -Force
+        if (Test-Path -LiteralPath $destination -PathType Leaf) {
+            $backup = $destination + '.before-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.bak'
+            Copy-Item -LiteralPath $destination -Destination $backup -ErrorAction Stop
+            Write-Log "Previous plugin backed up: $backup"
+        }
+        Copy-Item -LiteralPath $dll -Destination $destination -Force -ErrorAction Stop
         $hash = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash
         $report = @("Build time: $(Get-Date -Format o)", "Target: net472", "EFT Managed: $managed", "BepInEx core: $core", "DLL: $destination", "SHA256: $hash")
         Set-Content -LiteralPath (Join-Path $pluginDir 'build-report.txt') -Value $report -Encoding UTF8
