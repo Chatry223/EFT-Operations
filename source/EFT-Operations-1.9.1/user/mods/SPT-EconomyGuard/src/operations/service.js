@@ -206,6 +206,8 @@ class OperationsService {
         const serverVerified = event.evidenceTrust === 'server_verified' && source === 'fika-server-adapter';
         const sptAccepted = event.evidenceTrust === 'spt_accepted_client_delta' && source === 'spt-server-adapter'
             && event.type === 'collect' && event.acceptedBySpt === true;
+        const clientReported = event.evidenceTrust === 'client_report_only' && source === 'fika-client-report'
+            && ['extract', 'survive', 'raid_complete'].includes(event.type);
         const hostAttestedIdentity = event.evidenceTrust === 'host_attested' && source === 'fika-host-client'
             && event.reporterProfileId && g.members.some(member => String(member.profileId) === String(event.reporterProfileId) || String(member.scavProfileId || '') === String(event.reporterProfileId))
             && String(event.reporterProfileId) === String(event.matchId)
@@ -213,7 +215,7 @@ class OperationsService {
         const hostAttestedKill = hostAttestedIdentity && event.type === 'kill' && event.victimIsAi === true;
         const hostAttestedVisit = hostAttestedIdentity && event.type === 'visit' && typeof event.target === 'string' && !!event.target.trim();
         const hostAttested = !!(hostAttestedKill || hostAttestedVisit);
-        if (!serverVerified && !sptAccepted && !hostAttested) throw new Error('UNTRUSTED_RAID_EVENT');
+        if (!serverVerified && !sptAccepted && !clientReported && !hostAttested) throw new Error('UNTRUSTED_RAID_EVENT');
         const eventId = text(event.eventId, 120, 'EVENT_ID', true);
         const eventMap = text(event.map, 40, 'EVENT_MAP', true).toLowerCase();
         if (eventMap !== String(m.map || '').toLowerCase()) throw new Error('RAID_EVENT_MAP_MISMATCH');
