@@ -42,7 +42,8 @@ jobs:
   server-tests:
     name: SPT server checks and tests
     needs: source-status
-    if: needs.source-status.outputs.source_ready == 'true'
+    # Always execute the test gate. If the uploaded source is missing, the explicit
+    # Prepare source tree step fails with a useful error instead of silently skipping.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
