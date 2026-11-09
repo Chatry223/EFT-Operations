@@ -23,6 +23,15 @@ class Fika243OperationsAdapter {
         this.events = [];
         this.patched = new Set();
         this.status = this.detectVersion();
+        this.status.saveServerHook = false;
+        this.status.updateIdentityHook = false;
+        this.status.raidIdentityHook = false;
+        this.status.playerJoinHook = false;
+        this.status.matchEndHook = false;
+        this.status.lifecycleHook = false;
+        this.status.observerInstalled = false;
+        this.status.hookState = 'not_installed';
+        this.status.missingHooks = ['saveServer', 'updateIdentity', 'raidIdentity', 'playerJoin', 'matchEnd', 'lifecycle'];
     }
 
     log(level, message) {
@@ -68,7 +77,10 @@ class Fika243OperationsAdapter {
             this.status.reason = 'DI_CONTAINER_UNAVAILABLE';
             return false;
         }
-        this.hook(container, 'SaveServer', instance => { this.services.saveServer = instance; });
+        this.hook(container, 'SaveServer', instance => {
+            this.services.saveServer = instance;
+            this.status.saveServerHook = !!(instance && typeof instance.getProfile === 'function');
+        });
         this.hook(container, 'FikaUpdateCallbacks', instance => this.patchUpdateCallbacks(instance));
         this.hook(container, 'FikaRaidCallbacks', instance => this.patchRaidCallbacks(instance));
         this.hook(container, 'FikaMatchService', instance => {
@@ -76,21 +88,46 @@ class Fika243OperationsAdapter {
             this.patchMatchService(instance);
         });
         this.hook(container, 'LocationLifecycleService', instance => this.patchLifecycle(instance));
-        this.status.observerInstalled = true;
-        this.log('info', `Fika ${EXPECTED_FIKA_VERSION} match/player lifecycle hooks installed; mission groups link after all ready members join. Client outcomes remain untrusted.`);
+        this.refreshHookStatus();
+        if (this.status.observerInstalled) {
+            this.log('info', `Fika ${EXPECTED_FIKA_VERSION} lifecycle hooks are active; client outcomes remain untrusted.`);
+        } else {
+            this.log('warn', `Fika ${EXPECTED_FIKA_VERSION} hook registration is pending or partial: ${this.status.missingHooks.join(', ')}.`);
+        }
         return true;
     }
 
     hook(container, token, callback) {
         let registered = false;
+        const apply = instance => {
+            try { callback(instance); }
+            catch (err) { this.log('warn', `${token} hook application failed: ${err.message}`); }
+            this.refreshHookStatus();
+        };
         try {
             if (typeof container.afterResolution === 'function') {
-                container.afterResolution(token, (_token, instance) => safe(() => callback(instance)), { frequency: 'Always' });
+                container.afterResolution(token, (_token, instance) => apply(instance), { frequency: 'Always' });
                 registered = true;
             }
         } catch (err) { this.log('warn', `${token} hook registration failed: ${err.message}`); }
-        try { callback(container.resolve(token)); registered = true; }
+        try { apply(container.resolve(token)); registered = true; }
         catch (_) { if (!registered) this.log('debug', `${token} is not available yet.`); }
+    }
+
+    refreshHookStatus() {
+        const hooks = {
+            saveServer: this.status.saveServerHook === true,
+            updateIdentity: this.status.updateIdentityHook === true,
+            raidIdentity: this.status.raidIdentityHook === true,
+            playerJoin: this.status.playerJoinHook === true,
+            matchEnd: this.status.matchEndHook === true,
+            lifecycle: this.status.lifecycleHook === true
+        };
+        this.status.hooks = hooks;
+        this.status.missingHooks = Object.keys(hooks).filter(key => !hooks[key]);
+        this.status.observerInstalled = this.status.enabled === true && this.status.missingHooks.length === 0;
+        this.status.hookState = this.status.observerInstalled ? 'ready' : (this.status.enabled ? 'pending_or_partial' : 'disabled');
+        return this.status.observerInstalled;
     }
 
     patchUpdateCallbacks(instance) {
@@ -99,21 +136,22 @@ class Fika243OperationsAdapter {
         const hasHooks = proto && (Object.prototype.hasOwnProperty.call(proto, 'handleRaidAddPlayer') || Object.prototype.hasOwnProperty.call(proto, 'handlePlayerDied'));
         const target = hasHooks ? proto : instance;
         const adapter = this;
-        let patched = false;
+        let complete = true;
         for (const methodName of ['handleRaidAddPlayer', 'handlePlayerDied']) {
-            if (typeof target[methodName] !== 'function') continue;
+            if (typeof target[methodName] !== 'function') { complete = false; continue; }
             const flag = '__egFika243Identity_' + methodName;
             if (target[flag]) continue;
             const original = target[methodName];
             target[methodName] = function (url, info, sessionId, ...rest) {
                 adapter.assertProfileBelongsToSession(sessionId, object(info).profileId, methodName);
-                return original.call(this, url, info, sessionId, ...rest);
+                const result = original.call(this, url, info, sessionId, ...rest);
+                if (methodName === 'handlePlayerDied') safe(() => adapter.capturePlayerDeath(sessionId, info));
+                return result;
             };
             Object.defineProperty(target, flag, { value: true, enumerable: false });
-            patched = true;
         }
-        this.status.updateIdentityHook = patched;
-        return patched;
+        this.status.updateIdentityHook = complete;
+        return complete;
     }
 
     patchRaidCallbacks(instance) {
@@ -122,9 +160,9 @@ class Fika243OperationsAdapter {
         const hasHooks = proto && (Object.prototype.hasOwnProperty.call(proto, 'handleRaidCreate') || Object.prototype.hasOwnProperty.call(proto, 'handleRaidLeave'));
         const target = hasHooks ? proto : instance;
         const adapter = this;
-        let patched = false;
+        let complete = true;
         for (const methodName of ['handleRaidCreate', 'handleRaidLeave']) {
-            if (typeof target[methodName] !== 'function') continue;
+            if (typeof target[methodName] !== 'function') { complete = false; continue; }
             const flag = '__egFika243Identity_' + methodName;
             if (target[flag]) continue;
             const original = target[methodName];
@@ -141,10 +179,9 @@ class Fika243OperationsAdapter {
                 return original.call(this, url, info, sessionId, ...rest);
             };
             Object.defineProperty(target, flag, { value: true, enumerable: false });
-            patched = true;
         }
-        this.status.raidIdentityHook = patched;
-        return patched;
+        this.status.raidIdentityHook = complete;
+        return complete;
     }
 
     assertRaidHostBelongsToSession(sessionId, hostUsername) {
@@ -185,7 +222,8 @@ class Fika243OperationsAdapter {
         if (!instance) return false;
         const proto = Object.getPrototypeOf(instance);
         const target = proto && Object.prototype.hasOwnProperty.call(proto, 'endLocalRaid') ? proto : instance;
-        if (!target || typeof target.endLocalRaid !== 'function' || target.__egFika243LifecycleHook) return false;
+        if (!target || typeof target.endLocalRaid !== 'function') return false;
+        if (target.__egFika243LifecycleHook) { this.status.lifecycleHook = true; return true; }
         const adapter = this;
         const original = target.endLocalRaid;
         target.endLocalRaid = function (sessionId, request, ...rest) {
@@ -206,31 +244,39 @@ class Fika243OperationsAdapter {
         const adapter = this;
         let patched = false;
 
-        if (typeof target.endMatch === 'function' && !target.__egFika243MatchHook) {
-            const original = target.endMatch;
-            target.endMatch = function (matchId, reason, ...rest) {
-                safe(() => adapter.captureMatchEnd(this, matchId, reason));
-                return original.call(this, matchId, reason, ...rest);
-            };
-            Object.defineProperty(target, '__egFika243MatchHook', { value: true, enumerable: false });
+        if (typeof target.endMatch === 'function') {
+            if (!target.__egFika243MatchHook) {
+                const original = target.endMatch;
+                target.endMatch = function (matchId, reason, ...rest) {
+                    safe(() => adapter.captureMatchEnd(this, matchId, reason));
+                    return original.call(this, matchId, reason, ...rest);
+                };
+                Object.defineProperty(target, '__egFika243MatchHook', { value: true, enumerable: false });
+                patched = true;
+            }
             this.status.matchEndHook = true;
-            patched = true;
+        } else {
+            this.status.matchEndHook = false;
         }
 
         // Fika 2.4.3 updates IFikaMatch.players after the in-raid registration path.
         // Bind a mission only after every accepted, ready member appears in this match.
-        if (typeof target.addPlayerToMatch === 'function' && !target.__egFika243PlayerJoinHook) {
-            const original = target.addPlayerToMatch;
-            target.addPlayerToMatch = function (matchId, playerId, data, ...rest) {
-                const result = original.call(this, matchId, playerId, data, ...rest);
-                safe(() => adapter.tryStartMissionGroup(this, matchId));
-                return result;
-            };
-            Object.defineProperty(target, '__egFika243PlayerJoinHook', { value: true, enumerable: false });
+        if (typeof target.addPlayerToMatch === 'function') {
+            if (!target.__egFika243PlayerJoinHook) {
+                const original = target.addPlayerToMatch;
+                target.addPlayerToMatch = function (matchId, playerId, data, ...rest) {
+                    const result = original.call(this, matchId, playerId, data, ...rest);
+                    safe(() => adapter.tryStartMissionGroup(this, matchId));
+                    return result;
+                };
+                Object.defineProperty(target, '__egFika243PlayerJoinHook', { value: true, enumerable: false });
+                patched = true;
+            }
             this.status.playerJoinHook = true;
-            patched = true;
+        } else {
+            this.status.playerJoinHook = false;
         }
-        return patched;
+        return this.status.matchEndHook && this.status.playerJoinHook;
     }
 
     tryStartMissionGroup(service, matchId) {
@@ -329,6 +375,32 @@ class Fika243OperationsAdapter {
             || safe(() => identity.pmcId && service.getMatchIdByPlayer && service.getMatchIdByPlayer(identity.pmcId), null)
             || safe(() => identity.scavId && service.getMatchIdByPlayer && service.getMatchIdByPlayer(identity.scavId), null)
             || safe(() => service.getMatchIdByPlayer && service.getMatchIdByPlayer(sessionId), null);
+    }
+
+    capturePlayerDeath(sessionId, info) {
+        const identity = this.resolveIdentity(sessionId);
+        const requestedProfileId = String(object(info).profileId || '');
+        const matchId = String(object(info).serverId || this.resolveMatchId(sessionId, identity) || '');
+        const member = this.operations && this.operations.state && Array.isArray(this.operations.state.groups)
+            ? this.operations.state.groups
+                .filter(group => group.state === 'in_raid' && String(group.raidId || '') === matchId)
+                .flatMap(group => group.members || [])
+                .find(item => String(item.profileId || '') === requestedProfileId || String(item.scavProfileId || '') === requestedProfileId)
+            : null;
+        const event = {
+            eventId: `death-${Date.now()}-${requestedProfileId}`,
+            type: 'fika_player_died',
+            timestamp: new Date().toISOString(),
+            fikaServerVersion: EXPECTED_FIKA_VERSION,
+            matchId,
+            profileId: member ? String(member.profileId) : identity.profileId,
+            reportedCharacterProfileId: requestedProfileId,
+            evidenceTrust: 'authenticated_client_report',
+            source: 'FikaUpdateCallbacks.handlePlayerDied',
+            rewardEligible: false
+        };
+        this.appendEvent(event);
+        return event;
     }
 
     captureRaidEnd(sessionId, request) {
