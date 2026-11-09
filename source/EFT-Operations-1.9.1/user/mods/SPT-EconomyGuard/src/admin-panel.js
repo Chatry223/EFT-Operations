@@ -584,12 +584,12 @@ class AdminPanelServer {
                     const normalizeRole = role => {
                         const value = String(role || '').toLowerCase();
                         if (value.startsWith('pmc')) return 'pmc';
-                        if (value === 'assault' || value === 'marksman' || value.includes('scav')) return 'scav';
+                        if (value === 'assault' || value === 'marksman' || value === 'cursedassault' || value.includes('scav')) return 'scav';
                         if (value.startsWith('boss')) return 'boss';
                         if (value.includes('follower')) return 'boss_guard';
                         if (value.includes('raider')) return 'raider';
-                        if (value.includes('rogue')) return 'rogue';
-                        if (value.includes('cultist')) return 'cultist';
+                        if (value.includes('rogue') || value === 'exusec') return 'rogue';
+                        if (value.includes('cultist') || value.startsWith('sectant')) return 'cultist';
                         return value;
                     };
                     const objectiveEvidence = (mission && mission.objectives || []).map(objective => {
