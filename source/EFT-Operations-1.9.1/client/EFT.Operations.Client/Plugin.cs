@@ -468,7 +468,7 @@ namespace EFTOperations.Client
 
             MissionDto mission = playerState.mission;
             float width = Mathf.Min(420f, Screen.width - 24f);
-            float height = Mathf.Min(270f, Screen.height - 110f);
+            float height = Mathf.Min(300f, Screen.height - 110f);
             if (width < 220f || height < 130f) return;
 
             Rect hud = new Rect(Screen.width - width - 12f, 72f, width, height);
