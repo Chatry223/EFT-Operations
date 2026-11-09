@@ -114,7 +114,9 @@
           '<form id="opSvmForm"><div class="table-wrap"><table><thead><tr><th>TRADER</th><th>MARKUP (%)</th><th>SELL MULTIPLIER</th></tr></thead><tbody>'+rows+'</tbody></table></div>' +
           '<div class="form-grid"><label class="field">Items · ItemPriceMult<input name="itemPriceMultiplier" type="number" min="0" max="1000" step="0.01" value="'+(s.itemPriceMultiplier == null ? '' : esc(s.itemPriceMultiplier))+'" required></label>' +
           '<label class="field">Fence · Price multiplier<input name="fencePriceMultiplier" type="number" min="0" max="1000" step="0.01" value="'+(s.fence.priceMultiplier == null ? '' : esc(s.fence.priceMultiplier))+'"></label>' +
-          '<label class="field">Fence · Preset multiplier<input name="fencePresetMultiplier" type="number" min="0" max="1000" step="0.01" value="'+(s.fence.presetMultiplier == null ? '' : esc(s.fence.presetMultiplier))+'"></label></div>' +
+          '<label class="field">Fence · Preset multiplier<input name="fencePresetMultiplier" type="number" min="0" max="1000" step="0.01" value="'+(s.fence.presetMultiplier == null ? '' : esc(s.fence.presetMultiplier))+'"></label>' +
+          '<label class="field">Fence · Stock time minimum<input name="fenceStockTimeMin" type="number" min="1" max="10080" step="1" value="'+(s.fence.stockTimeMin == null ? '' : esc(s.fence.stockTimeMin))+'"></label>' +
+          '<label class="field">Fence · Stock time maximum<input name="fenceStockTimeMax" type="number" min="1" max="10080" step="1" value="'+(s.fence.stockTimeMax == null ? '' : esc(s.fence.stockTimeMax))+'"></label></div>' +
           '<div class="form-actions"><button class="primary-btn" type="submit" '+(s.compatible ? '' : 'disabled')+'>Save SVM settings</button><button class="secondary-btn" type="button" id="opSvmReload">Refresh</button></div></form>';
       } catch(e) { toast(e.message, true); }
     }
@@ -128,7 +130,7 @@
           e.target.querySelectorAll('[data-svm-sell]').forEach(el=>{ if(!el.disabled) traderSell[el.dataset.svmSell]=Number(el.value); });
           const payload = { traderMarkup, traderSell, itemPriceMultiplier:Number(data.get('itemPriceMultiplier')) };
           const fence = {};
-          [['fencePriceMultiplier','priceMultiplier'],['fencePresetMultiplier','presetMultiplier']].forEach(pair=>{ if(data.get(pair[0])!=='') fence[pair[1]]=Number(data.get(pair[0])); });
+          [['fencePriceMultiplier','priceMultiplier'],['fencePresetMultiplier','presetMultiplier'],['fenceStockTimeMin','stockTimeMin'],['fenceStockTimeMax','stockTimeMax']].forEach(pair=>{ if(data.get(pair[0])!=='') fence[pair[1]]=Number(data.get(pair[0])); });
           if(Object.keys(fence).length) payload.fence=fence;
           const result=await api('/api/svm/update',payload); await loadSvm();
           toast(result.changed ? 'SVM saved. Restart SPT to apply.' : 'No SVM changes.');
