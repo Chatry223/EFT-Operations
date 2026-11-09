@@ -704,6 +704,8 @@ class AdminPanelServer {
                                 return !target || candidates.includes(target);
                             }).length;
                             reportedCount = Math.max(clientReported, hostReported);
+                        } else if (objective.type === 'visit') {
+                            reportedCount = hostEvidence.filter(event => !target || String(event.target || '').toLowerCase() === target).length;
                         } else if (objective.type === 'collect') {
                             reportedCount = raidEnds.reduce((sum, event) => {
                                 const loot = event.acceptedLootByTpl || event.reportedLootByTpl || {};
