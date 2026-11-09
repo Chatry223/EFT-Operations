@@ -623,7 +623,7 @@ class AdminPanelServer {
                             required: objective.required !== false,
                             verifiedCount,
                             reportedCount,
-                            evidenceStatus: verifiedCount >= objective.count ? 'server_verified' : reportedCount > 0 ? 'client_report_only' : 'no_evidence'
+                            evidenceStatus: verifiedCount >= objective.count ? 'server_verified' : reportedCount > 0 && objective.type === 'raid_complete' ? 'fika_lifecycle_observed_unverified' : reportedCount > 0 ? 'client_report_only' : 'no_evidence'
                         };
                     });
                     return {
