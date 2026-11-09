@@ -34,8 +34,10 @@ class OperationsClientApi {
         const pmc = profile && profile.characters && profile.characters.pmc;
         const profileId = String(pmc && pmc._id || '');
         if (!PROFILE_ID_RE.test(profileId)) throw new Error('PMC_PROFILE_UNAVAILABLE');
+        const scav = profile && profile.characters && profile.characters.scav;
+        const scavId = String(scav && scav._id || '');
         const info = profile && profile.info || {};
-        return { profileId, displayName: String(info.Nickname || info.username || 'Operator').slice(0, 40) };
+        return { profileId, scavProfileId: PROFILE_ID_RE.test(scavId) && scavId !== profileId ? scavId : null, displayName: String(info.Nickname || info.username || 'Operator').slice(0, 40) };
     }
 
     publicMission(mission) {
@@ -82,7 +84,7 @@ class OperationsClientApi {
             const player = this.resolvePlayer(sessionId);
             const missionId = String(info && info.missionId || '').trim();
             if (!missionId || missionId.length > 100) throw new Error('INVALID_MISSION_ID');
-            const group = this.operations.accept(missionId, player.profileId, player.displayName);
+            const group = this.operations.accept(missionId, player.profileId, player.displayName, player.scavProfileId);
             return this.response({ ok: true, group: this.publicGroup(group) });
         } catch (err) { return this.response({ ok: false, error: this.errorCode(err) }); }
     }
