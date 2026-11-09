@@ -72,6 +72,31 @@ function fixture() {
     } finally { fs.rmSync(f.root, { recursive: true, force: true }); }
 })();
 
+(function testExplicitlyTogglesTraderAndItemSections() {
+    const f = fixture();
+    try {
+        const result = f.service.update({ tradersEnabled: false, itemsEnabled: true });
+        assert.strictEqual(result.changed, true);
+        assert.ok(result.changes.includes('Traders.EnableTraders'));
+        assert.ok(result.changes.includes('Items.EnableItems'));
+        const preset = JSON.parse(fs.readFileSync(path.join(f.svmDir, 'Presets', 'v6.json'), 'utf8'));
+        assert.strictEqual(preset.Traders.EnableTraders, false);
+        assert.strictEqual(preset.Items.EnableItems, true);
+        const status = f.service.getStatus();
+        assert.strictEqual(status.tradersEnabled, false);
+        assert.strictEqual(status.itemsEnabled, true);
+    } finally { fs.rmSync(f.root, { recursive: true, force: true }); }
+})();
+
+(function testRejectsNonBooleanSectionSwitches() {
+    const f = fixture();
+    try {
+        assert.throws(() => f.service.update({ itemsEnabled: 'true' }), /INVALID_SVM_ITEMS_ENABLED/);
+        assert.strictEqual(JSON.parse(fs.readFileSync(path.join(f.svmDir, 'Presets', 'v6.json'), 'utf8')).Items.EnableItems, false);
+        assert.strictEqual(fs.existsSync(path.join(f.dataDir, 'backups', 'svm')), false);
+    } finally { fs.rmSync(f.root, { recursive: true, force: true }); }
+})();
+
 (function testReadOnlyWhenSvmVersionIsNotAudited() {
     const f = fixture();
     try {
