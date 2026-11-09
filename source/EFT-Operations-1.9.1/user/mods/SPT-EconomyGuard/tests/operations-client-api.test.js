@@ -35,12 +35,21 @@ assert.equal(operations.state.groups[0].members[0].scavProfileId, 'abcdef0123456
 const acceptedB = api.acceptMission('', { missionId: mission.id }, 'session-b').wrapped;
 assert.equal(acceptedB.ok, true);
 assert.equal(acceptedB.group.id, acceptedA.group.id);
+assert.equal(acceptedA.group.members[0].isLeader, true);
+assert.equal(acceptedB.group.members[0].isLeader, false);
+assert.equal(acceptedA.group.members[0].profileId, undefined, 'public group must not expose profile IDs');
+assert.equal(acceptedA.group.minPlayers, 2);
+assert.equal(acceptedA.group.maxPlayers, 2);
+assert.equal(acceptedA.group.readyCount, 0);
+assert.equal(api.playerState('', {}, 'session-a').wrapped.canStart, false);
 
 const readyA = api.setReady('', { groupId: acceptedA.group.id, ready: true }, 'session-a').wrapped;
 assert.equal(readyA.ok, true);
 assert.equal(readyA.canStart, false);
 const readyB = api.setReady('', { groupId: acceptedA.group.id, ready: true }, 'session-b').wrapped;
 assert.equal(readyB.canStart, true);
+assert.equal(api.playerState('', {}, 'session-a').wrapped.canStart, true);
+assert.equal(api.playerState('', {}, 'session-a').wrapped.group.readyCount, 2);
 assert.equal(api.setReady('', { groupId: acceptedA.group.id, ready: true }, 'unknown').wrapped.error, 'NO_PROFILE');
 assert.equal(api.setReady('', { groupId: acceptedA.group.id, ready: true }, 'session-a').wrapped.ok, true);
 const left = api.leaveGroup('', { groupId: acceptedA.group.id }, 'session-a').wrapped;
