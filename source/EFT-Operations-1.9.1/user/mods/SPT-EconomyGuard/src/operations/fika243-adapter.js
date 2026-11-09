@@ -70,6 +70,7 @@ class Fika243OperationsAdapter {
         }
         this.hook(container, 'SaveServer', instance => { this.services.saveServer = instance; });
         this.hook(container, 'FikaUpdateCallbacks', instance => this.patchUpdateCallbacks(instance));
+        this.hook(container, 'FikaRaidCallbacks', instance => this.patchRaidCallbacks(instance));
         this.hook(container, 'FikaMatchService', instance => {
             this.services.fikaMatchService = instance;
             this.patchMatchService(instance);
@@ -105,7 +106,7 @@ class Fika243OperationsAdapter {
             if (target[flag]) continue;
             const original = target[methodName];
             target[methodName] = function (url, info, sessionId, ...rest) {
-                adapter.assertUpdateIdentity(sessionId, info, methodName);
+                adapter.assertProfileBelongsToSession(sessionId, object(info).profileId, methodName);
                 return original.call(this, url, info, sessionId, ...rest);
             };
             Object.defineProperty(target, flag, { value: true, enumerable: false });
@@ -127,6 +128,46 @@ class Fika243OperationsAdapter {
         if (!allowed.includes(requestedProfileId)) {
             this.log('warn', `Rejected Fika ${methodName} for session ${sid}: request profile does not belong to the authenticated SPT account.`);
             throw new Error('FIKA_UPDATE_IDENTITY_MISMATCH');
+        }
+        return true;
+    }
+
+    patchRaidCallbacks(instance) {
+        if (!instance) return false;
+        const proto = Object.getPrototypeOf(instance);
+        const hasHooks = proto && (Object.prototype.hasOwnProperty.call(proto, 'handleRaidCreate') || Object.prototype.hasOwnProperty.call(proto, 'handleRaidLeave'));
+        const target = hasHooks ? proto : instance;
+        const adapter = this;
+        let patched = false;
+        for (const methodName of ['handleRaidCreate', 'handleRaidLeave']) {
+            if (typeof target[methodName] !== 'function') continue;
+            const flag = '__egFika243Identity_' + methodName;
+            if (target[flag]) continue;
+            const original = target[methodName];
+            target[methodName] = function (url, info, sessionId, ...rest) {
+                const field = methodName === 'handleRaidCreate' ? 'serverId' : 'profileId';
+                adapter.assertProfileBelongsToSession(sessionId, object(info)[field], methodName);
+                return original.call(this, url, info, sessionId, ...rest);
+            };
+            Object.defineProperty(target, flag, { value: true, enumerable: false });
+            patched = true;
+        }
+        this.status.raidIdentityHook = patched;
+        return patched;
+    }
+
+    assertProfileBelongsToSession(sessionId, requestedProfileId, methodName) {
+        const sid = String(sessionId || '').trim();
+        const requested = String(requestedProfileId || '').trim();
+        if (!sid || !requested || !this.services.saveServer || typeof this.services.saveServer.getProfile !== 'function') {
+            throw new Error('FIKA_SESSION_PROFILE_UNAVAILABLE');
+        }
+        const profile = safe(() => this.services.saveServer.getProfile(sid), null);
+        const characters = object(profile && profile.characters);
+        const allowed = [String(object(characters.pmc)._id || ''), String(object(characters.scav)._id || '')].filter(Boolean);
+        if (!allowed.includes(requested)) {
+            this.log('warn', `Rejected Fika ${methodName} for session ${sid}: requested profile does not belong to the authenticated SPT account.`);
+            throw new Error('FIKA_SESSION_PROFILE_MISMATCH');
         }
         return true;
     }
