@@ -89,3 +89,31 @@ jobs:
             throw 'One-click GUI launcher batch file is missing.'
           }
           Write-Host 'Graphical build helper syntax validated.'
+
+  package-server-mod:
+    name: Package tested SPT server mod
+    needs: server-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare source tree
+        shell: bash
+        run: |
+          if [ -f source/EFT-Operations-1.9.1/user/mods/SPT-EconomyGuard/package.json ]; then
+            cp -a source/EFT-Operations-1.9.1/. .
+          elif [ -f source/EFT-Operations-1.9.1.zip ]; then
+            unzip -q source/EFT-Operations-1.9.1.zip -d .
+          fi
+          test -f user/mods/SPT-EconomyGuard/package.json
+      - name: Create installable server-mod archive
+        shell: bash
+        run: |
+          mkdir -p dist
+          zip -qr "dist/SPT-EconomyGuard-1.9.1-${GITHUB_SHA::7}.zip" user/mods/SPT-EconomyGuard
+      - name: Upload server-mod package
+        uses: actions/upload-artifact@v4
+        with:
+          name: EFT-Operations-ServerMod-${{ github.sha }}
+          path: dist/SPT-EconomyGuard-1.9.1-*.zip
+          if-no-files-found: error
+          retention-days: 30
