@@ -76,6 +76,15 @@ assert.equal(failedAward.deliveryAttempt, 1);
 assert.match(failedAward.deliveryError, /mail unavailable/);
 assert.equal(failing.deliverGroup('group-3').length, 0);
 
+// Manual reconciliation is explicit and audited. A retry is never automatic.
+assert.equal(failing.reconcileAward('award-3', 'retry', 'Checked mailbox; no reward message exists').status, 'delivery_attention_required');
+assert.equal(failedAward.deliveryAttempt, 2, 'manual retry creates a second recorded attempt');
+assert.equal(failedAward.deliveryReconciliation.decision, 'retry');
+assert.throws(() => failing.reconcileAward('award-3', 'retry', ''), /DELIVERY_RECONCILIATION_NOTE_REQUIRED/);
+assert.equal(failing.reconcileAward('award-3', 'mark_delivered', 'Verified in-game mail was received').status, 'delivered');
+assert.equal(failedAward.deliveryMethod, 'admin_reconciled');
+assert.equal(failedAward.deliveryReconciliation.decision, 'mark_delivered');
+
 // Points-only awards do not require SPT mail or inventory services.
 const pointsAward = { id: 'award-4', groupId: 'group-4', missionId: 'mission-1', profileId: 'offline-profile', points: 5,
     roubles: 0, items: [], status: 'pending_delivery' };
