@@ -22,6 +22,10 @@ namespace EFTOperations.Client
         private PlayerStateResponse playerState = new PlayerStateResponse();
         private Vector2 scroll;
         private float nextRefresh;
+        private readonly HashSet<string> knownMissionIds = new HashSet<string>();
+        private bool hasInitialMissionSync;
+        private string notificationText = String.Empty;
+        private float notificationUntil;
 
         private void Awake()
         {
@@ -48,7 +52,7 @@ namespace EFTOperations.Client
                 if (Time.realtimeSinceStartup >= nextRefresh && !busy)
                 {
                     nextRefresh = Time.realtimeSinceStartup + Mathf.Clamp(refreshSeconds.Value, 5f, 60f);
-                    if (visible) RefreshAll();
+                    RefreshAll();
                 }
                 yield return new WaitForSecondsRealtime(1f);
             }
@@ -59,7 +63,19 @@ namespace EFTOperations.Client
             if (busy) return;
             StartCoroutine(Request("/client/eft/operations/missions", null, delegate(string body)
             {
-                missions = JsonUtility.FromJson<MissionListResponse>(body) ?? new MissionListResponse();
+                MissionListResponse nextMissions = JsonUtility.FromJson<MissionListResponse>(body) ?? new MissionListResponse();
+                if (nextMissions.ok && nextMissions.missions != null)
+                {
+                    foreach (MissionDto mission in nextMissions.missions)
+                    {
+                        if (String.IsNullOrEmpty(mission.id)) continue;
+                        if (hasInitialMissionSync && !knownMissionIds.Contains(mission.id))
+                            Notify("NEW OPERATION AVAILABLE  /  " + (mission.title ?? "FIELD ASSIGNMENT"));
+                        knownMissionIds.Add(mission.id);
+                    }
+                    hasInitialMissionSync = true;
+                }
+                missions = nextMissions;
                 if (!missions.ok) status = "Mission list: " + missions.error;
                 else status = "Mission board synchronized.";
                 StartCoroutine(Request("/client/eft/operations/state", null, delegate(string stateBody)
@@ -165,8 +181,21 @@ namespace EFTOperations.Client
             }));
         }
 
+        private void Notify(string message)
+        {
+            notificationText = message ?? String.Empty;
+            notificationUntil = Time.realtimeSinceStartup + 9f;
+        }
+
         private void OnGUI()
         {
+            if (Time.realtimeSinceStartup < notificationUntil && !String.IsNullOrEmpty(notificationText))
+            {
+                float bannerWidth = Mathf.Min(760f, Screen.width - 36f);
+                Rect banner = new Rect((Screen.width - bannerWidth) / 2f, 18f, bannerWidth, 46f);
+                GUI.Box(banner, GUIContent.none);
+                GUI.Label(new Rect(banner.x + 14f, banner.y + 8f, banner.width - 28f, 30f), notificationText, NotificationStyle());
+            }
             if (!visible) return;
             float width = Mathf.Min(720f, Screen.width - 30f);
             float height = Mathf.Min(680f, Screen.height - 30f);
@@ -180,6 +209,8 @@ namespace EFTOperations.Client
             if (GUILayout.Button("X", GUILayout.Width(28f))) visible = false;
             GUILayout.EndHorizontal();
             GUILayout.Label(status, SmallStyle());
+            if (playerState.player != null)
+                GUILayout.Label("OPERATOR RANK  /  " + (playerState.player.rank ?? "Recruit").ToUpperInvariant() + "     ·     " + playerState.player.points + " POINTS", SmallStyle());
             GUILayout.Space(8f);
 
             if (playerState.group != null)
@@ -206,7 +237,10 @@ namespace EFTOperations.Client
                 GUILayout.BeginVertical(GUI.skin.box);
                 GUILayout.Label(mission.title ?? "Untitled operation", HeaderStyle());
                 GUILayout.Label((mission.map ?? "Unknown map").ToUpperInvariant() + "  ·  " + (mission.mode ?? "solo").ToUpperInvariant() + "  ·  " + mission.minPlayers + "–" + mission.maxPlayers + " OPERATORS", SmallStyle());
-                GUILayout.Label(mission.description ?? mission.briefing ?? String.Empty, SmallStyle());
+                string briefingBody = mission.briefing == null ? String.Empty : mission.briefing.body;
+                GUILayout.Label(!String.IsNullOrEmpty(mission.description) ? mission.description : briefingBody, SmallStyle());
+                if (mission.rewards != null)
+                    GUILayout.Label("REWARD  /  " + mission.rewards.points + " PTS  ·  " + mission.rewards.roubles.ToString("N0") + " RUB", SmallStyle());
                 if (mission.objectives != null) foreach (ObjectiveDto objective in mission.objectives)
                     GUILayout.Label("• " + (objective.target ?? objective.type) + "  ×" + objective.count + (objective.required ? "  [REQUIRED]" : ""), SmallStyle());
                 GUILayout.BeginHorizontal();
@@ -220,6 +254,7 @@ namespace EFTOperations.Client
         }
 
         private static GUIStyle HeaderStyle() { return new GUIStyle(GUI.skin.label) { fontSize = 16, fontStyle = FontStyle.Bold, normal = { textColor = new Color(0.82f, 0.72f, 0.50f) } }; }
+        private static GUIStyle NotificationStyle() { return new GUIStyle(GUI.skin.label) { fontSize = 15, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter, wordWrap = true, normal = { textColor = new Color(0.95f, 0.82f, 0.55f) } }; }
         private static GUIStyle SmallStyle() { return new GUIStyle(GUI.skin.label) { fontSize = 12, wordWrap = true, normal = { textColor = new Color(0.88f, 0.89f, 0.84f) } }; }
         private static string Escape(string value) { return (value ?? String.Empty).Replace("\\", "\\\\").Replace("\"", "\\\""); }
     }
@@ -356,7 +391,9 @@ namespace EFTOperations.Client
     [Serializable] internal class PlayerStateResponse { public bool ok; public string error; public PlayerDto player; public GroupDto group; public MissionDto mission; }
     [Serializable] internal class ActionResponse { public bool ok; public string error; public GroupDto group; public bool canStart; }
     [Serializable] internal class PlayerDto { public int points; public string rank; }
-    [Serializable] internal class MissionDto { public string id; public string title; public string description; public string briefing; public string map; public string mode; public int minPlayers; public int maxPlayers; public ObjectiveDto[] objectives; }
+    [Serializable] internal class MissionDto { public string id; public string title; public string description; public BriefingDto briefing; public RewardDto rewards; public string map; public string mode; public int minPlayers; public int maxPlayers; public ObjectiveDto[] objectives; }
+    [Serializable] internal class BriefingDto { public string kind; public string media; public string body; }
+    [Serializable] internal class RewardDto { public int points; public int roubles; }
     [Serializable] internal class ObjectiveDto { public string id; public string type; public string target; public int count; public bool required; }
     [Serializable] internal class GroupDto { public string id; public string missionId; public string state; public MemberDto[] members; }
     [Serializable] internal class MemberDto { public string displayName; public bool ready; }
