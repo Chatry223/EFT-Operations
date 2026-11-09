@@ -599,7 +599,11 @@ class AdminPanelServer {
                             reportedCount = victims.filter(victim => !target || normalizeRole(victim.role) === target
                                 || String(victim.role || '').toLowerCase() === target).length;
                         } else if (objective.type === 'collect') {
-                            reportedCount = raidEnds.reduce((sum, event) => sum + Number((event.reportedLootByTpl || {})[objective.target] || 0), 0);
+                            reportedCount = raidEnds.reduce((sum, event) => {
+                                const loot = event.reportedLootByTpl || {};
+                                const tpl = Object.keys(loot).find(key => key.toLowerCase() === target);
+                                return sum + Number(tpl ? loot[tpl] : 0);
+                            }, 0);
                         } else if (objective.type === 'extract' || objective.type === 'survive') {
                             const seen = new Set();
                             for (const event of raidEnds) {
