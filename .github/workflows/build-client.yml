@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     paths:
+      - 'source/**'
       - 'user/mods/SPT-EconomyGuard/**'
       - 'client/**'
       - '.github/workflows/build-client.yml'
@@ -32,10 +33,13 @@ jobs:
         run: |
           if [ -f user/mods/SPT-EconomyGuard/package.json ] && [ -f client/EFT.Operations.Client/EFT.Operations.Client.csproj ]; then
             echo "source_ready=true" >> "$GITHUB_OUTPUT"
-            echo "Server and client source trees are present."
+            echo "Expanded source trees are present."
+          elif [ -f source/EFT-Operations-1.9.1.zip ]; then
+            echo "source_ready=true" >> "$GITHUB_OUTPUT"
+            echo "Source archive is present; downstream jobs will expand it."
           else
             echo "source_ready=false" >> "$GITHUB_OUTPUT"
-            echo "Bootstrap only: import the 1.9.1 source bundle before CI/build jobs can run."
+            echo "Upload source/EFT-Operations-1.9.1.zip or commit the expanded source tree."
           fi
 
   server-tests:
@@ -45,6 +49,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Expand source bundle when needed
+        shell: bash
+        run: |
+          if [ ! -f user/mods/SPT-EconomyGuard/package.json ]; then
+            unzip -q source/EFT-Operations-1.9.1.zip -d .
+          fi
+          test -f user/mods/SPT-EconomyGuard/package.json
+          test -f client/EFT.Operations.Client/EFT.Operations.Client.csproj
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -62,7 +74,6 @@ jobs:
   client-build:
     name: Build BepInEx client plugin (Windows + EFT assemblies)
     needs: source-status
-    # Never execute untrusted PR code on the private EFT build runner.
     if: needs.source-status.outputs.source_ready == 'true' && github.event_name != 'pull_request'
     runs-on: [self-hosted, Windows, X64, eft-build]
     env:
@@ -70,6 +81,15 @@ jobs:
       BEPINEX_CORE_DIR: ${{ vars.BEPINEX_CORE_DIR }}
     steps:
       - uses: actions/checkout@v4
+      - name: Expand source bundle when needed
+        shell: pwsh
+        run: |
+          if (-not (Test-Path 'client/EFT.Operations.Client/EFT.Operations.Client.csproj')) {
+            Expand-Archive -LiteralPath 'source/EFT-Operations-1.9.1.zip' -DestinationPath '.' -Force
+          }
+          if (-not (Test-Path 'client/EFT.Operations.Client/EFT.Operations.Client.csproj')) {
+            throw 'Client source project is missing after source archive extraction.'
+          }
       - name: Validate local EFT assembly paths
         shell: pwsh
         run: |
