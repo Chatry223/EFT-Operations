@@ -60,3 +60,12 @@ The bridge does not submit objective progress, raid outcomes, review decisions, 
 The BepInEx client source now uses the exact SPT 3.11.1 public contract: `SPT.Common.Http.RequestHandler.SessionId`, `Host`, and `HttpClient`. The native `Client.GetAsync` / `PostAsync` methods supply the `PHPSESSID` cookie, POST zlib compression, and SPT's configured TLS behavior. Calls include the `/EFTOperations` static-router prefix. The plugin no longer scans arbitrary assemblies for guessed `Session` or `BackendConfig` members.
 
 The C# source remains uncompiled and has not yet been exercised inside the user's EFT installation; the server-side Node test suite does not validate BepInEx runtime loading.
+
+
+## 2026-11-09 — Fika observer regression coverage
+
+A dedicated adapter regression test now exercises the exact 2.4.3 version gate, match-end roster capture, PMC identity resolution, and the trust labels for both server lifecycle observations and client-originated raid-end payloads. The test asserts that neither evidence type is reward-eligible by itself. The Linux server CI run completed the static checks and **27 tests passed, 0 failed**.
+
+### Remaining production boundary (not silently treated as complete)
+
+The observer is still an evidence collector, not a complete raid-to-mission orchestrator. No automatic group-to-Fika-match binding, authoritative objective event stream, extraction/death verification, or reward-delivery transaction has been enabled. The admin Fika Link tab is diagnostic evidence only. Automatic rewards stay disabled until the server can independently establish those facts and the complete host/client/Scav/PMC runtime matrix passes on the exact installed build.
