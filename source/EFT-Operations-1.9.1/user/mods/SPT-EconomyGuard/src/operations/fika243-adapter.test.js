@@ -133,24 +133,42 @@ assert.equal(lifecycleAdapter.getRecentEvents(20).some(x => x.type === 'mission_
 
 // Installation status must only say ready when every expected Fika/SPT hook is present.
 const statusAdapter = new Fika243OperationsAdapter({ modDir, operations: { dataDir }, logger: { info() {}, warn() {}, debug() {} } });
+const statusMatchService = {
+    matches: new Map(),
+    getMatch(id) { return this.matches.get(id) || null; },
+    addPlayerToMatch() {},
+    endMatch(id, reason) { this.deleteMatch(id); },
+    deleteMatch(id) { this.matches.delete(id); },
+    createMatch(data) { this.matches.set(data.serverId, { players: new Map(), locationData: { Id: 'woods' } }); return true; }
+};
+const statusInstances = {
+    SaveServer: { getProfile() { return null; } },
+    FikaUpdateCallbacks: { handleRaidAddPlayer() {}, handlePlayerDied() {} },
+    FikaRaidCallbacks: { handleRaidCreate() {}, handleRaidLeave() {} },
+    FikaMatchService: statusMatchService,
+    LocationLifecycleService: { endLocalRaid() {} }
+};
 const statusContainer = {
     afterResolution() {},
     resolve(token) {
-        const instances = {
-            SaveServer: { getProfile() { return null; } },
-            FikaUpdateCallbacks: { handleRaidAddPlayer() {}, handlePlayerDied() {} },
-            FikaRaidCallbacks: { handleRaidCreate() {}, handleRaidLeave() {} },
-            FikaMatchService: { addPlayerToMatch() {}, endMatch() {} },
-            LocationLifecycleService: { endLocalRaid() {} }
-        };
-        if (!instances[token]) throw new Error('not registered');
-        return instances[token];
+        if (!statusInstances[token]) throw new Error('not registered');
+        return statusInstances[token];
     }
 };
 assert.equal(statusAdapter.install(statusContainer), true);
 assert.equal(statusAdapter.getStatus().observerInstalled, true);
 assert.equal(statusAdapter.getStatus().hookState, 'ready');
 assert.deepEqual(statusAdapter.getStatus().missingHooks, []);
+assert.equal(statusAdapter.getStatus().matchDeleteHook, true);
+assert.equal(statusAdapter.getStatus().matchCreateHook, true);
+
+// Fika 2.4.3 can delete a match without endMatch; both paths must create one review event.
+statusMatchService.createMatch({ serverId: 'dedupe-match' });
+statusMatchService.endMatch('dedupe-match', 'test-end');
+assert.equal(statusAdapter.getRecentEvents(20).filter(event => event.type === 'fika_match_end' && event.matchId === 'dedupe-match').length, 1);
+statusMatchService.createMatch({ serverId: 'dedupe-match' });
+statusMatchService.deleteMatch('dedupe-match');
+assert.equal(statusAdapter.getRecentEvents(20).filter(event => event.type === 'fika_match_end' && event.matchId === 'dedupe-match').length, 2);
 
 // Partial DI availability must never be reported as fully installed.
 const partialAdapter = new Fika243OperationsAdapter({ modDir, operations: { dataDir }, logger: { info() {}, warn() {}, debug() {} } });
