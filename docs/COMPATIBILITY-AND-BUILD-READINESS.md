@@ -63,12 +63,12 @@ The graphical helper now:
 - requires the actual installed BepInEx root as a separate install destination, so it cannot silently place the plugin in the temporary dependency cache;
 - backs up any existing plugin DLL and writes a build report.
 
-GitHub Actions validates the dependency archives and builds on a Windows-hosted runner. The first Windows attempt failed with `NETSDK1004` because project assets had not been restored; MSBuild `/restore` was added. A subsequent build on commit `f6e2441c6ffd825b68d4e41effadcb47671e3e1e` succeeded, verified the DLL output, and uploaded artifact `13704528374`.
+GitHub Actions validates the dependency archives and builds on a Windows-hosted runner. The first Windows attempt failed with `NETSDK1004` because project assets had not been restored; MSBuild `/restore` was added. A subsequent build on commit `248e5924bc331167a908f050f8eee7a6574dde12` succeeded, verified the DLL output, and uploaded artifact `13705463291`.
 
 Build output:
 - `EFTOperations.Client.dll`: 27,136 bytes
-- SHA-256: `276ecad202e8ccf473b52c2d6ff8f1b17a7bd2d7ed0ba1909a2c76928f1fcd1f`
-- Artifact: [GitHub Actions build](https://github.com/Chatry223/EFT-Operations/actions/runs/42687196015/artifacts/13704528374)
+- SHA-256: `443602390928327e748d6e8d7cc6e810b7d04bf8e0abed9b9d8fe325b0e0d4ef`
+- Artifact: [GitHub Actions build](https://github.com/Chatry223/EFT-Operations/actions/runs/42687894189/artifacts/13705463291)
 
 The DLL is compile-verified, not yet runtime-verified in the user's SPT/Fika installation.
 
