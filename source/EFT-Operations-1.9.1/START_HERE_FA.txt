@@ -62,6 +62,13 @@ EFT OPERATIONS / EconomyGuard 1.9.1
 
 نسخه‌ها با SHA-256 کنترل می‌شوند: EFT Assembly-CSharp، Fika.Core 1.2.3.0 و spt-common 3.11.1.0. فایل‌های بازی فقط ورودی Build هستند و نباید داخل بسته قابل نصب مود قرار بگیرند.
 
+خروجی Build تأییدشده:
+- DLL: EFTOperations.Client.dll
+- SHA-256: 276ecad202e8ccf473b52c2d6ff8f1b17a7bd2d7ed0ba1909a2c76928f1fcd1f
+- GitHub Actions Artifact: https://github.com/Chatry223/EFT-Operations/actions/runs/42687196015/artifacts/13704528374
+- نصب دستی: فایل DLL را داخل BepInEx/plugins/EFTOperations قرار بده.
+- این خروجی کامپایل شده، اما هنوز در اجرای واقعی بازی با Fika تست Runtime نشده است.
+
 راهنماهای بیشتر:
 - README_FA.md
 - ADMIN_PANEL_GUIDE_FA.md
