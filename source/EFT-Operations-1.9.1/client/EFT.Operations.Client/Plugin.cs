@@ -21,6 +21,9 @@ namespace EFTOperations.Client
         private static bool inputLookupAttempted;
         private Harmony fikaHarmony;
         private bool fikaKillHookInstalled;
+        private bool fikaVisitHookInstalled;
+        private readonly HashSet<string> reportedHostVisitKeys = new HashSet<string>();
+        private readonly Queue<string> reportedHostVisitOrder = new Queue<string>();
         private readonly HashSet<string> reportedHostKillKeys = new HashSet<string>();
         private readonly Queue<string> reportedHostKillOrder = new Queue<string>();
         private static MethodInfo inputGetKeyDown;
@@ -504,7 +507,9 @@ namespace EFTOperations.Client
                 string version = GetFikaPluginVersion();
                 if (version == "1.2.3" || version == "1.2.3.0")
                 {
-                    if (TryInstallFikaKillHook()) yield break;
+                    bool killInstalled = TryInstallFikaKillHook();
+                    bool visitInstalled = TryInstallFikaVisitHook();
+                    if (killInstalled && visitInstalled) yield break;
                 }
                 else if (!String.IsNullOrEmpty(version))
                 {
@@ -513,7 +518,8 @@ namespace EFTOperations.Client
                 }
                 yield return new WaitForSecondsRealtime(2f);
             }
-            Logger.LogWarning("Fika host telemetry hook was not installed. Mission progress will remain pending.");
+            if (!fikaKillHookInstalled) Logger.LogWarning("Fika kill telemetry hook was not installed.");
+            if (!fikaVisitHookInstalled) Logger.LogWarning("Fika visit-trigger telemetry hook was not installed.");
         }
 
         private bool TryInstallFikaKillHook()
@@ -547,6 +553,132 @@ namespace EFTOperations.Client
             {
                 Logger.LogWarning("Fika host telemetry hook could not be installed: " + ex.GetBaseException().Message);
                 return false;
+            }
+        }
+
+        private Type FindLoadedTypeBySimpleName(string simpleName)
+        {
+            foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                if (!String.Equals(assembly.GetName().Name, "Assembly-CSharp", StringComparison.Ordinal)) continue;
+                try
+                {
+                    foreach (Type type in assembly.GetTypes())
+                        if (type != null && String.Equals(type.Name, simpleName, StringComparison.Ordinal)) return type;
+                }
+                catch (ReflectionTypeLoadException ex)
+                {
+                    if (ex.Types == null) continue;
+                    foreach (Type type in ex.Types)
+                        if (type != null && String.Equals(type.Name, simpleName, StringComparison.Ordinal)) return type;
+                }
+                catch { }
+            }
+            return null;
+        }
+
+        private bool TryInstallFikaVisitHook()
+        {
+            if (fikaVisitHookInstalled) return true;
+            Type triggerType = FindLoadedTypeBySimpleName("TriggerWithId");
+            if (triggerType == null) return false;
+            MethodInfo target = null;
+            foreach (MethodInfo candidate in triggerType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+            {
+                ParameterInfo[] parameters = candidate.GetParameters();
+                if (candidate.Name == "OnTriggerEnter" && parameters.Length == 1 && parameters[0].ParameterType.Name == "Collider")
+                {
+                    target = candidate;
+                    break;
+                }
+            }
+            MethodInfo postfix = typeof(Plugin).GetMethod("FikaVisitPostfix", BindingFlags.Static | BindingFlags.NonPublic);
+            if (target == null || postfix == null) return false;
+            try
+            {
+                if (fikaHarmony == null) fikaHarmony = new Harmony("com.eft.operations.client.fika-host-evidence");
+                fikaHarmony.Patch(target, null, new HarmonyMethod(postfix), null, null);
+                fikaVisitHookInstalled = true;
+                Logger.LogInfo("Fika 1.2.3 visit telemetry hook installed on " + triggerType.FullName + ".OnTriggerEnter(Collider).");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning("Fika visit telemetry hook could not be installed: " + ex.GetBaseException().Message);
+                return false;
+            }
+        }
+
+        private static void FikaVisitPostfix(object __instance, object[] __args)
+        {
+            Plugin current = instance;
+            if (current == null || __args == null || __args.Length < 1) return;
+            current.CaptureFikaHostVisit(__instance, __args[0]);
+        }
+
+        private object FindPlayerFromCollider(object collider)
+        {
+            if (collider == null) return null;
+            Type coopPlayerType = FindLoadedType("Fika.Core.Coop.Players.CoopPlayer");
+            Type playerType = coopPlayerType == null ? null : coopPlayerType.BaseType;
+            if (playerType == null) return null;
+            MethodInfo getComponent = collider.GetType().GetMethod("GetComponentInParent",
+                BindingFlags.Public | BindingFlags.Instance, null, new Type[] { typeof(Type) }, null);
+            if (getComponent == null) return null;
+            try { return getComponent.Invoke(collider, new object[] { playerType }); }
+            catch { return null; }
+        }
+
+        private object ReadFirstMember(object target, params string[] names)
+        {
+            foreach (string name in names)
+            {
+                object value = ReadMember(target, name);
+                if (value != null) return value;
+            }
+            return null;
+        }
+
+        private void CaptureFikaHostVisit(object trigger, object collider)
+        {
+            try
+            {
+                if (!IsFikaServer() || trigger == null || collider == null || playerState == null
+                    || playerState.mission == null || playerState.mission.objectives == null) return;
+                object player = FindPlayerFromCollider(collider);
+                if (player == null) return;
+                object isAiValue = ReadMember(player, "IsAI");
+                if (!(isAiValue is bool) || (bool)isAiValue) return;
+                string actorProfileId = ReadMember(player, "ProfileId") as string;
+                if (!IsProfileId(actorProfileId)) return;
+                object rawTriggerId = ReadFirstMember(trigger, "Id", "ID", "TriggerId", "PlaceId", "PlaceID");
+                string triggerId = rawTriggerId == null ? String.Empty : rawTriggerId.ToString().Trim();
+                if (String.IsNullOrWhiteSpace(triggerId) || triggerId.Length > 100) return;
+
+                bool requiredByMission = false;
+                foreach (ObjectiveDto objective in playerState.mission.objectives)
+                    if (objective != null && objective.type == "visit"
+                        && String.Equals(objective.target, triggerId, StringComparison.OrdinalIgnoreCase))
+                    { requiredByMission = true; break; }
+                if (!requiredByMission) return;
+
+                string matchId = GetFikaMatchId();
+                if (String.IsNullOrWhiteSpace(matchId)) return;
+                string dedupeKey = matchId + ":" + actorProfileId + ":" + triggerId;
+                if (!reportedHostVisitKeys.Add(dedupeKey)) return;
+                reportedHostVisitOrder.Enqueue(dedupeKey);
+                while (reportedHostVisitOrder.Count > 5000)
+                    reportedHostVisitKeys.Remove(reportedHostVisitOrder.Dequeue());
+
+                string payload = "{\\"type\\":\\"visit\\",\\"eventId\\":\\"" + Guid.NewGuid().ToString("N")
+                    + "\\",\\"matchId\\":\\"" + Escape(matchId)
+                    + "\\",\\"actorProfileId\\":\\"" + Escape(actorProfileId)
+                    + "\\",\\"triggerId\\":\\"" + Escape(triggerId) + "\\"}";
+                StartCoroutine(PostFikaHostEvent(payload));
+            }
+            catch (Exception ex)
+            {
+                Logger.LogDebug("Fika host visit telemetry skipped safely: " + ex.GetBaseException().Message);
             }
         }
 
