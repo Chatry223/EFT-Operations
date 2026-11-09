@@ -252,7 +252,7 @@ class OperationsService {
         }
         g.evidenceEvents.push({
             eventId, type: event.type, profileId: event.profileId ? String(event.profileId) : null,
-            target: String(event.target || ''), targetCategory: String(event.targetCategory || ''),
+            amount, target: String(event.target || ''), targetCategory: String(event.targetCategory || ''),
             victimProfileId: event.victimProfileId ? String(event.victimProfileId) : null,
             victimRole: String(event.victimRole || ''), victimSide: String(event.victimSide || ''),
             reporterProfileId: event.reporterProfileId ? String(event.reporterProfileId) : null,
