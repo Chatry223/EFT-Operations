@@ -554,6 +554,39 @@ class Fika243OperationsAdapter {
             key: Array.isArray(object(item).Key) ? item.Key.map(value => String(value).slice(0, 40)).slice(0, 6) : [],
             value: Number.isFinite(Number(object(item).Value)) ? Number(item.Value) : 0
         })) : [];
+        const snapshotKey = matchId ? `${matchId}:${identity.profileId}` : '';
+        const raidSnapshot = snapshotKey ? this.raidSnapshots.get(snapshotKey) : null;
+        const acceptedAccount = safe(() => this.services.saveServer && this.services.saveServer.getProfile(sessionId), null);
+        const acceptedCharacters = object(acceptedAccount && acceptedAccount.characters);
+        const acceptedCharacter = raidSnapshot && raidSnapshot.side === 'scav' ? object(acceptedCharacters.scav) : object(acceptedCharacters.pmc);
+        const acceptedInventory = object(acceptedCharacter.Inventory);
+        const acceptedItems = Array.isArray(acceptedInventory.items) ? acceptedInventory.items : [];
+        const acceptedById = new Map(acceptedItems.map(item => [String(object(item)._id || ''), item]));
+        const preRaidItems = raidSnapshot ? object(raidSnapshot.items) : {};
+        const reportedInventory = object(profile.Inventory);
+        const reportedItems = Array.isArray(reportedInventory.items) ? reportedInventory.items : [];
+        const lootItems = [];
+        const lootByTpl = {};
+        for (const item of reportedItems.slice(0, 2500)) {
+            const id = String(object(item)._id || '');
+            const tpl = String(object(item)._tpl || '');
+            const upd = object(object(item).upd);
+            if (!id || !tpl || upd.SpawnedInSession !== true) continue;
+            const before = object(preRaidItems[id]);
+            const beforeCount = Math.max(0, Number(before.count) || 0);
+            const reportedCount = Math.max(1, Number(upd.StackObjectsCount) || 1);
+            const acceptedItem = acceptedById.get(id);
+            if (!acceptedItem) continue;
+            const acceptedUpd = object(object(acceptedItem).upd);
+            const acceptedCount = Math.max(1, Number(acceptedUpd.StackObjectsCount) || 1);
+            const reportedDelta = Math.max(0, reportedCount - beforeCount);
+            const acceptedDelta = Math.max(0, acceptedCount - beforeCount);
+            const acceptedDeltaCount = Math.min(reportedDelta, acceptedDelta);
+            if (acceptedDeltaCount <= 0) continue;
+            lootItems.push({ tpl, count: acceptedDeltaCount, itemId: id, acceptedBySpt: true });
+            lootByTpl[tpl] = (lootByTpl[tpl] || 0) + acceptedDeltaCount;
+        }
+        if (snapshotKey) this.raidSnapshots.delete(snapshotKey);
         const foundInRaidItems = Array.isArray(eftStats.FoundInRaidItems) ? eftStats.FoundInRaidItems.slice(0, 100).map(item => ({
             questId: String(object(item).QuestId || '').slice(0, 40),
             itemId: String(object(item).ItemId || '').slice(0, 40)
@@ -581,6 +614,11 @@ class Fika243OperationsAdapter {
             reportedKillCountsByRole: killCountsByRole,
             corroboratedVictimCount: victims.filter(victim => victim.corroboratedByFikaDeathReport).length,
             reportedSessionCounters: counterItems,
+            lootSnapshotAvailable: !!raidSnapshot,
+            serverProcessedProfileAvailable: !!acceptedAccount,
+            reportedLootItemCount: lootItems.reduce((sum, item) => sum + item.count, 0),
+            reportedLootByTpl: lootByTpl,
+            reportedLootItems: lootItems.slice(0, 200),
             reportedFoundInRaidQuestItems: foundInRaidItems,
             reportedDroppedQuestItems: droppedQuestItems,
             evidenceTrust: 'untrusted_client_report',
