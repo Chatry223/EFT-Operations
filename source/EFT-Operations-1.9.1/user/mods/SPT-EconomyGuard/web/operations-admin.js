@@ -27,7 +27,7 @@
       return `<div class="panel"><div class="panel-head"><div><h3>${m.id ? 'Edit mission draft' : 'Create mission'}</h3><p>Build the operation, define objectives and set the completion reward.</p></div><button type="button" class="secondary-btn" id="opCancel">Cancel</button></div>
         <form id="opMissionForm" class="form-grid">
           <label class="field">Mission title<input name="title" required maxlength="100" value="${esc(m.title)}" placeholder="Operation Blackout"></label>
-          <label class="field">Map / location<input name="map" required maxlength="40" value="${esc(m.map)}" placeholder="bigmap"></label>
+          <label class="field">Map / location<input name="map" required maxlength="40" value="${esc(m.map)}" placeholder="bigmap"><small class="muted">Use the SPT location ID, not the display name (for example, bigmap = Woods).</small></label>
           <label class="field span-2">Mission description<textarea name="description" rows="3" maxlength="4000">${esc(m.description)}</textarea></label>
           <label class="field">Team mode<select name="mode"><option value="solo"${m.mode==='solo'?' selected':''}>Solo</option><option value="squad"${m.mode==='squad'?' selected':''}>Squad</option><option value="either"${m.mode==='either'?' selected':''}>Solo or squad</option></select></label>
           <label class="field">Players · minimum / maximum<div style="display:flex;gap:8px"><input name="minPlayers" type="number" min="1" max="8" value="${m.minPlayers}" required><input name="maxPlayers" type="number" min="1" max="8" value="${m.maxPlayers}" required></div></label>
