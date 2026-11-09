@@ -69,6 +69,7 @@ class Fika243OperationsAdapter {
             return false;
         }
         this.hook(container, 'SaveServer', instance => { this.services.saveServer = instance; });
+        this.hook(container, 'FikaUpdateCallbacks', instance => this.patchUpdateCallbacks(instance));
         this.hook(container, 'FikaMatchService', instance => {
             this.services.fikaMatchService = instance;
             this.patchMatchService(instance);
@@ -89,6 +90,45 @@ class Fika243OperationsAdapter {
         } catch (err) { this.log('warn', `${token} hook registration failed: ${err.message}`); }
         try { callback(container.resolve(token)); registered = true; }
         catch (_) { if (!registered) this.log('debug', `${token} is not available yet.`); }
+    }
+
+    patchUpdateCallbacks(instance) {
+        if (!instance) return false;
+        const proto = Object.getPrototypeOf(instance);
+        const hasHooks = proto && (Object.prototype.hasOwnProperty.call(proto, 'handleRaidAddPlayer') || Object.prototype.hasOwnProperty.call(proto, 'handlePlayerDied'));
+        const target = hasHooks ? proto : instance;
+        const adapter = this;
+        let patched = false;
+        for (const methodName of ['handleRaidAddPlayer', 'handlePlayerDied']) {
+            if (typeof target[methodName] !== 'function') continue;
+            const flag = '__egFika243Identity_' + methodName;
+            if (target[flag]) continue;
+            const original = target[methodName];
+            target[methodName] = function (url, info, sessionId, ...rest) {
+                adapter.assertUpdateIdentity(sessionId, info, methodName);
+                return original.call(this, url, info, sessionId, ...rest);
+            };
+            Object.defineProperty(target, flag, { value: true, enumerable: false });
+            patched = true;
+        }
+        this.status.updateIdentityHook = patched;
+        return patched;
+    }
+
+    assertUpdateIdentity(sessionId, info, methodName) {
+        const sid = String(sessionId || '').trim();
+        const requestedProfileId = String(object(info).profileId || '').trim();
+        if (!sid || !requestedProfileId || !this.services.saveServer || typeof this.services.saveServer.getProfile !== 'function') {
+            throw new Error('FIKA_UPDATE_IDENTITY_UNAVAILABLE');
+        }
+        const profile = safe(() => this.services.saveServer.getProfile(sid), null);
+        const characters = object(profile && profile.characters);
+        const allowed = [String(object(characters.pmc)._id || ''), String(object(characters.scav)._id || '')].filter(Boolean);
+        if (!allowed.includes(requestedProfileId)) {
+            this.log('warn', `Rejected Fika ${methodName} for session ${sid}: request profile does not belong to the authenticated SPT account.`);
+            throw new Error('FIKA_UPDATE_IDENTITY_MISMATCH');
+        }
+        return true;
     }
 
     patchLifecycle(instance) {
