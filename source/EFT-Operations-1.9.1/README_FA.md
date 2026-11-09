@@ -24,7 +24,7 @@
 
 **مرز قابلیت این نسخه:** ذخیره مأموریت، گروه، Ready state، اتصال گروه آماده به Match واقعی Fika، صف بررسی مدیر، Rank Ledger و تحویل پاداش پس از تأیید مدیر پیاده‌سازی شده‌اند. Adapter فعلی گروه را هنگام ورود همه اعضای آماده به Match به حالت `in_raid` می‌برد و در پایان Match آن را به `review` منتقل می‌کند؛ هیچ پاداشی از داده‌های کلاینت به‌صورت خودکار صادر نمی‌شود. **محدودیت مهم:** رویدادهای واقعی Kill / Loot / Visit / Extract هنوز به `recordRaidEvent` متصل نشده‌اند؛ بنابراین شمارنده پیشرفت Objective در بازی هنوز زنده و خودکار نیست. HUD فعلی عنوان و اهداف را نمایش می‌دهد، نه تأیید تکمیل آن‌ها. راهنمای کامل: `user/mods/SPT-EconomyGuard/OPERATIONS-README_FA.md`.
 
-نتیجه بررسی فعلی GitHub Actions: **۲۸ تست Server موفق، صفر خطا** و Build کلاینت روی Windows موفق است. فایل `EFTOperations.Client.dll` با حجم 27,136 بایت و SHA-256 برابر `276ecad202e8ccf473b52c2d6ff8f1b17a7bd2d7ed0ba1909a2c76928f1fcd1f` ساخته شده است. [Artifact کلاینت در GitHub Actions](https://github.com/Chatry223/EFT-Operations/actions/runs/42687196015/artifacts/13704528374). این Build هنوز تست Runtime داخل بازی نیست؛ برای وضعیت دقیق به `docs/COMPATIBILITY-AND-BUILD-READINESS.md` مراجعه کن.
+نتیجه بررسی فعلی GitHub Actions: **۲۸ تست Server موفق، صفر خطا** و Build کلاینت روی Windows موفق است. فایل `EFTOperations.Client.dll` با حجم 27,136 بایت و SHA-256 برابر `443602390928327e748d6e8d7cc6e810b7d04bf8e0abed9b9d8fe325b0e0d4ef` ساخته شده است. [Artifact کلاینت در GitHub Actions](https://github.com/Chatry223/EFT-Operations/actions/runs/42687894189/artifacts/13705463291). این Build هنوز تست Runtime داخل بازی نیست؛ برای وضعیت دقیق به `docs/COMPATIBILITY-AND-BUILD-READINESS.md` مراجعه کن.
 
 ## قابلیت‌های نسخه 1.2.0 و 1.2.1
 
