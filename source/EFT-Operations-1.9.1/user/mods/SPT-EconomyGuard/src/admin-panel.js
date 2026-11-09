@@ -635,7 +635,27 @@ class AdminPanelServer {
                 }));
             }
             if (req.method === 'GET' && pathname === '/api/operations/fika') return this.send(res, 200, this.fikaOperationsAdapter ? { status: this.fikaOperationsAdapter.getStatus(), events: this.fikaOperationsAdapter.getRecentEvents(150) } : { status: { detected: false, enabled: false, reason: 'OPERATIONS_OR_FIKA_ADAPTER_DISABLED' }, events: [] });
-            if (req.method === 'GET' && pathname === '/api/operations/leaderboard') { const o = this.requireOperations(); return this.send(res, 200, Object.keys(o.state.playerStats).map(id => o.getPlayer(id)).sort((a,b) => b.points-a.points).slice(0,200)); }
+            if (req.method === 'GET' && pathname === '/api/operations/leaderboard') {
+                const operations = this.requireOperations();
+                const names = new Map();
+                try {
+                    const profiles = this.saveServer && typeof this.saveServer.getProfiles === 'function' ? this.saveServer.getProfiles() : {};
+                    for (const profile of Object.values(profiles || {})) {
+                        const characters = profile && profile.characters || {};
+                        const pmc = characters.pmc || {};
+                        const scav = characters.scav || {};
+                        const info = profile && profile.info || {};
+                        const displayName = String((pmc.Info && pmc.Info.Nickname) || (scav.Info && scav.Info.Nickname) || info.Nickname || info.username || 'Unknown operator').slice(0, 40);
+                        if (pmc._id) names.set(String(pmc._id), displayName);
+                        if (scav._id) names.set(String(scav._id), displayName);
+                    }
+                } catch (err) { this.log('warn', `Could not resolve leaderboard display names: ${err.message}`); }
+                const rows = Object.keys(operations.state.playerStats).map(profileId => {
+                    const player = operations.getPlayer(profileId);
+                    return { displayName: names.get(profileId) || 'Unknown operator', rank: player.rank, points: player.points, completedMissions: player.completedMissions };
+                }).sort((a, b) => b.points - a.points).slice(0, 200);
+                return this.send(res, 200, rows);
+            }
             if (req.method === 'GET' && pathname === '/api/activity') return this.send(res, 200, {
                 audit: this.readRecent(this.guard.storage.auditDir, /^audit-.*\.jsonl$/i, 1000).reverse(),
                 ledger: this.readRecent(this.guard.storage.ledgerDir, /^ledger-.*\.jsonl$/i, 1000).reverse()
