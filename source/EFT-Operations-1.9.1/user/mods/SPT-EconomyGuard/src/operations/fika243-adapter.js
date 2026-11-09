@@ -689,6 +689,11 @@ class Fika243OperationsAdapter {
         };
         this.appendEvent(event);
         this.finishMissionGroup(service, matchId, match);
+        for (const [key, snapshot] of this.raidSnapshots.entries()) {
+            if (String(snapshot.matchId || '') === id || (missionGroup && String(snapshot.groupId || '') === String(missionGroup.id))) {
+                this.raidSnapshots.delete(key);
+            }
+        }
         return event;
     }
 
