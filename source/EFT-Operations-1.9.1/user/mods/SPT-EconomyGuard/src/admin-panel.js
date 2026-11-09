@@ -47,6 +47,7 @@ function sanitizeFikaEvent(event) {
         serverProfileAvailable: item.serverProfileAvailable === true,
         reportedLootItemCount: Number(item.reportedLootItemCount || 0),
         reportedLootByTpl: item.reportedLootByTpl || {},
+        acceptedLootByTpl: item.acceptedLootByTpl || {},
         reportedLootItems: safeArray(item.reportedLootItems).map(loot => ({
             tpl: loot.tpl || '',
             count: Number(loot.count || 0),
@@ -705,7 +706,7 @@ class AdminPanelServer {
                             reportedCount = Math.max(clientReported, hostReported);
                         } else if (objective.type === 'collect') {
                             reportedCount = raidEnds.reduce((sum, event) => {
-                                const loot = event.reportedLootByTpl || {};
+                                const loot = event.acceptedLootByTpl || event.reportedLootByTpl || {};
                                 const tpl = Object.keys(loot).find(key => key.toLowerCase() === target);
                                 return sum + Number(tpl ? loot[tpl] : 0);
                             }, 0);
