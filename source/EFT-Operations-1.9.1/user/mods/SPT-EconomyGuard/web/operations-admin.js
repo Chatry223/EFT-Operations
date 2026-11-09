@@ -39,7 +39,7 @@
           <label class="field span-2">Briefing message<textarea name="briefingBody" rows="4" maxlength="8000">${esc(m.briefing?.body||'')}</textarea></label>
           <label class="field">Reward points<input name="points" type="number" min="0" max="1000000" value="${m.rewards?.points||0}"></label>
           <label class="field">Reward roubles<input name="roubles" type="number" min="0" max="50000000" value="${m.rewards?.roubles||0}"></label>
-          <div class="callout span-2"><b>Reward delivery status</b><p>Points and rank are recorded by the Operations ledger. Roubles and item rewards are currently marked pending delivery; automatic inventory delivery is not yet connected to the SPT profile system.</p></div>
+          <div class="callout span-2"><b>Reward delivery</b><p>Approved points are recorded in the rank ledger. Roubles and item rewards are sent through SPT system mail after an administrator approves the raid review. Failed or interrupted delivery is held for manual reconciliation; it is never retried automatically.</p></div>
           <div class="form-actions span-2"><button class="primary-btn" type="submit">Save mission draft</button><button class="secondary-btn" type="button" id="opExport">Export JSON</button><label class="secondary-btn" style="cursor:pointer">Import JSON<input id="opImport" type="file" accept="application/json,.json" hidden></label></div>
         </form></div>`;
     }
