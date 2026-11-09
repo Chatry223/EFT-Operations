@@ -113,7 +113,7 @@ jobs:
           zip -qr "$archive" user/mods/SPT-EconomyGuard
           unzip -t "$archive"
           unzip -Z1 "$archive" | grep -Fx 'user/mods/SPT-EconomyGuard/package.json'
-          sha256sum "$archive" > "$archive.sha256"
+          (cd dist && sha256sum "$(basename "$archive")" > "$(basename "$archive").sha256")
       - name: Upload server-mod package
         uses: actions/upload-artifact@v4
         with:
