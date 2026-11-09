@@ -596,9 +596,7 @@ namespace EFTOperations.Client
                 while (reportedHostKillOrder.Count > 1000)
                     reportedHostKillKeys.Remove(reportedHostKillOrder.Dequeue());
 
-                string groupId = playerState != null && playerState.group != null ? playerState.group.id : String.Empty;
                 string payload = "{\"eventId\":\"" + Guid.NewGuid().ToString("N")
-                    + "\",\"groupId\":\"" + Escape(groupId)
                     + "\",\"matchId\":\"" + Escape(matchId)
                     + "\",\"killerProfileId\":\"" + Escape(killerProfileId)
                     + "\",\"victimProfileId\":\"" + Escape(victimProfileId)
