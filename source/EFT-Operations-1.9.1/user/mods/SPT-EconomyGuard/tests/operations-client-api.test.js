@@ -69,26 +69,26 @@ const hostA = api.acceptMission('', { missionId: hostMission.id }, 'session-a').
 const hostB = api.acceptMission('', { missionId: hostMission.id }, 'session-b').wrapped;
 api.setReady('', { groupId: hostA.group.id, ready: true }, 'session-a');
 api.setReady('', { groupId: hostA.group.id, ready: true }, 'session-b');
-operations.startGroup(hostA.group.id, playerA);
+operations.startGroup(hostA.group.id, playerB);
 
-const hostKill = { eventId: 'host-kill-001', groupId: hostA.group.id, matchId: playerA,
+const hostKill = { eventId: 'host-kill-001', groupId: hostA.group.id, matchId: playerB,
     killerProfileId: 'abcdef0123456789abcdef10', victimProfileId: 'abcdef0123456789abcdef11',
     victimRole: 'assault', victimSide: 'Savage', victimIsAi: true };
-assert.equal(api.hostRaidEvent('', hostKill, 'session-b').wrapped.error, 'HOST_PROFILE_MISMATCH');
-assert.equal(api.hostRaidEvent('', Object.assign({}, hostKill, { killerProfileId: 'abcdef0123456789abcdef99' }), 'session-a').wrapped.error, 'KILLER_NOT_GROUP_MEMBER');
-assert.equal(api.hostRaidEvent('', Object.assign({}, hostKill, { victimIsAi: false }), 'session-a').wrapped.error, 'INVALID_HOST_KILL_EVIDENCE');
-const firstKill = api.hostRaidEvent('', hostKill, 'session-a').wrapped;
+assert.equal(api.hostRaidEvent('', hostKill, 'session-a').wrapped.error, 'HOST_PROFILE_MISMATCH', 'the Fika host may be a non-leader squad member');
+assert.equal(api.hostRaidEvent('', Object.assign({}, hostKill, { killerProfileId: 'abcdef0123456789abcdef99' }), 'session-b').wrapped.error, 'KILLER_NOT_GROUP_MEMBER');
+assert.equal(api.hostRaidEvent('', Object.assign({}, hostKill, { victimIsAi: false }), 'session-b').wrapped.error, 'INVALID_HOST_KILL_EVIDENCE');
+const firstKill = api.hostRaidEvent('', hostKill, 'session-b').wrapped;
 assert.equal(firstKill.ok, true);
 assert.equal(firstKill.evidenceTrust, 'host_attested');
 assert.equal(firstKill.group.objectiveProgress.find(x => x.id === 'scavs').progress, 1);
 assert.equal(firstKill.group.objectiveProgress.find(x => x.id === 'scavs').trust, 'host_attested');
 assert.equal(operations.state.groups.find(x => x.id === hostA.group.id).evidenceEvents.length, 1);
-const duplicateKill = api.hostRaidEvent('', hostKill, 'session-a').wrapped;
+const duplicateKill = api.hostRaidEvent('', hostKill, 'session-b').wrapped;
 assert.equal(duplicateKill.ok, true);
 assert.equal(duplicateKill.group.objectiveProgress.find(x => x.id === 'scavs').progress, 1, 'duplicate host event IDs cannot advance progress twice');
 const bossKill = api.hostRaidEvent('', Object.assign({}, hostKill, {
     eventId: 'host-kill-002', victimProfileId: 'abcdef0123456789abcdef12', victimRole: 'bossKilla'
-}), 'session-a').wrapped;
+}), 'session-b').wrapped;
 assert.equal(bossKill.ok, true);
 assert.equal(bossKill.group.objectiveProgress.find(x => x.id === 'boss').progress, 1);
 const hostReview = operations.finishGroup(hostA.group.id, { verified: true, aliveProfileIds: [playerA, playerB], extractedProfileIds: [playerA, playerB] });
