@@ -17,7 +17,8 @@ fs.writeFileSync(path.join(fikaDir, 'package.json'), JSON.stringify({ version: '
 
 const adapter = new Fika243OperationsAdapter({ modDir, operations: { dataDir }, logger: { info() {}, warn() {}, debug() {} } });
 assert.equal(adapter.getStatus().enabled, true, 'only the configured Fika 2.4.3 / SPT 3.11 line should enable hooks');
-assert.equal(adapter.getStatus().fikaClientTargetVersion, '2.4.3');
+assert.equal(adapter.getStatus().fikaServerVersion, '2.4.3');
+assert.equal(adapter.getStatus().fikaClientTargetVersion, '1.2.3');
 assert.equal(adapter.getStatus().fikaClientConfigLastVersion, '1.2.3');
 assert.match(adapter.getStatus().fikaClientConfigEvidence, /not authoritative/);
 assert.equal(adapter.getStatus().operationsClientPluginVersion, '0.1.0');
