@@ -613,7 +613,28 @@ class AdminPanelServer {
             if (req.method === 'GET' && pathname === '/api/online') return this.send(res, 200, this.getOnlinePlayers());
             if (req.method === 'GET' && pathname === '/api/board') return this.send(res, 200, this.requireBoard().getAdminState());
             if (req.method === 'GET' && pathname === '/api/operations') return this.send(res, 200, this.requireOperations().list());
-            if (req.method === 'GET' && pathname === '/api/operations/awards') return this.send(res, 200, this.requireOperations().state.awards.slice(-500).reverse());
+            if (req.method === 'GET' && pathname === '/api/operations/awards') {
+                const operations = this.requireOperations();
+                const awards = operations.state.awards.slice(-500).reverse().map(award => {
+                    const group = operations.state.groups.find(item => item.id === award.groupId);
+                    const member = group && safeArray(group.members).find(item => String(item.profileId || '') === String(award.profileId || ''));
+                    const mission = operations.state.missions.find(item => item.id === award.missionId);
+                    return {
+                        id: award.id,
+                        missionTitle: mission ? mission.title : 'Archived operation',
+                        squad: group ? 'Mission squad' : 'Archived squad',
+                        displayName: member && member.displayName || 'Unknown operator',
+                        points: Number(award.points || 0),
+                        roubles: Number(award.roubles || 0),
+                        items: safeArray(award.items).map(item => ({ count: Number(item.count || 0) })),
+                        status: award.status,
+                        deliveryError: award.deliveryError || '',
+                        createdAt: award.createdAt,
+                        deliveredAt: award.deliveredAt || null
+                    };
+                });
+                return this.send(res, 200, awards);
+            }
             if (req.method === 'GET' && pathname === '/api/operations/reviews') {
                 const operations = this.requireOperations();
                 const queue = operations.reviewQueue();
