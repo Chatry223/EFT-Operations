@@ -22,31 +22,32 @@ jobs:
   source-status:
     name: Source bundle readiness
     runs-on: ubuntu-latest
+    outputs:
+      source_ready: ${{ steps.detect.outputs.source_ready }}
     steps:
       - uses: actions/checkout@v4
-      - name: Report source readiness
+      - name: Detect imported source
+        id: detect
+        shell: bash
         run: |
           if [ -f user/mods/SPT-EconomyGuard/package.json ] && [ -f client/EFT.Operations.Client/EFT.Operations.Client.csproj ]; then
-            echo 'Server and client source trees are present.'
+            echo "source_ready=true" >> "$GITHUB_OUTPUT"
+            echo "Server and client source trees are present."
           else
-            echo 'Bootstrap only: import the 1.9.1 source bundle before CI/build jobs can run.'
+            echo "source_ready=false" >> "$GITHUB_OUTPUT"
+            echo "Bootstrap only: import the 1.9.1 source bundle before CI/build jobs can run."
           fi
 
   server-tests:
     name: SPT server checks and tests
-    if: hashFiles('user/mods/SPT-EconomyGuard/package.json') != ''
+    needs: source-status
+    if: needs.source-status.outputs.source_ready == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Verify source is present
-        run: |
-          test -f user/mods/SPT-EconomyGuard/package.json || {
-            echo "::error::Source tree is not present. Import EFT-Operations-1.9.1 source bundle first."
-            exit 1
-          }
       - name: Install dependencies (if lockfile exists)
         working-directory: user/mods/SPT-EconomyGuard
         run: |
@@ -60,9 +61,9 @@ jobs:
 
   client-build:
     name: Build BepInEx client plugin (Windows + EFT assemblies)
+    needs: source-status
     # Never execute untrusted PR code on the private EFT build runner.
-    # Do not queue a self-hosted job until the client source is committed.
-    if: github.event_name != 'pull_request' && hashFiles('client/EFT.Operations.Client/EFT.Operations.Client.csproj') != ''
+    if: needs.source-status.outputs.source_ready == 'true' && github.event_name != 'pull_request'
     runs-on: [self-hosted, Windows, X64, eft-build]
     env:
       EFT_MANAGED_DIR: ${{ vars.EFT_MANAGED_DIR }}
@@ -77,9 +78,6 @@ jobs:
           }
           if (-not $env:BEPINEX_CORE_DIR -or -not (Test-Path (Join-Path $env:BEPINEX_CORE_DIR 'BepInEx.dll'))) {
             throw 'Set repository Actions variable BEPINEX_CORE_DIR to BepInEx/core.'
-          }
-          if (-not (Test-Path 'client/EFT.Operations.Client/EFT.Operations.Client.csproj')) {
-            throw 'Client source project is missing from the repository.'
           }
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
