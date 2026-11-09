@@ -76,7 +76,7 @@ try {
 
     // Windows-style separators in archive entry names are normalized before matching.
     const windowsPath = path.join(root, 'windows-path.zip');
-    fs.writeFileSync(windowsPath, makeZip([{ name: 'SVM\\\\Presets\\\\v7.json', data: { preset: 'windows-path' } }]));
+    fs.writeFileSync(windowsPath, makeZip([{ name: 'SVM\\Presets\\v7.json', data: { preset: 'windows-path' } }]));
     const windowsPreview = readZipJsonEntries(windowsPath);
     assert.strictEqual(windowsPreview.length, 1);
     assert.strictEqual(windowsPreview[0].ok, true);
