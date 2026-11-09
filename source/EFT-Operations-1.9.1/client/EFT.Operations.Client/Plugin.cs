@@ -464,7 +464,7 @@ namespace EFTOperations.Client
 
             GUILayout.Label("OBJECTIVES  /  LIVE HOST TELEMETRY", HeaderStyle());
             raidHudScroll = GUILayout.BeginScrollView(raidHudScroll, GUILayout.Height(Mathf.Max(64f, hud.height - 145f)));
-            bool hasHostEvidence = false;
+            bool hasReviewEvidence = false;
             if (mission.objectives == null || mission.objectives.Length == 0)
                 GUILayout.Label("No objectives listed.", SmallStyle());
             else
@@ -478,16 +478,16 @@ namespace EFTOperations.Client
                             if (item != null && item.id == objective.id) { progress = item; break; }
                     int current = progress == null ? 0 : progress.progress;
                     string trust = progress == null ? "none" : progress.trust;
-                    string trustLabel = trust == "server_verified" ? "VERIFIED" : (trust == "host_attested" ? "HOST REPORTED" : "AWAITING EVENT");
-                    if (trust == "host_attested") hasHostEvidence = true;
+                    string trustLabel = trust == "server_verified" ? "VERIFIED" : (trust == "host_attested" ? "HOST REPORTED / REVIEW" : (trust == "spt_accepted_client_delta" ? "SPT ACCEPTED / REVIEW" : "AWAITING EVENT"));
+                    if (trust == "host_attested" || trust == "spt_accepted_client_delta") hasReviewEvidence = true;
                     string objectiveName = !String.IsNullOrEmpty(objective.target) ? objective.target : (objective.type ?? "OBJECTIVE");
                     GUILayout.Label((objective.required ? "[REQUIRED] " : "[OPTIONAL] ") + objectiveName + "  " + current + "/" + objective.count + "  ·  " + trustLabel, SmallStyle());
                 }
             }
             GUILayout.EndScrollView();
             bool localIsFikaHost = fikaKillHookInstalled && IsFikaServer();
-            GUILayout.Label(hasHostEvidence
-                ? "Host-reported evidence is visible. Final completion and rewards still require admin review."
+            GUILayout.Label(hasReviewEvidence
+                ? "Host-reported or SPT-accepted evidence is visible. Final completion and rewards still require admin review."
                 : (localIsFikaHost
                     ? "Fika host telemetry is active. Waiting for objective events; rewards still require admin review."
                     : (fikaKillHookInstalled
