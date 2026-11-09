@@ -246,8 +246,10 @@ $buildButton.Add_Click({
                 throw "Wrong target dependency '$name'. Expected the verified EFT 0.16.1.3.35392 / SPT 3.11.1 / Fika client 1.2.3 file hash; got $actualHash."
             }
         }
+        $bepinexVersion = [Reflection.AssemblyName]::GetAssemblyName((Join-Path $core 'BepInEx.dll')).Version.ToString()
         $fikaVersion = [System.Reflection.AssemblyName]::GetAssemblyName($fikaDll).Version.ToString()
         $sptCommonVersion = [Reflection.AssemblyName]::GetAssemblyName($sptCommonDll).Version.ToString()
+        if ($bepinexVersion -ne '5.4.22.0') { throw "Expected BepInEx 5.4.22.0; found $bepinexVersion" }
         if ($fikaVersion -ne '1.2.3.0') { throw "Expected Fika.Core 1.2.3.0; found $fikaVersion" }
         if ($sptCommonVersion -ne '3.11.1.0') { throw "Expected SPT.Common 3.11.1.0; found $sptCommonVersion" }
         $fikaHeader = Get-Content -LiteralPath $fikaConfig -TotalCount 2 -ErrorAction Stop | Select-Object -First 1
@@ -258,7 +260,7 @@ $buildButton.Add_Click({
         Write-Log "EFT references: $managed"
         Write-Log "Assembly-CSharp assembly version: $gameAssemblyVersion"
         Write-Log "BepInEx references: $core"
-        Write-Log "Fika.Core: $fikaVersion; SPT.Common: $sptCommonVersion"
+        Write-Log "BepInEx: $bepinexVersion; Fika.Core: $fikaVersion; SPT.Common: $sptCommonVersion"
         Write-Log "MSBuild: $msbuild"
         Write-Log 'Building Release / net472...'
         $output = & $msbuild $project '/restore' '/m' '/p:Configuration=Release' "/p:GameManagedDir=$managed" "/p:BepInExCoreDir=$core" '/verbosity:minimal' 2>&1
