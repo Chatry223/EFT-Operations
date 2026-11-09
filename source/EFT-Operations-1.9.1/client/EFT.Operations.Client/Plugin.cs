@@ -433,6 +433,8 @@ namespace EFTOperations.Client
             GUILayout.Label("ACTIVE FIELD OPERATION", HeaderStyle());
             GUILayout.Label(mission.title ?? "UNTITLED OPERATION", NotificationStyle());
             GUILayout.Label((mission.map ?? "UNKNOWN MAP").ToUpperInvariant(), SmallStyle());
+            if (playerState.player != null)
+                GUILayout.Label("OPERATOR RANK  /  " + (playerState.player.rank ?? "UNRANKED") + "  ·  " + playerState.player.points + " PTS", SmallStyle());
 
             string briefing = mission.briefing == null ? String.Empty : mission.briefing.body;
             if (!String.IsNullOrEmpty(briefing))
