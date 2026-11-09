@@ -450,7 +450,7 @@ class Fika243OperationsAdapter {
         const extractedProfileIds = this.getRecentEvents(500)
             .filter(event => event.type === 'player_raid_end' && String(event.matchId || '') === String(matchId)
                 && group.members.some(member => String(member.profileId) === String(event.profileId || ''))
-                && String(event.exitStatus || '').toLowerCase() === 'survived')
+                && ['survived', 'runner'].includes(String(event.exitStatus || '').toLowerCase()))
             .map(event => String(event.profileId));
         try {
             const result = this.operations.finishGroup(group.id, {
