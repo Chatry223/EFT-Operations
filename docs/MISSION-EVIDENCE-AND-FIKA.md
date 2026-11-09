@@ -23,6 +23,7 @@ Target stack:
 - Missions may share a normalized Campaign ID and a sequence number (1, 2, 3…).
 - A player must have an approved award for every earlier numbered mission in that campaign before accepting a later one.
 - A mission may also require a minimum accumulated rank-point total.
+- Default ladder: Recruit (0), Private (1,000), Corporal (3,000), Sergeant (7,000), Lieutenant (15,000), Captain (30,000), Major (50,000), Colonel (80,000), General (120,000). The player board and admin leaderboard show points remaining and percentage progress to the next rank.
 - The in-game mission board displays locked reasons and missing campaign operations. The admin mission library groups entries by campaign and sequence.
 - Points and campaign completion are credited only when an admin approves the raid review and the award ledger records the result.
 
