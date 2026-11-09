@@ -62,7 +62,7 @@ const leftB = api.leaveGroup('', { groupId: acceptedA.group.id }, 'session-b').w
 assert.equal(leftB.ok, true);
 
 const hostMission = operations.save({ title: 'Fika Host Evidence', map: 'woods', mode: 'squad', minPlayers: 2, maxPlayers: 2,
-    objectives: [{ id: 'scavs', type: 'kill', target: 'scav', count: 2 }, { id: 'boss', type: 'kill_type', target: 'boss', count: 1 }, { id: 'extract', type: 'extract', count: 1 }],
+    objectives: [{ id: 'scavs', type: 'kill', target: 'scav', count: 2 }, { id: 'boss', type: 'kill_type', target: 'boss', count: 1 }, { id: 'visit', type: 'visit', target: 'bunker2', count: 1 }, { id: 'extract', type: 'extract', count: 1 }],
     rewards: { points: 500, roubles: 0, items: [] } });
 operations.setStatus(hostMission.id, 'published');
 const hostA = api.acceptMission('', { missionId: hostMission.id }, 'session-a').wrapped;
