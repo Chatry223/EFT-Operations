@@ -31,7 +31,7 @@ function Add-Button([string]$text, [int]$x, [int]$y, [int]$w, [int]$h) {
     $c.ForeColor = [System.Drawing.Color]::White; $form.Controls.Add($c); return $c
 }
 function Write-Log([string]$message) {
-    $logBox.AppendText($message + [Environment]::NewLine)
+    $logBox.AppendText($message + [System.Environment]::NewLine)
     $logBox.SelectionStart = $logBox.TextLength
     $logBox.ScrollToCaret()
     [System.Windows.Forms.Application]::DoEvents()
@@ -61,7 +61,7 @@ function Resolve-BepInExCore([string]$selected) {
 function Find-MSBuild {
     $cmd = Get-Command msbuild.exe -ErrorAction SilentlyContinue
     if ($cmd) { return $cmd.Source }
-    $programFilesX86 = [Environment]::GetFolderPath('ProgramFilesX86')
+    $programFilesX86 = [System.Environment]::GetFolderPath('ProgramFilesX86')
     if ([string]::IsNullOrWhiteSpace($programFilesX86)) { return $null }
     $vswhere = Join-Path $programFilesX86 'Microsoft Visual Studio\Installer\vswhere.exe'
     if (Test-Path $vswhere) {
@@ -116,7 +116,7 @@ $buildButton.Add_Click({
         foreach ($dependency in @($fikaDll,$sptCommonDll,$fikaConfig)) {
             if (-not (Test-Path -LiteralPath $dependency -PathType Leaf)) { throw "Missing required target dependency: $dependency" }
         }
-        $fikaVersion = [Reflection.AssemblyName]::GetAssemblyName($fikaDll).Version.ToString()
+        $fikaVersion = [System.Reflection.AssemblyName]::GetAssemblyName($fikaDll).Version.ToString()
         $sptCommonVersion = [Reflection.AssemblyName]::GetAssemblyName($sptCommonDll).Version.ToString()
         if ($fikaVersion -ne '1.2.3.0') { throw "Expected Fika.Core 1.2.3.0; found $fikaVersion" }
         if ($sptCommonVersion -ne '3.11.1.0') { throw "Expected SPT.Common 3.11.1.0; found $sptCommonVersion" }
