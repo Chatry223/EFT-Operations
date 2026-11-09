@@ -117,8 +117,11 @@ class SvmConfigService {
 
         if (input.itemPriceMultiplier !== undefined) {
             if (!isObject(preset.Items) || !Object.prototype.hasOwnProperty.call(preset.Items, 'ItemPriceMult')) throw new Error('SVM_ITEM_PRICE_SETTING_MISSING');
-            preset.Items.ItemPriceMult = number(input.itemPriceMultiplier, 0, 1000, 'item_price_multiplier');
-            changes.push('Items.ItemPriceMult');
+            const next = number(input.itemPriceMultiplier, 0, 1000, 'item_price_multiplier');
+            if (Number(preset.Items.ItemPriceMult) !== next) {
+                preset.Items.ItemPriceMult = next;
+                changes.push('Items.ItemPriceMult');
+            }
         }
 
         if (input.fence !== undefined) {
