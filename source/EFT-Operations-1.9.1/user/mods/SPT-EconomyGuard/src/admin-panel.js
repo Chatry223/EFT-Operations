@@ -810,7 +810,7 @@ class AdminPanelServer {
                 } catch (err) { this.log('warn', `Could not resolve leaderboard display names: ${err.message}`); }
                 const rows = Object.keys(operations.state.playerStats).map(profileId => {
                     const player = operations.getPlayer(profileId);
-                    return { displayName: names.get(profileId) || 'Unknown operator', rank: player.rank, points: player.points, completedMissions: player.completedMissions };
+                    return { displayName: names.get(profileId) || 'Unknown operator', rank: player.rank, nextRank: player.nextRank, nextRankPoints: player.nextRankPoints, pointsToNextRank: player.pointsToNextRank, rankProgressPercent: player.rankProgressPercent, points: player.points, completedMissions: player.completedMissions };
                 }).sort((a, b) => b.points - a.points).slice(0, 200);
                 return this.send(res, 200, rows);
             }
