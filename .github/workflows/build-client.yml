@@ -132,7 +132,7 @@ jobs:
       - name: Build Release DLL
         shell: pwsh
         run: |
-          msbuild client/EFT.Operations.Client/EFT.Operations.Client.csproj /m /p:Configuration=Release /p:GameManagedDir="$env:EFT_MANAGED_DIR" /p:BepInExCoreDir="$env:BEPINEX_CORE_DIR" /verbosity:minimal
+          msbuild client/EFT.Operations.Client/EFT.Operations.Client.csproj /restore /m /p:Configuration=Release /p:GameManagedDir="$env:EFT_MANAGED_DIR" /p:BepInExCoreDir="$env:BEPINEX_CORE_DIR" /verbosity:minimal
       - name: Verify output
         shell: pwsh
         run: |
