@@ -130,7 +130,9 @@ class FakeFikaMatchService {
     getMatch(id) { return this.matches.get(id); }
     getMatchIdByProfile() { return 'match-live'; }
     addPlayerToMatch(matchId, playerId, data) { this.matches.get(matchId).players.set(playerId, data); }
-    endMatch(matchId, reason) { const match = this.matches.get(matchId); this.matches.delete(matchId); return { matchId, reason, match }; }
+    createMatch(data) { this.matches.set(data.serverId, { locationData: { Id: 'woods' }, raidConfig: { location: 'woods' }, players: new Map() }); return true; }
+    deleteMatch(matchId) { this.matches.delete(matchId); }
+    endMatch(matchId, reason) { const match = this.matches.get(matchId); this.deleteMatch(matchId); return { matchId, reason, match }; }
 }
 const liveMatchService = new FakeFikaMatchService();
 lifecycleAdapter.services.fikaMatchService = liveMatchService;
@@ -243,4 +245,60 @@ assert.equal(mismatch.getStatus().enabled, false);
 assert.equal(mismatch.getStatus().reason, 'FIKA_VERSION_MISMATCH');
 
 fs.rmSync(root, { recursive: true, force: true });
-console.log('Fika243OperationsAdapter: all tests passed');
+
+async function verifyAsyncLifecycleWrappers() {
+    const asyncRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'eft-fika-async-'));
+    const asyncModDir = path.join(asyncRoot, 'user', 'mods', 'SPT-EconomyGuard');
+    fs.mkdirSync(asyncModDir, { recursive: true });
+    const asyncOperations = {
+        dataDir: path.join(asyncRoot, 'data'),
+        state: { groups: [{ state: 'forming', members: [{ profileId: 'abcdef0123456789abcdef21' }] }] }
+    };
+    let profileState = {
+        characters: {
+            pmc: { _id: 'abcdef0123456789abcdef21', Info: { Nickname: 'Async-PMC' }, Inventory: { items: [
+                { _id: 'async-pre', _tpl: 'tpl-async', upd: { StackObjectsCount: 2 } }
+            ] } },
+            scav: { _id: 'abcdef0123456789abcdef22', Inventory: { items: [] } }
+        }
+    };
+    const asyncAdapter = new Fika243OperationsAdapter({ modDir: asyncModDir, operations: asyncOperations, logger: { info() {}, warn() {}, debug() {} } });
+    asyncAdapter.services.saveServer = { getProfile() { return profileState; } };
+    asyncAdapter.services.fikaMatchService = { getMatchIdByProfile() { return 'async-match'; } };
+    const asyncLifecycleService = {
+        async startLocalRaid() { await Promise.resolve(); return { location: 'woods' }; },
+        async endLocalRaid() {
+            await Promise.resolve();
+            profileState = {
+                characters: {
+                    pmc: { _id: 'abcdef0123456789abcdef21', Info: { Nickname: 'Async-PMC' }, Inventory: { items: [
+                        { _id: 'async-pre', _tpl: 'tpl-async', upd: { StackObjectsCount: 4, SpawnedInSession: true } },
+                        { _id: 'async-new', _tpl: 'tpl-new', upd: { StackObjectsCount: 1, SpawnedInSession: true } }
+                    ] } },
+                    scav: { _id: 'abcdef0123456789abcdef22', Inventory: { items: [] } }
+                }
+            };
+            return { accepted: true };
+        }
+    };
+    assert.equal(asyncAdapter.patchLifecycle(asyncLifecycleService), true);
+    await asyncLifecycleService.startLocalRaid('session-async', { playerSide: 'pmc', location: 'woods' });
+    assert.equal(asyncAdapter.raidSnapshots.size, 1, 'raid-start snapshot must be captured after the async start handler resolves');
+    const result = await asyncLifecycleService.endLocalRaid('session-async', {
+        serverId: 'woods.789',
+        results: { result: 'Survived', profile: { Inventory: { items: [
+            { _id: 'async-pre', _tpl: 'tpl-async', upd: { StackObjectsCount: 4, SpawnedInSession: true } },
+            { _id: 'async-new', _tpl: 'tpl-new', upd: { StackObjectsCount: 1, SpawnedInSession: true } }
+        ] } } }
+    });
+    assert.equal(result.accepted, true);
+    const event = asyncAdapter.getRecentEvents(10).find(item => item.type === 'player_raid_end');
+    assert.ok(event, 'raid-end evidence must be captured after the async SPT handler');
+    assert.equal(event.reportedLootItemCount, 3);
+    assert.equal(asyncAdapter.raidSnapshots.size, 0);
+    fs.rmSync(asyncRoot, { recursive: true, force: true });
+}
+
+verifyAsyncLifecycleWrappers()
+    .then(() => console.log('Fika243OperationsAdapter: all tests passed'))
+    .catch(error => { console.error(error); process.exitCode = 1; });
