@@ -17,6 +17,8 @@ const saveServer = { getProfile(sessionId) {
 } };
 const responses = { noBody: value => ({ wrapped: value }) };
 const api = new OperationsClientApi({ operations, saveServer, httpResponseUtil: responses, logger: { info() {}, warn() {} } });
+const normalizedMap = operations.normalizeMission({ title: 'Map normalization', map: 'WoOdS', mode: 'solo', minPlayers: 1, maxPlayers: 1, objectives: [{ id: 'extract', type: 'extract', count: 1 }], rewards: {} });
+assert.equal(normalizedMap.map, 'woods');
 const mission = operations.save({ title: 'Client API Mission', description: 'Safe player bridge', map: 'woods', mode: 'squad', minPlayers: 2, maxPlayers: 2,
     objectives: [{ id: 'scavs', type: 'kill', target: 'scav', count: 2 }, { id: 'boss', type: 'kill_type', target: 'boss', count: 1 }, { id: 'visit', type: 'visit', target: 'bunker2', count: 1 }, { id: 'extract', type: 'extract', count: 1 }], rewards: { points: 50, roubles: 1000, items: [] } });
 operations.setStatus(mission.id, 'published');
