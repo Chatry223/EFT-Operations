@@ -7,7 +7,7 @@ Mission / campaign operations and EconomyGuard integration for SPT.
 - EFT build: `0.16.1.3.35392-P2P`
 - SPT: `3.11.1`
 - Fika Server: `2.4.3`
-- Fika client plugin: `1.2.3`
+- Fika client plugin target: `2.4.3` (the BepInEx config's hidden `Last Version` value is not authoritative)
 - Client plugin: .NET Framework 4.7.2 / C# 7.3 / BepInEx
 
 ## Project layout
@@ -44,7 +44,7 @@ The package is a CI-tested server-mod build, not yet a runtime-certified release
 - Approved points update the rank ledger immediately. Rouble/item rewards are delivered through SPT system mail after approval; failed or interrupted deliveries enter `delivery_attention_required` and are never retried automatically. The admin Awards ledger provides an audited manual retry / mark-delivered reconciliation action.
 
 - Player identity is resolved server-side from the authenticated SPT session.
-- Ready mission groups are linked to Fika matches only after every accepted member is present in the same map/match. PMC and Scav character IDs are both matched to the same SPT account.
+- Ready mission groups are linked to Fika matches only after every accepted member is present in the same map/match. PMC and Scav character IDs are both matched to the same SPT account. The in-game leader action invokes Fika 2.4.3's native Start button only when the native host screen is active, the client plugin version is 2.4.3, the squad is fully ready, and the selected map matches the mission. Other members still join through Fika's native raid list; direct auto-join is not claimed.
 - Fika's authenticated registered-player roster is captured before match deletion. Cached death flags originate from player update callbacks and are corroborating, not authoritative proof.
 - Fika player registration/create/leave callbacks are bound to the authenticated SPT session. A player's own death flag and extraction/raid-result report still originate from that client; they can populate a manual review record but cannot auto-award.
 - Manual approval requires an evidence reference and explicit administrator confirmation of objectives and all member extractions.
