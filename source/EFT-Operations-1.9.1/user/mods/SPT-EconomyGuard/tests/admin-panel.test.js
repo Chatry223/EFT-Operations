@@ -19,7 +19,13 @@ const { OperationsService } = require('../src/operations/service');
   const operations = new OperationsService(path.join(root,'data'),{info(){},warn(){}});
   const postedEvents=[];
   const board={store:{listNews:()=>postedEvents},saveNews(item){if(item.id){const i=postedEvents.findIndex(x=>x.id===item.id);if(i<0)throw new Error('NEWS_NOT_FOUND');postedEvents[i]={...postedEvents[i],...item};return postedEvents[i];}const event={...item,id:`event-${postedEvents.length+1}`};postedEvents.push(event);return event;},deleteNews(id){const i=postedEvents.findIndex(x=>x.id===id);if(i>=0)postedEvents.splice(i,1);}};
-  const panel=new AdminPanelServer(modDir,guard,{info(){},warn(){},error(){}},{enabled:true,host:'127.0.0.1',port:0},{saveServer,launcherController,operations,board});
+  const fikaEvents=[
+    {eventId:'event-profile-secret',type:'player_raid_end',groupId:'group-review-1',matchId:'fika-match-secret',profileId:'PROFILESECRET',displayName:'Alpha PMC',map:'woods',exitStatus:'Survived',exitName:'Outskirts',reportedVictimCount:1,reportedVictims:[{profileId:'VICTIMSECRET',name:'Scav-Test',role:'assault',side:'Savage',corroboratedByFikaDeathReport:true}],reportedLootItemCount:2,reportedLootByTpl:{'tpl-123':2},reportedLootItems:[{itemId:'ITEMSECRET',tpl:'tpl-123',count:2,acceptedBySpt:true}],reportedSessionCounters:[{key:['KilledSavage'],value:1}],evidenceTrust:'untrusted_client_report',rewardEligible:false},
+    {eventId:'death-profile-secret',type:'fika_player_died',groupId:'group-review-1',matchId:'fika-match-secret',profileId:'PROFILESECRET',reportedCharacterProfileId:'VICTIMSECRET',displayName:'Bravo PMC',evidenceTrust:'authenticated_client_report'},
+    {eventId:'match-profile-secret',type:'fika_match_end',groupId:'group-review-1',matchId:'fika-match-secret',players:['PROFILESECRET'],displayName:'Alpha PMC',evidenceTrust:'fika_match_end_lifecycle_with_authenticated_roster'}
+  ];
+  const fikaOperationsAdapter={getStatus:()=>({detected:true,enabled:true,observerInstalled:true,hookState:'ready'}),getRecentEvents:()=>fikaEvents};
+  const panel=new AdminPanelServer(modDir,guard,{info(){},warn(){},error(){}},{enabled:true,host:'127.0.0.1',port:0},{saveServer,launcherController,operations,board,fikaOperationsAdapter});
   assert.match(panel.token,/^[a-f0-9]{64}$/i);
   const profileId='0123456789abcdef01234567',tpl='5e81f423763d9f754677bf2e';
   const created=await panel.createServerAccount({username:'friend_new',password:'StrongPassword123!',edition:'Standard'});
@@ -66,6 +72,38 @@ const { OperationsService } = require('../src/operations/service');
   assert.strictEqual(postedEvents.length,1); assert.strictEqual(postedEvents[0].kind,'event'); assert.strictEqual(published.announcementId,postedEvents[0].id);
   const opsClose=await fetch(`http://127.0.0.1:${port}/api/operations/close`,{method:'POST',headers:opsHeaders,body:JSON.stringify({id:savedMission.id})});
   assert.strictEqual(opsClose.status,200); assert.strictEqual(postedEvents[0].enabled,false,'closing a mission also disables its public Event');
+
+  operations.reviewQueue=()=>[{
+    id:'group-review-1',missionId:savedMission.id,raidId:'fika-match-secret',leaderProfileId:'LEADERSECRET',
+    state:'review',createdAt:'2026-11-09T20:00:00.000Z',finishedAt:'2026-11-09T20:05:00.000Z',
+    members:[{profileId:'PROFILESECRET',scavProfileId:'SCAVSECRET',displayName:'Alpha PMC',ready:true}],
+    progress:{},reviewData:{requiredDone:false,aliveProfileIds:['PROFILESECRET'],extractedProfileIds:['PROFILESECRET'],evidenceTrust:'untrusted_client_report',source:'fika-server-adapter',submittedAt:'2026-11-09T20:05:00.000Z'}
+  }];
+  const reviewsResponse=await fetch(`http://127.0.0.1:${port}/api/operations/reviews`,{headers:opsHeaders});
+  assert.strictEqual(reviewsResponse.status,200);
+  const reviewRows=await reviewsResponse.json();
+  assert.strictEqual(reviewRows[0].missionTitle,'API Test Mission');
+  assert.strictEqual(reviewRows[0].objectiveEvidence[0].reportedCount,1);
+  assert.strictEqual(reviewRows[0].objectiveEvidence[0].evidenceStatus,'client_report_only');
+  const safeReviewJson=JSON.stringify(reviewRows);
+  for(const secret of ['PROFILESECRET','VICTIMSECRET','SCAVSECRET','ITEMSECRET','fika-match-secret','LEADERSECRET'])
+    assert.ok(!safeReviewJson.includes(secret),`review API must not expose internal identifier ${secret}`);
+  assert.strictEqual(reviewRows[0].fikaEvidence[0].reportedVictims[0].name,'Scav-Test');
+
+  profiles['session-leaderboard']={info:{id:'session-leaderboard',username:'alpha'},characters:{pmc:{_id:profileId,Info:{Nickname:'Alpha PMC'}},scav:{_id:'abcdef0123456789abcdef98',Info:{Nickname:'Alpha Scav'}}}};
+  operations.state.playerStats[profileId]={points:500,completedMissions:1};
+  const leaderboardResponse=await fetch(`http://127.0.0.1:${port}/api/operations/leaderboard`,{headers:opsHeaders});
+  assert.strictEqual(leaderboardResponse.status,200);
+  const leaderboardRows=await leaderboardResponse.json();
+  assert.strictEqual(leaderboardRows[0].displayName,'Alpha PMC');
+  assert.ok(!JSON.stringify(leaderboardRows).includes(profileId),'leaderboard API must not expose profile IDs');
+
+  const fikaResponse=await fetch(`http://127.0.0.1:${port}/api/operations/fika`,{headers:opsHeaders});
+  assert.strictEqual(fikaResponse.status,200);
+  const safeFikaJson=JSON.stringify(await fikaResponse.json());
+  for(const secret of ['PROFILESECRET','VICTIMSECRET','SCAVSECRET','ITEMSECRET','fika-match-secret'])
+    assert.ok(!safeFikaJson.includes(secret),`Fika API must not expose internal identifier ${secret}`);
+
   const bad=await fetch(`http://127.0.0.1:${port}/api/health`,{headers:{Host:`127.0.0.1:${port}`,Authorization:'Bearer bad'}});
   assert.strictEqual(bad.status,401);
   await new Promise(resolve=>panel.server.close(resolve));
