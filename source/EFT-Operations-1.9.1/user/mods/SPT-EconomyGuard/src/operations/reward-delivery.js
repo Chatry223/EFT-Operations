@@ -82,6 +82,33 @@ class RewardDeliveryService {
         }
     }
 
+    reconcileAward(awardId, decision, note, reviewer = 'ADMIN') {
+        const award = this.operations && this.operations.state && this.operations.state.awards.find(item => item.id === String(awardId || ''));
+        if (!award) throw new Error('AWARD_NOT_FOUND');
+        if (!['delivery_attention_required', 'delivering'].includes(award.status)) throw new Error('AWARD_NOT_RECONCILABLE');
+        if (!['retry', 'mark_delivered'].includes(decision)) throw new Error('INVALID_DELIVERY_RECONCILIATION');
+        const auditNote = String(note || '').trim().slice(0, 500);
+        if (!auditNote) throw new Error('DELIVERY_RECONCILIATION_NOTE_REQUIRED');
+        award.deliveryReconciliation = {
+            decision,
+            note: auditNote,
+            reviewer: String(reviewer || 'ADMIN').slice(0, 80),
+            timestamp: new Date().toISOString()
+        };
+        if (decision === 'mark_delivered') {
+            award.status = 'delivered';
+            award.deliveryMethod = 'admin_reconciled';
+            award.deliveredAt = new Date().toISOString();
+            this.persist();
+            return { awardId: award.id, status: award.status, decision };
+        }
+        award.status = 'pending_delivery';
+        delete award.deliveryError;
+        delete award.deliveryStartedAt;
+        this.persist();
+        return { ...this.deliverAward(award), decision };
+    }
+
     findSessionId(profileId) {
         const profiles = this.saveServer.getProfiles() || {};
         for (const [sessionId, profile] of Object.entries(profiles)) {
