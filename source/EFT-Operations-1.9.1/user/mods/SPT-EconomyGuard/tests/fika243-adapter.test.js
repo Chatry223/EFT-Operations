@@ -15,7 +15,7 @@ function makeContainer(instances) {
   };
 }
 
-(async function testFika243LifecycleAndAcceptedLootEvidence() {
+async function testFika243LifecycleAndAcceptedLootEvidence() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'eg-fika243-'));
   try {
     const modDir = path.join(root, 'user', 'mods', 'SPT-EconomyGuard');
@@ -113,9 +113,9 @@ function makeContainer(instances) {
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
-})().catch(error => { console.error(error); process.exitCode = 1; });
+}
 
-(function testUnsupportedVersionDoesNotPatch() {
+function testUnsupportedVersionDoesNotPatch() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'eg-fika-mismatch-'));
   try {
     const modDir = path.join(root, 'user', 'mods', 'SPT-EconomyGuard');
