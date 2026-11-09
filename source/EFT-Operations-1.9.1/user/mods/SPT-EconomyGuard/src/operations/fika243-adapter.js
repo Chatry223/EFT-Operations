@@ -155,7 +155,7 @@ class Fika243OperationsAdapter {
             if (group.state !== 'forming' || !group.members || !group.members.length) continue;
             const mission = safe(() => this.operations.get(group.missionId), null);
             if (!mission || String(mission.map || '').toLowerCase() !== location) continue;
-            if (!group.members.every(member => member.ready === true && players.has(String(member.profileId)))) continue;
+            if (!group.members.every(member => member.ready === true && (players.has(String(member.profileId)) || (member.scavProfileId && players.has(String(member.scavProfileId)))))) continue;
             try {
                 this.operations.startGroup(group.id, String(matchId));
                 this.appendEvent({
@@ -184,13 +184,18 @@ class Fika243OperationsAdapter {
         if (!this.operations || !this.operations.state || !Array.isArray(this.operations.state.groups)) return null;
         const group = this.operations.state.groups.find(item => item.state === 'in_raid' && String(item.raidId) === String(matchId));
         if (!group) return null;
-        const memberIds = new Set(group.members.map(member => String(member.profileId)));
+        const raidProfileToAccount = new Map();
+        for (const member of group.members) {
+            raidProfileToAccount.set(String(member.profileId), String(member.profileId));
+            if (member.scavProfileId) raidProfileToAccount.set(String(member.scavProfileId), String(member.profileId));
+        }
+        const memberIds = new Set(raidProfileToAccount.keys());
         const aliveProfileIds = match && match.players instanceof Map
-            ? [...match.players.entries()].filter(([playerId, player]) => memberIds.has(String(playerId)) && object(player).isDead !== true).map(([playerId]) => String(playerId))
+            ? [...match.players.entries()].filter(([playerId, player]) => memberIds.has(String(playerId)) && object(player).isDead !== true).map(([playerId]) => raidProfileToAccount.get(String(playerId)))
             : [];
         const extractedProfileIds = this.getRecentEvents(500)
             .filter(event => event.type === 'player_raid_end' && String(event.matchId || '') === String(matchId)
-                && memberIds.has(String(event.profileId || ''))
+                && group.members.some(member => String(member.profileId) === String(event.profileId || ''))
                 && String(event.exitStatus || '').toLowerCase() === 'survived')
             .map(event => String(event.profileId));
         try {
