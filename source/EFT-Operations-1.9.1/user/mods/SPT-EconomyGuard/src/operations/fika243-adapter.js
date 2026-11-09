@@ -721,6 +721,7 @@ class Fika243OperationsAdapter {
             serverProfileAvailable: !!acceptedAccount,
             reportedLootItemCount: lootItems.reduce((sum, item) => sum + item.count, 0),
             reportedLootByTpl: lootByTpl,
+            acceptedLootByTpl: lootByTpl,
             reportedLootItems: lootItems.slice(0, 200),
             reportedFoundInRaidQuestItems: foundInRaidItems,
             reportedDroppedQuestItems: droppedQuestItems,
