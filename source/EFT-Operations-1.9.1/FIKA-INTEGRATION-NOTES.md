@@ -32,6 +32,7 @@ The version-gated adapter activates only when the sibling `fika-server/package.j
 - Captures client-reported `Stats.Eft.Victims`, session counters and quest-item reports. Victim profile IDs are cross-checked against authenticated Fika player-death reports where available; the admin UI displays names/roles and corroboration without exposing profile IDs.
 - Stores a bounded Fika evidence stream in `SPT-EconomyGuard-Data/operations/fika-events.jsonl`.
 - The protected mission review queue now shows per-objective **server-verified progress** separately from **client-reported evidence** (victim roles, loot template counts, exits, and Fika match completion); profile IDs are not displayed in the UI.
+- Visit-zone telemetry is not yet collected by the client plugin; `visit` objectives therefore appear as `no_evidence` and require manual evidence until position reporting is implemented.
 - All kill/loot/exit reports remain untrusted or corroborated client evidence, not server-verified objective progress. No automatic points or item rewards are issued from these records.
 - The protected admin Fika Link tab shows observer state, hook status, event records, and evidence trust labels.
 
