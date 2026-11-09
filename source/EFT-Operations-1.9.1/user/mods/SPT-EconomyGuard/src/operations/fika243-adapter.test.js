@@ -118,7 +118,7 @@ liveMatchService.addPlayerToMatch('match-live', 'abcdef0123456789abcdef13', { is
 assert.equal(ops.state.groups.find(x => x.id === group.id).state, 'in_raid', 'all ready members in the same Fika match starts the operation');
 assert.equal(ops.state.groups.find(x => x.id === group.id).raidId, 'match-live');
 assert.deepEqual(ops.state.groups.find(x => x.id === group.id).members.map(x => x.scavProfileId), [null, 'abcdef0123456789abcdef13']);
-ops.recordRaidEvent(group.id, { type: 'extract', amount: 1 });
+ops.recordRaidEvent(group.id, { type: 'extract', amount: 1, map: 'woods', source: 'fika-server-adapter', evidenceTrust: 'server_verified' });
 lifecycleAdapter.captureRaidEnd('abcdef0123456789abcdef11', { serverId: 'woods.1', results: { result: 'Survived', exitName: 'Outskirts' } });
 lifecycleAdapter.captureRaidEnd('abcdef0123456789abcdef12', { serverId: 'woods.1', results: { result: 'Survived', exitName: 'Outskirts' } });
 liveMatchService.endMatch('match-live', 'host_left');
