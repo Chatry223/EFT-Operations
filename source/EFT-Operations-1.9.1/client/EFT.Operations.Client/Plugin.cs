@@ -149,16 +149,9 @@ namespace EFTOperations.Client
             }
         }
 
-        private bool IsLocalSquadLeader()
-        {
-            if (playerState.group == null || playerState.group.members == null) return false;
-            foreach (MemberDto member in playerState.group.members) if (member.isLeader) return true;
-            return false;
-        }
-
         private void StartFikaHost()
         {
-            if (!playerState.canStart || !IsLocalSquadLeader())
+            if (!playerState.canStart || playerState.group == null || !playerState.group.isLeader)
             {
                 status = "Only the squad leader can start after every required operator is ready.";
                 return;
@@ -350,9 +343,10 @@ namespace EFTOperations.Client
                 int readyCount = group.readyCount;
                 GUILayout.Label("YOUR SQUAD  ·  " + group.state.ToUpperInvariant(), HeaderStyle());
                 GUILayout.Label(memberCount + " / " + group.maxPlayers + " OPERATORS  ·  " + readyCount + " READY  ·  MINIMUM " + group.minPlayers, SmallStyle());
+                if (!String.IsNullOrEmpty(group.leaderName)) GUILayout.Label("SQUAD LEADER: " + group.leaderName, SmallStyle());
                 if (group.members != null) foreach (MemberDto member in group.members)
-                    GUILayout.Label((member.isLeader ? "[SQUAD LEADER] " : "") + (member.ready ? "[READY] " : "[WAITING] ") + member.displayName, SmallStyle());
-                if (group.state == "forming" && playerState.canStart && IsLocalSquadLeader())
+                    GUILayout.Label((member.ready ? "[READY] " : "[WAITING] ") + member.displayName, SmallStyle());
+                if (group.state == "forming" && playerState.canStart && group.isLeader)
                 {
                     GUILayout.Label("All required operators are ready. Continue through EFT's map/time selection and Fika host screen.", SmallStyle());
                     GUI.enabled = !fikaStartRequested;
@@ -537,6 +531,6 @@ namespace EFTOperations.Client
     [Serializable] internal class BriefingDto { public string kind; public string media; public string body; }
     [Serializable] internal class RewardDto { public int points; public int roubles; }
     [Serializable] internal class ObjectiveDto { public string id; public string type; public string target; public int count; public bool required; }
-    [Serializable] internal class GroupDto { public string id; public string missionId; public string state; public int minPlayers; public int maxPlayers; public int readyCount; public MemberDto[] members; }
-    [Serializable] internal class MemberDto { public string displayName; public bool ready; public bool isLeader; }
+    [Serializable] internal class GroupDto { public string id; public string missionId; public string state; public bool isLeader; public string leaderName; public int minPlayers; public int maxPlayers; public int readyCount; public MemberDto[] members; }
+    [Serializable] internal class MemberDto { public string displayName; public bool ready; }
 }
