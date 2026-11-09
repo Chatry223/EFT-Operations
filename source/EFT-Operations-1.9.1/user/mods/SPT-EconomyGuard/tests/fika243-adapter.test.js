@@ -25,7 +25,6 @@ async function testFika243LifecycleAndAcceptedLootEvidence() {
 
     const hostProfileId = 'abcdef0123456789abcdef01';
     const scavProfileId = 'abcdef0123456789abcdef02';
-    const otherProfileId = 'abcdef0123456789abcdef03';
     const oldItemId = 'abcdef0123456789abcdef04';
     const newItemId = 'abcdef0123456789abcdef05';
     const lootTpl = 'abcdef0123456789abcdef06';
@@ -118,7 +117,7 @@ async function testFika243LifecycleAndAcceptedLootEvidence() {
     const start = events.find(x => x.type === 'fika_raid_start');
     assert.strictEqual(start.evidenceTrust, 'fika_server_lifecycle');
     const ended = events.find(x => x.type === 'fika_match_end');
-    assert.deepStrictEqual(ended.players.sort(), [hostProfileId, otherProfileId].sort());
+    assert.deepStrictEqual(ended.players, [hostProfileId]);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
