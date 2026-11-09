@@ -69,9 +69,9 @@ const hostA = api.acceptMission('', { missionId: hostMission.id }, 'session-a').
 const hostB = api.acceptMission('', { missionId: hostMission.id }, 'session-b').wrapped;
 api.setReady('', { groupId: hostA.group.id, ready: true }, 'session-a');
 api.setReady('', { groupId: hostA.group.id, ready: true }, 'session-b');
-operations.startGroup(hostA.group.id, playerB);
+operations.startGroup(hostA.group.id, 'abcdef0123456789abcdef10');
 
-const hostKill = { eventId: 'host-kill-001', groupId: hostA.group.id, matchId: playerB,
+const hostKill = { eventId: 'host-kill-001', groupId: hostA.group.id, matchId: 'abcdef0123456789abcdef10',
     killerProfileId: 'abcdef0123456789abcdef10', victimProfileId: 'abcdef0123456789abcdef11',
     victimRole: 'assault', victimSide: 'Savage', victimIsAi: true };
 assert.equal(api.hostRaidEvent('', hostKill, 'session-a').wrapped.error, 'HOST_PROFILE_MISMATCH', 'the Fika host may be a non-leader squad member');
