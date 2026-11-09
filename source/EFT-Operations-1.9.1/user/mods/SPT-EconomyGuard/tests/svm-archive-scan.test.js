@@ -93,6 +93,17 @@ try {
     assert.strictEqual(bounded.totalMatchingEntries, 75);
     assert.ok(bounded.previewBytes <= 4 * 1024 * 1024);
 
+    // The aggregate JSON budget is enforced even when each entry is individually valid.
+    const oversizedPreview = path.join(root, 'oversized-preview.zip');
+    fs.writeFileSync(oversizedPreview, makeZip([1, 2, 3].map(i => ({
+        name: 'Presets/v' + i + '.json', data: { text: 'x'.repeat(1500000) }
+    }))));
+    const aggregateLimited = readZipJsonEntries(oversizedPreview);
+    assert.strictEqual(aggregateLimited.truncated, true);
+    assert.strictEqual(aggregateLimited.length, 3);
+    assert.strictEqual(aggregateLimited[2].error, 'ZIP_PREVIEW_TOTAL_LIMIT');
+    assert.ok(aggregateLimited.previewBytes <= 4 * 1024 * 1024);
+
     // Local and central directory flags must agree, including the data-descriptor bit.
     const mismatched = path.join(root, 'mismatched-flags.zip');
     const mismatchedBytes = makeZip([{ name: 'Presets/v8.json', data: { safe: true } }]);
