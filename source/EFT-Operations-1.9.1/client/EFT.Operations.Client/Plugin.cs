@@ -565,37 +565,17 @@ namespace EFTOperations.Client
             }
         }
 
-        private Type FindLoadedTypeBySimpleName(string simpleName)
-        {
-            foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
-            {
-                if (!String.Equals(assembly.GetName().Name, "Assembly-CSharp", StringComparison.Ordinal)) continue;
-                try
-                {
-                    foreach (Type type in assembly.GetTypes())
-                        if (type != null && String.Equals(type.Name, simpleName, StringComparison.Ordinal)) return type;
-                }
-                catch (ReflectionTypeLoadException ex)
-                {
-                    if (ex.Types == null) continue;
-                    foreach (Type type in ex.Types)
-                        if (type != null && String.Equals(type.Name, simpleName, StringComparison.Ordinal)) return type;
-                }
-                catch { }
-            }
-            return null;
-        }
-
         private bool TryInstallFikaVisitHook()
         {
             if (fikaVisitHookInstalled) return true;
-            Type triggerType = FindLoadedTypeBySimpleName("TriggerWithId");
-            if (triggerType == null) return false;
+            Type playerType = FindLoadedType("EFT.Player");
+            if (playerType == null) return false;
             MethodInfo target = null;
-            foreach (MethodInfo candidate in triggerType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+            foreach (MethodInfo candidate in playerType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
             {
                 ParameterInfo[] parameters = candidate.GetParameters();
-                if (candidate.Name == "OnTriggerEnter" && parameters.Length == 1 && parameters[0].ParameterType.Name == "Collider")
+                if (candidate.Name == "SpecialPlaceVisited" && parameters.Length == 2
+                    && parameters[0].ParameterType == typeof(string) && parameters[1].ParameterType == typeof(int))
                 {
                     target = candidate;
                     break;
@@ -608,7 +588,7 @@ namespace EFTOperations.Client
                 if (fikaHarmony == null) fikaHarmony = new Harmony("com.eft.operations.client.fika-host-evidence");
                 fikaHarmony.Patch(target, null, new HarmonyMethod(postfix), null, null);
                 fikaVisitHookInstalled = true;
-                Logger.LogInfo("Fika 1.2.3 visit telemetry hook installed on " + triggerType.FullName + ".OnTriggerEnter(Collider).");
+                Logger.LogInfo("Fika 1.2.3 visit telemetry hook installed on EFT.Player.SpecialPlaceVisited(string, int).");
                 return true;
             }
             catch (Exception ex)
@@ -621,47 +601,21 @@ namespace EFTOperations.Client
         private static void FikaVisitPostfix(object __instance, object[] __args)
         {
             Plugin current = instance;
-            if (current == null || __args == null || __args.Length < 1) return;
-            current.CaptureFikaHostVisit(__instance, __args[0]);
+            if (current == null || __args == null || __args.Length < 2) return;
+            current.CaptureFikaHostVisit(__instance, __args);
         }
 
-        private object FindPlayerFromCollider(object collider)
-        {
-            if (collider == null) return null;
-            Type coopPlayerType = FindLoadedType("Fika.Core.Coop.Players.CoopPlayer");
-            Type playerType = coopPlayerType == null ? null : coopPlayerType.BaseType;
-            if (playerType == null) return null;
-            MethodInfo getComponent = collider.GetType().GetMethod("GetComponentInParent",
-                BindingFlags.Public | BindingFlags.Instance, null, new Type[] { typeof(Type) }, null);
-            if (getComponent == null) return null;
-            try { return getComponent.Invoke(collider, new object[] { playerType }); }
-            catch { return null; }
-        }
-
-        private object ReadFirstMember(object target, params string[] names)
-        {
-            foreach (string name in names)
-            {
-                object value = ReadMember(target, name);
-                if (value != null) return value;
-            }
-            return null;
-        }
-
-        private void CaptureFikaHostVisit(object trigger, object collider)
+        private void CaptureFikaHostVisit(object player, object[] args)
         {
             try
             {
-                if (!IsFikaServer() || trigger == null || collider == null || playerState == null
+                if (!IsFikaServer() || player == null || args == null || args.Length < 2 || playerState == null
                     || playerState.mission == null || playerState.mission.objectives == null) return;
-                object player = FindPlayerFromCollider(collider);
-                if (player == null) return;
                 object isAiValue = ReadMember(player, "IsAI");
                 if (!(isAiValue is bool) || (bool)isAiValue) return;
                 string actorProfileId = ReadMember(player, "ProfileId") as string;
                 if (!IsProfileId(actorProfileId)) return;
-                object rawTriggerId = ReadFirstMember(trigger, "Id", "ID", "id", "TriggerId", "triggerId", "PlaceId", "PlaceID", "placeId", "_id");
-                string triggerId = rawTriggerId == null ? String.Empty : rawTriggerId.ToString().Trim();
+                string triggerId = Convert.ToString(args[0] ?? String.Empty).Trim();
                 if (String.IsNullOrWhiteSpace(triggerId) || triggerId.Length > 100) return;
 
                 bool requiredByMission = false;
@@ -679,10 +633,10 @@ namespace EFTOperations.Client
                 while (reportedHostVisitOrder.Count > 5000)
                     reportedHostVisitKeys.Remove(reportedHostVisitOrder.Dequeue());
 
-                string payload = "{\"type\":\"visit\",\"eventId\":\"" + Guid.NewGuid().ToString("N")
-                    + "\",\"matchId\":\"" + Escape(matchId)
-                    + "\",\"actorProfileId\":\"" + Escape(actorProfileId)
-                    + "\",\"triggerId\":\"" + Escape(triggerId) + "\"}";
+                string payload = "{\\"type\\":\\"visit\\",\\"eventId\\":\\"" + Guid.NewGuid().ToString("N")
+                    + "\\",\\"matchId\\":\\"" + Escape(matchId)
+                    + "\\",\\"actorProfileId\\":\\"" + Escape(actorProfileId)
+                    + "\\",\\"triggerId\\":\\"" + Escape(triggerId) + "\\"}";
                 StartCoroutine(PostFikaHostEvent(payload));
             }
             catch (Exception ex)
