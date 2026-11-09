@@ -130,7 +130,7 @@ class SvmConfigService {
             if (!isObject(input.traderMarkup) || !isObject(preset.Traders.TraderMarkup)) throw new Error('INVALID_SVM_TRADER_MARKUP');
             for (const [trader, value] of Object.entries(input.traderMarkup)) {
                 if (!TRADER_KEYS.has(trader) || !Object.prototype.hasOwnProperty.call(preset.Traders.TraderMarkup, trader)) throw new Error('UNKNOWN_SVM_TRADER');
-                // SVM stores buy_price_coef = 100 - TraderMarkup; the resulting buyback rate is 0..100%.
+                // SPT 3.11.1 treats buy_price_coef as the inverse buyback percentage (TraderHelper uses 100 - buy_price_coef). Therefore TraderMarkup is the percent paid when a player sells an item to the trader, not the trader's price multiplier when the player buys.
                 const next = number(value, 0, 100, 'trader_markup');
                 if (Number(preset.Traders.TraderMarkup[trader]) !== next) {
                     preset.Traders.TraderMarkup[trader] = next;
