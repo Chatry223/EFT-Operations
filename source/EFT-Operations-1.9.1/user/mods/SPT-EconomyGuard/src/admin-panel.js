@@ -603,7 +603,7 @@ class AdminPanelServer {
                         } else if (objective.type === 'extract' || objective.type === 'survive') {
                             const seen = new Set();
                             for (const event of raidEnds) {
-                                const exitMatches = !target || String(event.exitName || '').toLowerCase() === target;
+                                const exitMatches = objective.type === 'survive' || !target || String(event.exitName || '').toLowerCase() === target;
                                 if (exitMatches && String(event.exitStatus || '').toLowerCase() === 'survived') seen.add(String(event.profileId || event.displayName || 'unknown'));
                             }
                             reportedCount = seen.size;
