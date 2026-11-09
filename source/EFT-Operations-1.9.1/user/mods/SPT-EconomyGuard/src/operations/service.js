@@ -242,6 +242,7 @@ class OperationsService {
         const alive = new Set(data.aliveProfileIds || []);
         const extracted = new Set(data.extractedProfileIds || []);
         if (decision === 'approve') {
+            if (!attestation || attestation.confirmed !== true) throw new Error('REVIEW_ATTESTATION_REQUIRED');
             if (data.requiredDone !== true || !g.members.every(x => alive.has(x.profileId) && extracted.has(x.profileId))) throw new Error('REVIEW_EVIDENCE_INCOMPLETE');
             for (const member of g.members) { member.result = 'success'; this.award(m, g, member.profileId); }
         } else {
