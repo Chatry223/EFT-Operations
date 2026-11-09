@@ -485,9 +485,14 @@ namespace EFTOperations.Client
                 }
             }
             GUILayout.EndScrollView();
+            bool localIsFikaHost = fikaKillHookInstalled && IsFikaServer();
             GUILayout.Label(hasHostEvidence
                 ? "Host-reported evidence is visible. Final completion and rewards still require admin review."
-                : "Progress updates require the Fika 1.2.3 host bridge. Rewards are never granted from client-only claims.", SmallStyle());
+                : (localIsFikaHost
+                    ? "Fika host telemetry is active. Waiting for objective events; rewards still require admin review."
+                    : (fikaKillHookInstalled
+                        ? "Waiting for the Fika squad host to provide objective telemetry."
+                        : "Fika 1.2.3 host bridge is not active. Objective progress may remain pending.")), SmallStyle());
             GUILayout.EndArea();
         }
 
