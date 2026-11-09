@@ -80,10 +80,10 @@ class Fika243OperationsAdapter {
             // Fika's JSONC may contain comments; the setting is a single boolean
             // and this narrow extraction avoids a new JSONC parser dependency.
             const match = raw.match(/"allowItemSending"\s*:\s*(true|false)/i);
-            if (!match) return { configured: false, enabled: null, configPath, reason: 'SETTING_NOT_FOUND' };
-            return { configured: true, enabled: match[1].toLowerCase() === 'true', configPath, reason: null };
+            if (!match) return { configured: false, enabled: null, reason: 'SETTING_NOT_FOUND' };
+            return { configured: true, enabled: match[1].toLowerCase() === 'true', reason: null };
         } catch (err) {
-            return { configured: false, enabled: null, configPath, reason: err && err.code ? err.code : 'READ_FAILED' };
+            return { configured: false, enabled: null, reason: err && err.code ? err.code : 'READ_FAILED' };
         }
     }
 
