@@ -116,17 +116,29 @@ class OperationsClientApi {
     hostRaidEvent(_url, info, sessionId) {
         try {
             const reporter = this.resolvePlayer(sessionId);
+            const type = String(info && info.type || 'kill').trim().toLowerCase();
             const eventId = String(info && info.eventId || '').trim();
             const matchId = String(info && info.matchId || '').trim();
-            const killerProfileId = String(info && info.killerProfileId || '').trim();
-            const victimProfileId = String(info && info.victimProfileId || '').trim();
-            const victimRole = String(info && info.victimRole || '').trim().slice(0, 60);
-            const victimSide = String(info && info.victimSide || '').trim().slice(0, 20);
+            const actorProfileId = String(info && (info.actorProfileId || info.killerProfileId) || '').trim();
+            if (!['kill', 'visit'].includes(type)) throw new Error('INVALID_HOST_EVENT_TYPE');
             if (!eventId || eventId.length > 120) throw new Error('INVALID_EVENT_ID');
             if (!matchId || matchId.length > 100) throw new Error('INVALID_MATCH_ID');
-            if (!PROFILE_ID_RE.test(killerProfileId)) throw new Error('INVALID_KILLER_PROFILE');
-            if (!PROFILE_ID_RE.test(victimProfileId)) throw new Error('INVALID_VICTIM_PROFILE');
-            if (!victimRole || info.victimIsAi !== true) throw new Error('INVALID_HOST_KILL_EVIDENCE');
+            if (!PROFILE_ID_RE.test(actorProfileId)) throw new Error('INVALID_ACTOR_PROFILE');
+
+            let victimProfileId = '';
+            let victimRole = '';
+            let victimSide = '';
+            let triggerId = '';
+            if (type === 'kill') {
+                victimProfileId = String(info && info.victimProfileId || '').trim();
+                victimRole = String(info && info.victimRole || '').trim().slice(0, 60);
+                victimSide = String(info && info.victimSide || '').trim().slice(0, 20);
+                if (!PROFILE_ID_RE.test(victimProfileId)) throw new Error('INVALID_VICTIM_PROFILE');
+                if (!victimRole || info.victimIsAi !== true) throw new Error('INVALID_HOST_KILL_EVIDENCE');
+            } else {
+                triggerId = String(info && info.triggerId || '').trim().slice(0, 100);
+                if (!triggerId) throw new Error('INVALID_VISIT_TRIGGER');
+            }
 
             const groups = this.operations && this.operations.state && Array.isArray(this.operations.state.groups) ? this.operations.state.groups : [];
             const group = groups.find(item => item.state === 'in_raid' && String(item.raidId || '') === matchId
@@ -135,9 +147,9 @@ class OperationsClientApi {
             if (matchId !== reporter.profileId && matchId !== String(reporter.scavProfileId || '')) throw new Error('HOST_PROFILE_MISMATCH');
             if (info.groupId && String(info.groupId) !== String(group.id)) throw new Error('RAID_GROUP_MISMATCH');
 
-            const member = group.members.find(item => String(item.profileId) === killerProfileId || String(item.scavProfileId || '') === killerProfileId);
-            if (!member) throw new Error('KILLER_NOT_GROUP_MEMBER');
-            if (group.members.some(item => String(item.profileId) === victimProfileId || String(item.scavProfileId || '') === victimProfileId)) {
+            const member = group.members.find(item => String(item.profileId) === actorProfileId || String(item.scavProfileId || '') === actorProfileId);
+            if (!member) throw new Error('ACTOR_NOT_GROUP_MEMBER');
+            if (type === 'kill' && group.members.some(item => String(item.profileId) === victimProfileId || String(item.scavProfileId || '') === victimProfileId)) {
                 throw new Error('VICTIM_IS_SQUAD_MEMBER');
             }
 
@@ -151,36 +163,40 @@ class OperationsClientApi {
                 for (const [key, value] of this.hostEventWindows) if (now - value.startedAt > 120000) this.hostEventWindows.delete(key);
             }
 
-            const role = victimRole.toLowerCase();
-            const side = victimSide.toLowerCase();
-            let targetCategory = 'other';
-            if (role.indexOf('follower') >= 0) targetCategory = 'boss_guard';
-            else if (role.indexOf('boss') >= 0) targetCategory = 'boss';
-            else if (role.indexOf('raider') >= 0) targetCategory = 'raider';
-            else if (role.indexOf('rogue') >= 0) targetCategory = 'rogue';
-            else if (role.indexOf('cultist') >= 0) targetCategory = 'cultist';
-            else if (role.indexOf('pmc') >= 0 || side.indexOf('usec') >= 0 || side.indexOf('bear') >= 0) targetCategory = 'pmc';
-            else if (side.indexOf('savage') >= 0 || role.indexOf('assault') >= 0 || role.indexOf('marksman') >= 0 || role.indexOf('cursed') >= 0) targetCategory = 'scav';
-
             const mission = this.operations.get(group.missionId);
             if (!mission) throw new Error('MISSION_NOT_FOUND');
-            const progress = this.operations.recordRaidEvent(group.id, {
+            const event = {
                 eventId,
-                type: 'kill',
+                type,
                 profileId: member.profileId,
                 amount: 1,
                 map: mission.map,
-                target: victimRole,
-                targetCategory,
-                victimProfileId,
-                victimRole,
-                victimSide,
-                victimIsAi: true,
                 matchId,
                 reporterProfileId: matchId,
                 source: 'fika-host-client',
                 evidenceTrust: 'host_attested'
-            });
+            };
+            if (type === 'visit') {
+                event.target = triggerId;
+            } else {
+                const role = victimRole.toLowerCase();
+                const side = victimSide.toLowerCase();
+                let targetCategory = 'other';
+                if (role.indexOf('follower') >= 0) targetCategory = 'boss_guard';
+                else if (role.indexOf('boss') >= 0) targetCategory = 'boss';
+                else if (role.indexOf('raider') >= 0) targetCategory = 'raider';
+                else if (role.indexOf('rogue') >= 0) targetCategory = 'rogue';
+                else if (role.indexOf('cultist') >= 0) targetCategory = 'cultist';
+                else if (role.indexOf('pmc') >= 0 || side.indexOf('usec') >= 0 || side.indexOf('bear') >= 0) targetCategory = 'pmc';
+                else if (side.indexOf('savage') >= 0 || role.indexOf('assault') >= 0 || role.indexOf('marksman') >= 0 || role.indexOf('cursed') >= 0) targetCategory = 'scav';
+                event.target = victimRole;
+                event.targetCategory = targetCategory;
+                event.victimProfileId = victimProfileId;
+                event.victimRole = victimRole;
+                event.victimSide = victimSide;
+                event.victimIsAi = true;
+            }
+            const progress = this.operations.recordRaidEvent(group.id, event);
             return this.response({ ok: true, progress, group: this.publicGroup(group, reporter.profileId), evidenceTrust: 'host_attested' });
         } catch (err) { return this.response({ ok: false, error: this.errorCode(err) }); }
     }
