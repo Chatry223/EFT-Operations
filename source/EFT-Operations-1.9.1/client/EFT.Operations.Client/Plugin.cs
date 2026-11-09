@@ -320,7 +320,10 @@ namespace EFTOperations.Client
             StartCoroutine(Request("/client/eft/operations/accept", "{\"missionId\":\"" + Escape(missionId) + "\"}", delegate(string body)
             {
                 ActionResponse response = JsonUtility.FromJson<ActionResponse>(body);
-                status = response != null && response.ok ? "Mission accepted. Squad is forming." : "Accept failed: " + (response == null ? "INVALID_RESPONSE" : response.error);
+                string error = response == null ? "INVALID_RESPONSE" : response.error;
+                if (error == "RANK_REQUIREMENT_NOT_MET") error = "Your rank points are below this operation's requirement.";
+                else if (error == "CAMPAIGN_PREREQUISITES_NOT_MET") error = "Complete earlier campaign operations before accepting this one.";
+                status = response != null && response.ok ? "Mission accepted. Squad is forming." : "Accept failed: " + error;
                 RefreshAll();
             }));
         }
@@ -423,15 +426,34 @@ namespace EFTOperations.Client
                 GUILayout.BeginVertical(GUI.skin.box);
                 GUILayout.Label(mission.title ?? "Untitled operation", HeaderStyle());
                 GUILayout.Label((mission.map ?? "Unknown map").ToUpperInvariant() + "  ·  " + (mission.mode ?? "solo").ToUpperInvariant() + "  ·  " + mission.minPlayers + "–" + mission.maxPlayers + " OPERATORS", SmallStyle());
+                if (!String.IsNullOrEmpty(mission.campaignId))
+                    GUILayout.Label("CAMPAIGN  /  " + mission.campaignId.ToUpperInvariant() + (mission.campaignOrder > 0 ? "  ·  OPERATION " + mission.campaignOrder : ""), SmallStyle());
+                if (mission.requiredPoints > 0)
+                    GUILayout.Label("MINIMUM RANK POINTS  /  " + mission.requiredPoints.ToString("N0") + "  ·  YOUR POINTS " + mission.currentPoints.ToString("N0"), SmallStyle());
                 string briefingBody = mission.briefing == null ? String.Empty : mission.briefing.body;
                 GUILayout.Label(!String.IsNullOrEmpty(mission.description) ? mission.description : briefingBody, SmallStyle());
                 if (mission.rewards != null)
                     GUILayout.Label("REWARD  /  " + mission.rewards.points + " PTS  ·  " + mission.rewards.roubles.ToString("N0") + " RUB", SmallStyle());
                 if (mission.objectives != null) foreach (ObjectiveDto objective in mission.objectives)
                     GUILayout.Label("• " + (objective.target ?? objective.type) + "  ×" + objective.count + (objective.required ? "  [REQUIRED]" : ""), SmallStyle());
+                if (mission.locked)
+                {
+                    if (mission.lockReason == "RANK_REQUIREMENT_NOT_MET")
+                        GUILayout.Label("LOCKED  /  RANK POINTS REQUIREMENT NOT MET", SmallStyle());
+                    else if (mission.lockReason == "CAMPAIGN_PREREQUISITES_NOT_MET")
+                    {
+                        GUILayout.Label("LOCKED  /  COMPLETE PREVIOUS CAMPAIGN OPERATIONS", SmallStyle());
+                        if (mission.missingPrerequisites != null) foreach (PrerequisiteDto prerequisite in mission.missingPrerequisites)
+                            if (prerequisite != null) GUILayout.Label("• REQUIRED FIRST  /  " + (prerequisite.title ?? prerequisite.id), SmallStyle());
+                    }
+                }
                 GUILayout.BeginHorizontal();
                 GUILayout.FlexibleSpace();
-                if (GUILayout.Button("ACCEPT OPERATION", GUILayout.Width(190f), GUILayout.Height(32f))) Accept(mission.id);
+                bool canAccept = !mission.locked && (playerState.group == null);
+                GUI.enabled = canAccept;
+                string acceptLabel = mission.locked ? "LOCKED" : (playerState.group != null ? "ALREADY ASSIGNED" : "ACCEPT OPERATION");
+                if (GUILayout.Button(acceptLabel, GUILayout.Width(190f), GUILayout.Height(32f)) && canAccept) Accept(mission.id);
+                GUI.enabled = true;
                 GUILayout.EndHorizontal();
                 GUILayout.EndVertical();
             }
@@ -927,7 +949,8 @@ namespace EFTOperations.Client
     [Serializable] internal class PlayerStateResponse { public bool ok; public string error; public bool canStart; public PlayerDto player; public GroupDto group; public MissionDto mission; }
     [Serializable] internal class ActionResponse { public bool ok; public string error; public GroupDto group; public bool canStart; }
     [Serializable] internal class PlayerDto { public int points; public string rank; }
-    [Serializable] internal class MissionDto { public string id; public string title; public string description; public BriefingDto briefing; public RewardDto rewards; public string map; public string mode; public int minPlayers; public int maxPlayers; public ObjectiveDto[] objectives; }
+    [Serializable] internal class MissionDto { public string id; public string title; public string description; public BriefingDto briefing; public RewardDto rewards; public string map; public string mode; public int minPlayers; public int maxPlayers; public string campaignId; public int campaignOrder; public int requiredPoints; public bool locked; public string lockReason; public int currentPoints; public PrerequisiteDto[] missingPrerequisites; public ObjectiveDto[] objectives; }
+    [Serializable] internal class PrerequisiteDto { public string id; public string title; public int campaignOrder; }
     [Serializable] internal class BriefingDto { public string kind; public string media; public string body; }
     [Serializable] internal class RewardDto { public int points; public int roubles; }
     [Serializable] internal class ObjectiveDto { public string id; public string type; public string target; public int count; public bool required; }
