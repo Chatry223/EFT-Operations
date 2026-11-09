@@ -34,7 +34,7 @@ function makeContainer(instances) {
   const adapter = new Fika243OperationsAdapter({ modDir, operations, logger: { info() {}, warn() {}, debug() {} } });
   assert.strictEqual(adapter.install(container), true);
   assert.strictEqual(adapter.getStatus().serverVersion, '2.4.3');
-  assert.strictEqual(adapter.getStatus().fikaClientPluginVersion, '1.2.3');
+  assert.strictEqual(adapter.getStatus().fikaClientTargetVersion, '1.2.3');
   const result = lifecycleProto.endLocalRaid.call(lifecycle, 'session-id', { serverId: 'bigmap.pmc.123', results: { result: 'Survived', exitName: 'ZB-1011', playTime: 600 } });
   assert.strictEqual(result, 'original-result');
   assert.strictEqual(lifecycle.originalCalled, true);
