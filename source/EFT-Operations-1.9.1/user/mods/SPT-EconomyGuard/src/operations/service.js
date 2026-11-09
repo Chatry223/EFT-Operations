@@ -234,7 +234,7 @@ class OperationsService {
             const victimId = requireProfileId(event.victimProfileId);
             if (g.members.some(member => member.profileId === victimId || member.scavProfileId === victimId)) throw new Error('RAID_EVENT_VICTIM_IS_MEMBER');
             const category = text(event.targetCategory, 40, 'EVENT_TARGET_CATEGORY', true).toLowerCase();
-            if (!['scav', 'boss', 'boss_guard', 'raider', 'rogue', 'cultist', 'pmc', 'follower', 'other', 'unknown'].includes(category)) throw new Error('INVALID_EVENT_TARGET_CATEGORY');
+            if (!['scav', 'boss', 'boss_guard', 'raider', 'rogue', 'cultist', 'pmc', 'other', 'unknown'].includes(category)) throw new Error('INVALID_EVENT_TARGET_CATEGORY');
         }
         if (!g.progress || typeof g.progress !== 'object' || Array.isArray(g.progress)) {
             g.progress = Object.fromEntries(m.objectives.map(objective => [objective.id, 0]));
