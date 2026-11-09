@@ -42,7 +42,7 @@ async function testFika243LifecycleAndAcceptedLootEvidence() {
     const operations = new OperationsService(path.join(root, 'data'), { info() {}, warn() {} });
     const mission = operations.save({
       title: 'Accepted loot test', map: 'woods', mode: 'solo', minPlayers: 1, maxPlayers: 1,
-      objectives: [{ id: 'collect-key', type: 'collect', target: lootTpl, count: 2 }],
+      objectives: [{ id: 'collect-key', type: 'collect', target: lootTpl, count: 2 }, { id: 'survive-raid', type: 'survive', count: 1 }, { id: 'extract-outskirts', type: 'extract', target: 'Outskirts', count: 1 }, { id: 'complete-raid', type: 'raid_complete', count: 1 }],
       rewards: { points: 100, roubles: 0, items: [] }
     });
     operations.setStatus(mission.id, 'published');
@@ -89,6 +89,12 @@ async function testFika243LifecycleAndAcceptedLootEvidence() {
     const activeGroup = operations.state.groups.find(item => item.id === group.id);
     assert.strictEqual(activeGroup.progress['collect-key'], 2, 'only inventory delta accepted into the SPT server profile advances collect objectives');
     assert.strictEqual(activeGroup.progressTrust['collect-key'], 'spt_accepted_client_delta');
+    assert.strictEqual(activeGroup.progress['survive-raid'], 1);
+    assert.strictEqual(activeGroup.progress['extract-outskirts'], 1);
+    assert.strictEqual(activeGroup.progress['complete-raid'], 1);
+    assert.strictEqual(activeGroup.progressTrust['survive-raid'], 'client_report_only');
+    assert.strictEqual(activeGroup.progressTrust['extract-outskirts'], 'client_report_only');
+    assert.strictEqual(activeGroup.progressTrust['complete-raid'], 'client_report_only');
     const lootEvidence = activeGroup.evidenceEvents.find(item => item.type === 'collect');
     assert.strictEqual(lootEvidence.source, 'spt-server-adapter');
     assert.strictEqual(lootEvidence.evidenceTrust, 'spt_accepted_client_delta');
