@@ -536,8 +536,8 @@ namespace EFTOperations.Client
             if (fikaKillHookInstalled) return true;
             Type coopPlayerType = FindLoadedType("Fika.Core.Coop.Players.CoopPlayer");
             if (coopPlayerType == null || coopPlayerType.BaseType == null) return false;
-            // Patch the EFT Player base implementation, not only Fika's CoopPlayer override.
-            // Fika 1.2.3 uses CoopPlayer for the host/local player while AI actors can be native EFT Player instances.
+            // EFT 0.16.1.3.35392 exposes OnBeenKilledByAggressor(IPlayer, ...); its first argument is the aggressor.
+            // Patch the EFT Player base implementation, not only Fika's CoopPlayer override, so host-observed AI deaths are covered.
             Type playerType = coopPlayerType.BaseType;
             MethodInfo target = null;
             foreach (MethodInfo candidate in playerType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
