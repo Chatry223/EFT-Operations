@@ -7,6 +7,7 @@ const { AdminPanelServer } = require('./admin-panel');
 const { OperationsService } = require('./operations/service');
 const { Fika243OperationsAdapter } = require('./operations/fika243-adapter');
 const { OperationsClientApi } = require('./operations/client-api');
+const { RewardDeliveryService } = require('./operations/reward-delivery');
 
 class SptEconomyGuardMod {
     constructor() {
@@ -81,6 +82,13 @@ class SptEconomyGuardMod {
         this.operations = config.operations && config.operations.enabled === false ? null : new OperationsService(this.guard.storage.baseDir, logger, config.operations || {});
         this.fikaOperationsAdapter = this.operations ? new Fika243OperationsAdapter({ modDir: this.modDir, operations: this.operations, logger }) : null;
         if (this.fikaOperationsAdapter) this.fikaOperationsAdapter.install(container);
+        let mailSendService = null;
+        let hashUtil = null;
+        let databaseService = null;
+        try { mailSendService = container.resolve('MailSendService'); } catch (_) { /* reward delivery remains pending if mail is unavailable */ }
+        try { hashUtil = container.resolve('HashUtil'); } catch (_) { /* reward delivery remains pending if hash utility is unavailable */ }
+        try { databaseService = container.resolve('DatabaseService'); } catch (_) { /* reward delivery remains pending if item database is unavailable */ }
+        this.rewardDelivery = this.operations ? new RewardDeliveryService({ operations: this.operations, saveServer, mailSendService, hashUtil, databaseService, logger }) : null;
         if (this.operations && config.operations && config.operations.clientApiEnabled !== false) {
             let httpResponseUtil = null;
             try { httpResponseUtil = container.resolve('HttpResponseUtil'); } catch (_) { /* response helper is optional in test/minimal containers */ }
@@ -93,7 +101,7 @@ class SptEconomyGuardMod {
         }
         this.guard.registerHooks(container);
         try {
-            this.adminPanel = new AdminPanelServer(this.modDir, this.guard, logger, config.adminPanel || {}, { launcherController, saveServer, fikaPresenceService, operations: this.operations, fikaOperationsAdapter: this.fikaOperationsAdapter });
+            this.adminPanel = new AdminPanelServer(this.modDir, this.guard, logger, config.adminPanel || {}, { launcherController, saveServer, fikaPresenceService, operations: this.operations, fikaOperationsAdapter: this.fikaOperationsAdapter, rewardDelivery: this.rewardDelivery });
             this.adminPanel.start();
         } catch (err) {
             this.guard.health.adminPanel = { enabled: false, error: err.message };
