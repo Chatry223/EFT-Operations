@@ -276,7 +276,7 @@ class Fika243OperationsAdapter {
         } else {
             this.status.playerJoinHook = false;
         }
-        return this.status.matchEndHook && this.status.playerJoinHook;
+        return patched || this.status.matchEndHook || this.status.playerJoinHook;
     }
 
     tryStartMissionGroup(service, matchId) {
