@@ -28,6 +28,7 @@ For the supplied `v6` preset, the inspected values include Skier markup `20`, Pr
 - Numeric values and Fence stock-time ordering are validated.
 - A timestamped copy of the original preset is stored under `SPT-EconomyGuard-Data/backups/svm/` before each write.
 - The write uses a temporary file followed by an atomic rename.
+- SVM folder, loader, and active preset paths are resolved and checked to remain inside the server's `user/mods` tree; symlinks that escape that tree are rejected.
 - SVM applies its preset during server startup; restart the SPT server after saving.
 
 If the SVM package version or SPT target does not match the audited package, the panel remains read-only and the write API rejects changes.
