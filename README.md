@@ -18,25 +18,29 @@ Mission / campaign operations and EconomyGuard integration for SPT.
 
 ## Build requirements
 
-The client build references Unity and BepInEx assemblies from the actual EFT installation. Do not commit those proprietary/runtime DLLs to this public repository.
+The supplied Library archives were inspected. The game Managed assemblies and BepInEx references required by the client project are present in the user's local source folder. Do not commit game, Unity, BepInEx or Fika binaries to this public repository.
 
 Configure a Windows self-hosted GitHub Actions runner on the EFT machine with labels:
 `self-hosted`, `Windows`, `X64`, `eft-build`.
 
 Set repository Actions variables:
-- `EFT_MANAGED_DIR`: full path to `EscapeFromTarkov_Data/Managed`
-- `BEPINEX_CORE_DIR`: full path to `BepInEx/core`
+- `EFT_MANAGED_DIR`: absolute path to the extracted `EscapeFromTarkov_Data/Managed`
+- `BEPINEX_CORE_DIR`: absolute path to the extracted `BepInEx/core`
 
-The workflow passes these to MSBuild as `GameManagedDir` and `BepInExCoreDir`, matching the project file. Run **Actions → EFT Operations CI and Client Build → Run workflow**. A DLL artifact is published only after compilation and output verification succeed.
+The workflow passes these to MSBuild as `GameManagedDir` and `BepInExCoreDir`. A DLL artifact is published only after Windows compilation, output verification and SHA-256 reporting succeed.
 
 ## Security invariants
 
 - Resolve player identity server-side from the authenticated SPT session / server profile.
 - Treat client-submitted mission completion, kills, extraction claims and reward claims as untrusted.
-- Fika Server 2.4.3 integration is read-only/observer; do not assume unsupported lifecycle control.
+- Fika integration must remain read-only until server-side evidence is validated against the exact Fika 2.4.3 lifecycle.
 - Issue rewards only from server-verifiable evidence or explicit administrator review.
 - Never commit player data, WireGuard private keys, tokens, EFT/Unity assemblies or BepInEx binaries.
 
-## Source import status
+## Current repository status
 
-The 1.9.1 source bundle is available as a conversation attachment for import into this repository. The repository workflow bootstrap is present, but the source tree must be committed before CI can pass. A workflow file is not a compiled or tested DLL.
+The CI bootstrap and build-readiness audit are committed. The 1.9.1 source bundle has been located in the user's ChatGPT Library and validated locally, but its source tree is **not yet committed** to this repository. Consequently no CI test run or client DLL artifact has been produced yet.
+
+The local source checks already executed successfully: `npm run check` and `npm test` (26 passed, 0 failed). These do not replace the Windows DLL build or in-game runtime validation.
+
+See [Compatibility and Build Readiness](docs/COMPATIBILITY-AND-BUILD-READINESS.md) for the verified archive inventory, reference mapping, audit findings and remaining work.
