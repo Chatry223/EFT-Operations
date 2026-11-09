@@ -124,15 +124,17 @@ class OperationsService {
         m.status = status; m.updatedAt = new Date().toISOString(); this.persist(); return clone(m);
     }
 
-    accept(missionId, profileId, displayName = '') {
+    accept(missionId, profileId, displayName = '', scavProfileId = null) {
         profileId = requireProfileId(profileId);
+        scavProfileId = scavProfileId ? requireProfileId(scavProfileId) : null;
+        if (scavProfileId === profileId) scavProfileId = null;
         const m = this.state.missions.find(x => x.id === missionId && x.status === 'published');
         if (!m) throw new Error('MISSION_UNAVAILABLE');
         const now = Date.now();
         if (m.startAt && Date.parse(m.startAt) > now) throw new Error('MISSION_NOT_STARTED');
         if (m.endAt && Date.parse(m.endAt) <= now) throw new Error('MISSION_EXPIRED');
         if (m.mode === 'solo' && m.maxPlayers !== 1) throw new Error('INVALID_SOLO_PLAYER_RANGE');
-        const existingGroup = this.state.groups.find(g => ['forming', 'in_raid', 'review'].includes(g.state) && g.members.some(x => x.profileId === profileId));
+        const existingGroup = this.state.groups.find(g => ['forming', 'in_raid', 'review'].includes(g.state) && g.members.some(x => [x.profileId, x.scavProfileId].includes(profileId) || (scavProfileId && [x.profileId, x.scavProfileId].includes(scavProfileId))));
         if (existingGroup) {
             if (existingGroup.missionId === missionId && existingGroup.state === 'forming') return clone(existingGroup);
             if (existingGroup.state === 'review') throw new Error('PLAYER_REVIEW_PENDING');
@@ -140,9 +142,9 @@ class OperationsService {
         }
         let group = this.state.groups.find(g => g.missionId === missionId && g.state === 'forming' && g.members.length < m.maxPlayers);
         if (!group) { group = { id: id('grp'), missionId, state: 'forming', members: [], createdAt: new Date().toISOString(), raidId: null }; this.state.groups.push(group); }
-        if (group.members.some(x => x.profileId === profileId)) return clone(group);
+        if (group.members.some(x => x.profileId === profileId || (scavProfileId && x.scavProfileId === scavProfileId))) return clone(group);
         if (group.members.length >= m.maxPlayers) throw new Error('GROUP_FULL');
-        group.members.push({ profileId, displayName: text(displayName, 40, 'DISPLAY_NAME'), ready: false, acceptedAt: new Date().toISOString(), result: 'pending' });
+        group.members.push({ profileId, scavProfileId, displayName: text(displayName, 40, 'DISPLAY_NAME'), ready: false, acceptedAt: new Date().toISOString(), result: 'pending' });
         this.persist(); return clone(group);
     }
 
