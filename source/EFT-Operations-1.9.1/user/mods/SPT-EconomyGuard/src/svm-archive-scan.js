@@ -9,6 +9,9 @@ const MAX_ENTRIES_PER_ARCHIVE = 20000;
 const MAX_ARCHIVE_BYTES = 256 * 1024 * 1024;
 const MAX_DIRECTORY_BYTES = 16 * 1024 * 1024;
 const MAX_TOTAL_SCAN_BYTES = 512 * 1024 * 1024;
+const MAX_SCAN_DIRECTORIES = 10000;
+const MAX_SCAN_ENTRIES = 100000;
+const MAX_ENTRIES_PER_DIRECTORY = 20000;
 const MAX_JSON_BYTES = 2 * 1024 * 1024;
 const MAX_PREVIEW_ENTRIES = 50;
 const MAX_PREVIEW_TOTAL_BYTES = 4 * 1024 * 1024;
@@ -169,6 +172,8 @@ class SvmArchiveScanner {
         this.serverRoot = path.resolve(serverRoot);
         this.maxArchives = Math.min(MAX_ARCHIVES, Math.max(1, Number(options.maxArchives) || MAX_ARCHIVES));
         this.maxTotalBytes = Math.min(MAX_TOTAL_SCAN_BYTES, Math.max(16 * 1024 * 1024, Number(options.maxTotalBytes) || MAX_TOTAL_SCAN_BYTES));
+        this.maxDirectories = Math.min(MAX_SCAN_DIRECTORIES, Math.max(1, Number(options.maxDirectories) || MAX_SCAN_DIRECTORIES));
+        this.maxEntries = Math.min(MAX_SCAN_ENTRIES, Math.max(1, Number(options.maxEntries) || MAX_SCAN_ENTRIES));
     }
 
     scan() {
@@ -177,13 +182,20 @@ class SvmArchiveScanner {
         const stack = [this.serverRoot];
         const seen = new Set();
         let scannedBytes = 0;
+        let scannedDirectories = 0;
+        let scannedEntries = 0;
         let limitReached = false;
         while (stack.length && seen.size < this.maxArchives && !limitReached) {
+            if (scannedDirectories >= this.maxDirectories) { limitReached = true; break; }
+            scannedDirectories++;
             const dir = stack.pop();
             let entries;
             try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
             catch (err) { errors.push({ path: path.relative(this.serverRoot, dir), error: err.code || 'READ_FAILED' }); continue; }
-            for (const entry of entries) {
+            if (entries.length > MAX_ENTRIES_PER_DIRECTORY) limitReached = true;
+            for (const entry of entries.slice(0, MAX_ENTRIES_PER_DIRECTORY)) {
+                scannedEntries++;
+                if (scannedEntries > this.maxEntries) { limitReached = true; break; }
                 if (entry.name === 'node_modules' || entry.name === '.git') continue;
                 const full = path.join(dir, entry.name);
                 if (entry.isDirectory()) { stack.push(full); continue; }
@@ -218,7 +230,7 @@ class SvmArchiveScanner {
                 if (seen.size >= this.maxArchives) { limitReached = true; break; }
             }
         }
-        return { scannedArchives: seen.size, scannedBytes, matchingArchives: archives.length, truncated: limitReached || stack.length > 0, archives, errors: errors.slice(0, 100) };
+        return { scannedArchives: seen.size, scannedDirectories, scannedEntries, scannedBytes, matchingArchives: archives.length, truncated: limitReached || stack.length > 0, archives, errors: errors.slice(0, 100) };
     }
 }
 
