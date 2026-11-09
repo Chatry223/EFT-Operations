@@ -112,6 +112,8 @@ function Load-BundledDependencies {
         'Managed/UnityEngine.dll',
         'Managed/UnityEngine.CoreModule.dll',
         'Managed/UnityEngine.IMGUIModule.dll',
+        'Managed/UnityEngine.InputLegacyModule.dll',
+        'Managed/UnityEngine.TextRenderingModule.dll',
         'Managed/UnityEngine.UnityWebRequestModule.dll',
         'Managed/UnityEngine.JSONSerializeModule.dll'
     )
@@ -220,7 +222,7 @@ $buildButton.Add_Click({
         $msbuild = Find-MSBuild
         if (-not $msbuild) { throw 'MSBuild was not found. Install Visual Studio with the .NET desktop development workload and .NET Framework 4.7.2 targeting pack.' }
 
-        $requiredGame = @('Assembly-CSharp.dll','UnityEngine.dll','UnityEngine.CoreModule.dll','UnityEngine.IMGUIModule.dll','UnityEngine.UnityWebRequestModule.dll','UnityEngine.JSONSerializeModule.dll')
+        $requiredGame = @('Assembly-CSharp.dll','UnityEngine.dll','UnityEngine.CoreModule.dll','UnityEngine.IMGUIModule.dll','UnityEngine.InputLegacyModule.dll','UnityEngine.TextRenderingModule.dll','UnityEngine.UnityWebRequestModule.dll','UnityEngine.JSONSerializeModule.dll')
         foreach ($name in $requiredGame) { if (-not (Test-Path (Join-Path $managed $name))) { throw "Missing EFT reference: $name" } }
         $bepInExRoot = Split-Path $core -Parent
         $fikaDll = Join-Path $bepInExRoot 'plugins\Fika.Core.dll'
