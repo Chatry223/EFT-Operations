@@ -22,3 +22,12 @@
 3. بعد از ورود از SPT Launcher، F8 را بزنید.
 4. اگر پیام session not found دیدید، خروجی BepInEx LogOutput و نسخه دقیق کلاینت را بررسی کنید؛ احراز هویت را با ارسال شناسه جعلی دور نزنید.
 5. قبل از استفاده چندنفره، درخواست‌های `/EFTOperations/client/eft/operations/*` را روی localhost/VPN خصوصی بررسی کنید؛ Cookie را افزونه دستی نمی‌سازد و از HTTP Client خود SPT استفاده می‌کند.
+
+
+## Fika 2.4.3 native host bridge
+
+- The client checks the loaded BepInEx plugin metadata for `com.fika.core` and requires version `2.4.3`.
+- It locates the existing `Fika.Core.UI.Custom.MatchMakerUIScript` and its native `MatchMakerUI.StartButton` using reflection; it does not create a fake Fika match or bypass Fika's Force IP / Force Bind IP checks.
+- The action is available only to the authenticated squad leader when the server reports all required members ready and the selected EFT `RaidSettings.SelectedLocation._Id` matches the mission map.
+- Squad members still use Fika's normal raid browser to join the host; after the match roster is observed, the server adapter links the mission group.
+- The BepInEx config `Hidden.Last Version` value is a hidden config migration marker and is not reliable proof of the installed plugin version. Runtime plugin metadata is authoritative.
