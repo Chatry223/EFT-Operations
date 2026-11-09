@@ -481,8 +481,8 @@ namespace EFTOperations.Client
                             if (item != null && item.id == objective.id) { progress = item; break; }
                     int current = progress == null ? 0 : progress.progress;
                     string trust = progress == null ? "none" : progress.trust;
-                    string trustLabel = trust == "server_verified" ? "VERIFIED" : (trust == "host_attested" ? "HOST REPORTED / REVIEW" : (trust == "spt_accepted_client_delta" ? "SPT ACCEPTED / REVIEW" : "AWAITING EVENT"));
-                    if (trust == "host_attested" || trust == "spt_accepted_client_delta") hasReviewEvidence = true;
+                    string trustLabel = trust == "server_verified" ? "VERIFIED" : (trust == "host_attested" ? "HOST REPORTED / REVIEW" : (trust == "spt_accepted_client_delta" ? "SPT ACCEPTED / REVIEW" : (trust == "client_report_only" ? "CLIENT REPORT / REVIEW" : "AWAITING EVENT")));
+                    if (trust == "host_attested" || trust == "spt_accepted_client_delta" || trust == "client_report_only") hasReviewEvidence = true;
                     string objectiveName = !String.IsNullOrEmpty(objective.target) ? objective.target : (objective.type ?? "OBJECTIVE");
                     GUILayout.Label((objective.required ? "[REQUIRED] " : "[OPTIONAL] ") + objectiveName + "  " + current + "/" + objective.count + "  ·  " + trustLabel, SmallStyle());
                 }
@@ -503,7 +503,7 @@ namespace EFTOperations.Client
                     : (needsKillTelemetry && !fikaKillHookInstalled ? "Fika host active; kill hook unavailable." : "Fika host telemetry is active."))
                 : (fikaKillHookInstalled || fikaVisitHookInstalled ? "Waiting for the Fika squad host to provide objective telemetry." : "Fika 1.2.3 host bridge is not active. Objective progress may remain pending.");
             GUILayout.Label(hasReviewEvidence
-                ? "Host-reported or SPT-accepted evidence is visible. Final completion and rewards still require admin review."
+                ? "Host-reported, SPT-accepted or client-reported evidence is visible. Final completion and rewards still require admin review."
                 : hostTelemetryStatus + " Final completion and rewards still require admin review.", SmallStyle());
             GUILayout.EndArea();
         }
