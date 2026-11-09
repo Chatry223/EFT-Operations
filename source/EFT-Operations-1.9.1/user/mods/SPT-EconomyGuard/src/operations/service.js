@@ -212,6 +212,7 @@ class OperationsService {
         const eventId = text(event.eventId, 120, 'EVENT_ID', true);
         const eventMap = text(event.map, 40, 'EVENT_MAP', true).toLowerCase();
         if (eventMap !== String(m.map || '').toLowerCase()) throw new Error('RAID_EVENT_MAP_MISMATCH');
+        if (event.matchId && String(event.matchId) !== String(g.raidId || '')) throw new Error('RAID_EVENT_MATCH_MISMATCH');
         const amount = integer(event.amount, 1, 1000, 'EVENT_AMOUNT', 1);
         // Kill/collection/visit events must identify a real member of this operation.
         // Lifecycle-wide extraction/survival events may be aggregate, but any supplied
