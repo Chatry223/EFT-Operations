@@ -243,8 +243,14 @@ class Fika243OperationsAdapter {
         // from our wrapper; a one-time boolean flag would silently lose the hook.
         if (target.startLocalRaid !== target.__egFika243StartLifecycleWrapper) {
             const originalStart = target.startLocalRaid;
-            const wrappedStart = async function (sessionId, request, ...rest) {
-                const result = await originalStart.call(this, sessionId, request, ...rest);
+            const wrappedStart = function (sessionId, request, ...rest) {
+                const result = originalStart.call(this, sessionId, request, ...rest);
+                if (result && typeof result.then === 'function') {
+                    return result.then(value => {
+                        safe(() => adapter.captureRaidStart(sessionId, request, value));
+                        return value;
+                    });
+                }
                 safe(() => adapter.captureRaidStart(sessionId, request, result));
                 return result;
             };
@@ -254,10 +260,24 @@ class Fika243OperationsAdapter {
 
         if (target.endLocalRaid !== target.__egFika243EndLifecycleWrapper) {
             const originalEnd = target.endLocalRaid;
-            const wrappedEnd = async function (sessionId, request, ...rest) {
+            const wrappedEnd = function (sessionId, request, ...rest) {
                 let result;
-                try { result = await originalEnd.call(this, sessionId, request, ...rest); }
-                finally { safe(() => adapter.captureRaidEnd(sessionId, request)); }
+                try {
+                    result = originalEnd.call(this, sessionId, request, ...rest);
+                } catch (error) {
+                    safe(() => adapter.captureRaidEnd(sessionId, request));
+                    throw error;
+                }
+                if (result && typeof result.then === 'function') {
+                    return result.then(value => {
+                        safe(() => adapter.captureRaidEnd(sessionId, request));
+                        return value;
+                    }, error => {
+                        safe(() => adapter.captureRaidEnd(sessionId, request));
+                        throw error;
+                    });
+                }
+                safe(() => adapter.captureRaidEnd(sessionId, request));
                 return result;
             };
             target.__egFika243EndLifecycleWrapper = wrappedEnd;
