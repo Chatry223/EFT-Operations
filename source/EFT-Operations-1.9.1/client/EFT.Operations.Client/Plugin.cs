@@ -16,6 +16,8 @@ namespace EFTOperations.Client
     {
         private ConfigEntry<KeyCode> toggleKey;
         private ConfigEntry<float> refreshSeconds;
+        private static bool inputLookupAttempted;
+        private static MethodInfo inputGetKeyDown;
         private bool visible;
         private bool busy;
         private string status = "Connecting to Operations service...";
@@ -36,6 +38,7 @@ namespace EFTOperations.Client
             toggleKey = Config.Bind("Interface", "ToggleKey", KeyCode.F8, "Open or close the mission interface.");
             refreshSeconds = Config.Bind("Interface", "RefreshSeconds", 12f, "Automatic status refresh interval.");
             Logger.LogInfo("EFT Operations client loaded. UI key: " + toggleKey.Value);
+            EnsureInputBridge();
             Logger.LogInfo("Authentication bridge: SPT 3.11.1 RequestHandler (SessionId + native HttpClient).");
             StartCoroutine(RefreshLoop());
         }
@@ -47,7 +50,7 @@ namespace EFTOperations.Client
                 fikaStartRequested = false;
                 status = "No active Fika match was detected after the host request. Review Fika's message and retry if needed.";
             }
-            if (Input.GetKeyDown(toggleKey.Value))
+            if (IsToggleKeyDown())
             {
                 visible = !visible;
                 if (visible) RefreshAll();
@@ -461,8 +464,34 @@ namespace EFTOperations.Client
             GUILayout.EndArea();
         }
 
-        private static GUIStyle HeaderStyle() { return new GUIStyle(GUI.skin.label) { fontSize = 16, fontStyle = FontStyle.Bold, normal = { textColor = new Color(0.82f, 0.72f, 0.50f) } }; }
-        private static GUIStyle NotificationStyle() { return new GUIStyle(GUI.skin.label) { fontSize = 15, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter, wordWrap = true, normal = { textColor = new Color(0.95f, 0.82f, 0.55f) } }; }
+        private void EnsureInputBridge()
+        {
+            if (inputLookupAttempted) return;
+            inputLookupAttempted = true;
+            Type inputType = Type.GetType("UnityEngine.Input, UnityEngine.InputLegacyModule", false);
+            if (inputType == null)
+            {
+                try { inputType = Assembly.Load("UnityEngine.InputLegacyModule").GetType("UnityEngine.Input", false); }
+                catch { }
+            }
+            if (inputType != null)
+            {
+                inputGetKeyDown = inputType.GetMethod("GetKeyDown", BindingFlags.Public | BindingFlags.Static,
+                    null, new Type[] { typeof(KeyCode) }, null);
+            }
+            if (inputGetKeyDown == null) Logger.LogWarning("Unity InputLegacyModule.GetKeyDown was not found; the F8 panel toggle will be unavailable.");
+        }
+
+        private bool IsToggleKeyDown()
+        {
+            EnsureInputBridge();
+            if (inputGetKeyDown == null) return false;
+            try { return (bool)inputGetKeyDown.Invoke(null, new object[] { toggleKey.Value }); }
+            catch (Exception ex) { Logger.LogDebug("Input bridge call failed: " + ex.Message); return false; }
+        }
+
+        private static GUIStyle HeaderStyle() { return new GUIStyle(GUI.skin.label) { fontSize = 16, normal = { textColor = new Color(0.82f, 0.72f, 0.50f) } }; }
+        private static GUIStyle NotificationStyle() { return new GUIStyle(GUI.skin.label) { fontSize = 15, wordWrap = true, normal = { textColor = new Color(0.95f, 0.82f, 0.55f) } }; }
         private static GUIStyle SmallStyle() { return new GUIStyle(GUI.skin.label) { fontSize = 12, wordWrap = true, normal = { textColor = new Color(0.88f, 0.89f, 0.84f) } }; }
         private static string Escape(string value) { return (value ?? String.Empty).Replace("\\", "\\\\").Replace("\"", "\\\""); }
     }
