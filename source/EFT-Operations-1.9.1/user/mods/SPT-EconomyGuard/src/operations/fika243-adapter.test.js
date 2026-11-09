@@ -63,6 +63,31 @@ assert.equal(deathEvidence.profileId, 'abcdef0123456789abcdef01');
 assert.equal(deathEvidence.reportedCharacterProfileId, 'abcdef0123456789abcdef02');
 assert.equal(deathEvidence.evidenceTrust, 'authenticated_client_report');
 assert.equal(deathEvidence.rewardEligible, false, 'player-death reports must not auto-award');
+const raidEvidenceWithVictim = adapter.captureRaidEnd('session-1', {
+    serverId: 'woods.456',
+    results: {
+        result: 'Survived',
+        exitName: 'Outskirts',
+        profile: {
+            Stats: {
+                Eft: {
+                    Victims: [{ ProfileId: 'abcdef0123456789abcdef02', Name: 'Scav-Test', Role: 'assault', Side: 'Savage', Level: 5, Distance: 42, Weapon: 'weapon-test', Location: 'Woods' }],
+                    SessionCounters: { Items: [{ Key: ['KilledSavage'], Value: 1 }] },
+                    FoundInRaidItems: [{ QuestId: 'quest-1', ItemId: 'item-1' }],
+                    DroppedItems: [{ QuestId: 'quest-1', ItemId: 'item-2', ZoneId: 'zone-1' }]
+                }
+            }
+        }
+    }
+});
+assert.equal(raidEvidenceWithVictim.reportedVictimCount, 1);
+assert.equal(raidEvidenceWithVictim.reportedKillCountsByRole.assault, 1);
+assert.equal(raidEvidenceWithVictim.corroboratedVictimCount, 1, 'Fika death reports should corroborate matching PMC/Scav victim IDs');
+assert.equal(raidEvidenceWithVictim.reportedSessionCounters[0].value, 1);
+assert.equal(raidEvidenceWithVictim.reportedFoundInRaidQuestItems.length, 1);
+assert.equal(raidEvidenceWithVictim.reportedDroppedQuestItems.length, 1);
+assert.equal(raidEvidenceWithVictim.evidenceTrust, 'untrusted_client_report');
+assert.equal(raidEvidenceWithVictim.rewardEligible, false);
 assert.throws(() => fakeUpdateCallbacks.handleRaidAddPlayer('', { profileId: 'abcdef0123456789abcdef99' }, 'session-1'), /FIKA_SESSION_PROFILE_MISMATCH/);
 assert.throws(() => fakeUpdateCallbacks.handlePlayerDied('', { profileId: 'abcdef0123456789abcdef99' }, 'session-1'), /FIKA_SESSION_PROFILE_MISMATCH/);
 assert.equal(acceptedUpdateCalls, 2, 'mismatched account IDs must be rejected before Fika mutates its match registry');
