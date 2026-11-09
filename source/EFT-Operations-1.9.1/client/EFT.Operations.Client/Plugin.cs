@@ -178,9 +178,9 @@ namespace EFTOperations.Client
             try
             {
                 string fikaVersion = GetFikaPluginVersion();
-                if (fikaVersion != "2.4.3")
+                if (fikaVersion != "1.2.3" && fikaVersion != "1.2.3.0")
                 {
-                    status = "Fika 2.4.3 is required for the operation host bridge. Detected: " + (fikaVersion ?? "not loaded");
+                    status = "Fika client 1.2.3 is required for the operation host bridge. Detected: " + (fikaVersion ?? "not loaded");
                     return;
                 }
 
@@ -236,7 +236,7 @@ namespace EFTOperations.Client
                         return;
                     }
 
-                    // Invoke the exact Fika 2.4.3 native Start button listener. This preserves
+                    // Invoke the exact Fika client 1.2.3 native Start button listener. This preserves
                     // Fika's Force IP validation, match creation, and normal EFT transition.
                     invoke.Invoke(onClick, null);
                     fikaStartRequested = true;
