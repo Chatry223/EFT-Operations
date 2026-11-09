@@ -33,7 +33,7 @@ assert.equal(matchEvents[0].evidenceTrust, 'fika_match_end_lifecycle_with_authen
 assert.equal(matchEvents[0].rewardEligible, false, 'a match-end hook alone must never authorize rewards');
 
 // A raid-end request is client-originated. Preserve it for review, but mark it untrusted.
-adapter.services.saveServer = { getProfile() { return { characters: { pmc: { _id: 'abcdef0123456789abcdef01' }, scav: { _id: 'abcdef0123456789abcdef02' } } }; } };
+adapter.services.saveServer = { getProfile() { return { characters: { pmc: { _id: 'abcdef0123456789abcdef01', Info: { Nickname: 'pmc-name' } }, scav: { _id: 'abcdef0123456789abcdef02', Info: { Nickname: 'scav-name' } } } }; } };
 adapter.services.fikaMatchService = { getMatchIdByProfile() { return 'match-1'; } };
 const raidEnd = adapter.captureRaidEnd('session-1', { serverId: 'woods.123', results: { result: 'Survived', exitName: 'Outskirts', playTime: 1200 } });
 assert.equal(raidEnd.matchId, 'match-1');
