@@ -63,9 +63,14 @@ The graphical helper now:
 - requires the actual installed BepInEx root as a separate install destination, so it cannot silently place the plugin in the temporary dependency cache;
 - backs up any existing plugin DLL and writes a build report.
 
-GitHub Actions now validates the dependency archives and builds on a Windows-hosted runner. The first Windows attempt successfully extracted and validated the dependencies and reached MSBuild, then failed with `NETSDK1004` because project assets had not been restored. The workflow and GUI were updated to invoke MSBuild with `/restore`. The next Windows run is the required compile acceptance check.
+GitHub Actions validates the dependency archives and builds on a Windows-hosted runner. The first Windows attempt failed with `NETSDK1004` because project assets had not been restored; MSBuild `/restore` was added. A subsequent build on commit `f6e2441c6ffd825b68d4e41effadcb47671e3e1e` succeeded, verified the DLL output, and uploaded artifact `13704528374`.
 
-No compiled DLL is claimed ready until a subsequent Windows job succeeds, verifies the DLL output, and uploads the artifact. Even a successful CI compile is not an in-game runtime test.
+Build output:
+- `EFTOperations.Client.dll`: 27,136 bytes
+- SHA-256: `276ecad202e8ccf473b52c2d6ff8f1b17a7bd2d7ed0ba1909a2c76928f1fcd1f`
+- Artifact: [GitHub Actions build](https://github.com/Chatry223/EFT-Operations/actions/runs/42687196015/artifacts/13704528374)
+
+The DLL is compile-verified, not yet runtime-verified in the user's SPT/Fika installation.
 
 ## Fika 2.4.3 mission lifecycle: current truth
 
