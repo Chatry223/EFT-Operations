@@ -25,7 +25,7 @@ function fixture() {
             EnableTraders: true,
             TraderMarkup: { Prapor: 25, Skier: 20, Fence: 17 },
             TraderSell: { Prapor: 6.45, Skier: 5.1 },
-            Fence: { PriceMult: 1.2, PresetMult: 2, StockTime_Min: 50, StockTime_Max: 150 }
+            Fence: { EnableFence: false, PriceMult: 1.2, PresetMult: 2, StockTime_Min: 50, StockTime_Max: 150 }
         }
     });
     writeJson(path.join(svmDir, 'Presets', 'v5.json'), { Items: { ItemPriceMult: 7 }, Traders: {} });
@@ -45,6 +45,8 @@ function fixture() {
         assert.strictEqual(status.tradersEnabled, true);
         assert.strictEqual(status.itemsEnabled, false);
         assert.strictEqual(status.itemPriceMultiplierActive, false);
+        assert.strictEqual(status.fence.enabled, false);
+        assert.strictEqual(status.fence.priceMultiplier, 1.2);
     } finally { fs.rmSync(f.root, { recursive: true, force: true }); }
 })();
 
