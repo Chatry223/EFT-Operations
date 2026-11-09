@@ -90,7 +90,6 @@ async function testFika243LifecycleAndAcceptedLootEvidence() {
     assert.strictEqual(lootEvidence.source, 'spt-server-adapter');
     assert.strictEqual(lootEvidence.evidenceTrust, 'spt_accepted_client_delta');
     assert.strictEqual(lootEvidence.amount, 2);
-    assert.strictEqual(lootEvidence.source, 'spt-server-adapter');
 
     matchService.endMatch(hostProfileId, 'host shutdown');
     assert.deepStrictEqual(matchService.ended, [hostProfileId, 'host shutdown']);
