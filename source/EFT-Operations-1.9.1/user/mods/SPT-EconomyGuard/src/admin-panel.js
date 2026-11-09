@@ -777,13 +777,16 @@ class AdminPanelServer {
                         hostEvidence: hostEvidence.map(event => {
                             const actor = (group.members || []).find(member => String(member.profileId || '') === String(event.profileId || '')
                                 || String(member.scavProfileId || '') === String(event.profileId || ''));
-                            return {
+                            const actorName = actor ? String(actor.displayName || 'Unknown operator') : 'Unknown operator';
+                            const safeEvent = {
                                 type: event.type,
-                                killerName: actor ? String(actor.displayName || 'Unknown operator') : 'Unknown operator',
+                                actorName,
                                 target: event.target, targetCategory: event.targetCategory,
                                 victimRole: event.victimRole, victimSide: event.victimSide,
                                 evidenceTrust: event.evidenceTrust, timestamp: event.timestamp
                             };
+                            if (event.type === 'kill') safeEvent.killerName = actorName;
+                            return safeEvent;
                         }),
                         objectiveEvidence
                     };
