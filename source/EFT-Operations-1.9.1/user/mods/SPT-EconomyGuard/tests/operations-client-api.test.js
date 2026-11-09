@@ -35,8 +35,10 @@ assert.equal(operations.state.groups[0].members[0].scavProfileId, 'abcdef0123456
 const acceptedB = api.acceptMission('', { missionId: mission.id }, 'session-b').wrapped;
 assert.equal(acceptedB.ok, true);
 assert.equal(acceptedB.group.id, acceptedA.group.id);
-assert.equal(acceptedA.group.members[0].isLeader, true);
-assert.equal(acceptedB.group.members[0].isLeader, false);
+assert.equal(acceptedA.group.isLeader, true);
+assert.equal(acceptedB.group.isLeader, false);
+assert.equal(acceptedA.group.leaderName, 'Alpha');
+assert.equal(acceptedB.group.leaderName, 'Alpha');
 assert.equal(acceptedA.group.members[0].profileId, undefined, 'public group must not expose profile IDs');
 assert.equal(acceptedA.group.minPlayers, 2);
 assert.equal(acceptedA.group.maxPlayers, 2);
