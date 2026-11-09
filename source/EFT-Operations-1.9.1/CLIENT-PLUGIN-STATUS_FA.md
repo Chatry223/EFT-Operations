@@ -1,42 +1,52 @@
 # وضعیت افزونه کلاینت EFT Operations 1.9.1
 
-## پیاده‌سازی شده در سورس
+## پیاده‌سازی‌شده در سورس
 - پنل IMGUI با کلید F8
-- HUD فشرده مأموریت فعال هنگام Raid، شامل عنوان، نقشه، رتبه و امتیاز اپراتور، Briefing، اهداف و پاداش اعلام‌شده
-- اعلان بالای صفحه هنگام ورود گروه به Raid و هنگام پایان نشست با وضعیت «در انتظار بررسی مدیر»
-- دریافت مأموریت‌های منتشرشده از Router سفارشی SPT با پیشوند EFTOperations
-- قبول مأموریت، نمایش گروه، Ready/Not Ready و خروج در حالت forming
-- استفاده مستقیم از `SPT.Common.Http.RequestHandler.SessionId` و `RequestHandler.HttpClient` در SPT 3.11.1؛ بدون جستجوی عمومی/حدسی فیلدها
-- استفاده از Backend URL تنظیم‌شده توسط خود SPT و prefix صحیح `/EFTOperations`
-- استفاده از HTTP client رسمی SPT برای Cookie، فشرده‌سازی POST و رفتار TLS
-- صف‌بندی درخواست‌ها برای جلوگیری از تداخل Mission List / Player State
+- HUD فشرده مأموریت فعال هنگام Raid شامل عنوان، نقشه، رتبه، امتیاز، Briefing، اهداف و پاداش اعلام‌شده
+- اعلان شروع و پایان نشست Fika؛ پایان نشست با وضعیت «در انتظار بررسی مدیر»
+- دریافت مأموریت‌ها و وضعیت گروه از Router اختصاصی SPT با پیشوند `/EFTOperations`
+- قبول مأموریت، نمایش گروه، Ready/Not Ready و خروج پیش از شروع
+- تشخیص نشست SPT با استفاده از قرارداد واقعی `SPT.Common.Http.RequestHandler`
+- استفاده از `Host`، `SessionId` و `HttpClient` خود SPT برای Cookie، فشرده‌سازی POST و Backend URL تنظیم‌شده
+- بررسی نسخه Fika Client از Plugin Metadata و استفاده از UI بومی Fika 1.2.3 برای Start توسط رهبر آماده گروه
+- بررسی نقشه انتخاب‌شده در `RaidSettings.SelectedLocation._Id` پیش از اجرای Start بومی Fika
 
-## هنوز پیاده‌سازی نشده
-- DLL کامپایل‌شده و تست‌شده روی ویندوز؛ سورس C# اصلاح شده اما در این محیط کامپایلر .NET موجود نیست
-- HUD کامل با شمارنده پیشرفت زنده و معتبر برای هر Objective؛ HUD فعلی فقط مأموریت و اهداف را نشان می‌دهد و تکمیل را به‌صورت خودکار تأیید نمی‌کند
-- راه‌اندازی/پیوستن خودکار Fika Raid و matchmaking واقعی
-- ویدئو/صوت/اتاق سه‌بعدی و پخش هم‌زمان
-- تأیید معتبر Kill/Extract و پرداخت جایزه
+## اصلاح فنی انجام‌شده در پل SPT
+در سورس SPT 3.11.x مشخص شد:
+- namespace نوع: `SPT.Common.Http.RequestHandler`
+- نام اسمبلی واقعی: `spt-common` (نه `SPT.Common`)
+- فیلدهای استاتیک واقعی: `Host`، `SessionId`، `HttpClient`
+- متدهای HTTP واقعی در `SPT.Common.Http.Client`: `GetAsync(string)` و `PostAsync(string, byte[], bool)`
 
-## کنترل نسخه در Build GUI
+پل کلاینت اصلاح شد تا ابتدا اسمبلی‌های از قبل بارگذاری‌شده را بررسی کند و سپس با نام صحیح `spt-common` بارگذاری کند. این پل از یک Session ID ساختگی یا HTTP Client جداگانه استفاده نمی‌کند.
 
-- پیش از Build، وجود `Assembly-CSharp.dll` و اسمبلی‌های Unity را بررسی می‌کند.
-- نسخه اسمبلی `SPT.Common` باید `3.11.1.0` و نسخه اسمبلی `Fika.Core` باید `1.2.3.0` باشد؛ در صورت عدم تطابق، Build متوقف می‌شود.
-- DLL قبلی پیش از جایگزینی Backup می‌شود و SHA-256 خروجی ثبت می‌شود.
+## Build گرافیکی
+فایل اجرا:
+`client/EFT.Operations.Client/BUILD-GUI.bat`
 
-## نکات آزمون پذیرش
-1. در ویندوز مسیرهای GameManagedDir و BepInExCoreDir را تنظیم و Build کنید.
-2. ابتدا روی کپی آزمایشی SPT 3.11.1 نصب کنید.
-3. بعد از ورود از SPT Launcher، F8 را بزنید.
-4. اگر پیام session not found دیدید، خروجی BepInEx LogOutput و نسخه دقیق کلاینت را بررسی کنید؛ احراز هویت را با ارسال شناسه جعلی دور نزنید.
-5. قبل از استفاده چندنفره، درخواست‌های `/EFTOperations/client/eft/operations/*` را روی localhost/VPN خصوصی بررسی کنید؛ Cookie را افزونه دستی نمی‌سازد و از HTTP Client خود SPT استفاده می‌کند.
+در GUI:
+1. **Load bundled ZIPs** آرشیوهای منبع را در Cache محلی با کلید Hash استخراج می‌کند.
+2. مسیر واقعی نصب BepInEx باید جداگانه در فیلد سوم انتخاب شود؛ DLL هرگز داخل Cache موقت نصب نمی‌شود.
+3. **Build and Install DLL** با MSBuild و NuGet Restore کامپایل می‌کند، DLL قبلی را Backup می‌گیرد و گزارش SHA-256 می‌نویسد.
 
+کنترل‌ها:
+- Hash دقیق `Assembly-CSharp.dll`، `Fika.Core.dll` و `spt-common.dll`
+- Fika Core assembly version برابر `1.2.3.0`
+- SPT Common assembly version برابر `3.11.1.0`
+- وجود فایل پیکربندی Fika با marker نسخه `1.2.3`
 
-## Fika Server 2.4.3 / Fika client 1.2.3 native host bridge
+GitHub Actions نیز آرشیوها را بررسی و روی Windows Hosted Runner کامپایل می‌کند. اولین تلاش Build به دلیل نبود NuGet Restore در MSBuild شکست خورد؛ گزینه `/restore` به Workflow و GUI اضافه شده است. تا موفق‌شدن اجرای بعدی و بررسی artifact، DLL کامپایل‌شده را آماده اعلام نمی‌کنیم.
 
-- The client checks loaded BepInEx plugin metadata for `com.fika.core` and requires **Fika client 1.2.3** (`1.2.3` or `1.2.3.0`). The server package is separately verified as **Fika Server 2.4.3** from the user's SPT server archive.
-- For the installed Fika client `Fika.Core.dll 1.2.3`, the bridge reads the exact `MatchMakerUIScript` fields `fikaMatchMakerUi` and `raidSettings`; it retains fallbacks for later field names. This was checked against the upstream `v1.2.3` source, not inferred from a newer release.
-- It locates the existing `Fika.Core.UI.Custom.MatchMakerUIScript` and its native `MatchMakerUI.StartButton` using reflection; it does not create a fake Fika match or bypass Fika's Force IP / Force Bind IP checks.
-- The action is available only to the authenticated squad leader when the server reports all required members ready and the selected EFT `RaidSettings.SelectedLocation._Id` matches the mission map.
-- Squad members still use Fika's normal raid browser to join the host; after the match roster is observed, the server adapter links the mission group.
-- The BepInEx config `Hidden.Last Version` value is a hidden config migration marker and is not reliable proof of the installed plugin version. Runtime plugin metadata is authoritative.
+## هنوز تکمیل نشده
+- پیشرفت زنده و معتبر برای Kill / Loot / Visit / Extract؛ سرویس `recordRaidEvent` وجود دارد، اما Adapter تولیدی هنوز رویداد Objective به آن نمی‌فرستد.
+- تأیید خودکار مأموریت و پرداخت خودکار جایزه بر اساس داده‌های کلاینت
+- Kick فوری از Raid فعال Fika
+- تست Runtime واقعی در بازی با دو کلاینت و یک سرور Fika
+
+## آزمون پذیرش پس از Build
+1. DLL را روی کپی آزمایشی SPT 3.11.1 نصب کنید.
+2. بازی را از SPT Launcher اجرا و وارد پروفایل شوید.
+3. F8 را باز کنید و دریافت مأموریت و وضعیت گروه را بررسی کنید.
+4. در Fika 1.2.3 رهبر باید فقط پس از Ready شدن همه اعضا و تطبیق نقشه بتواند Start بزند.
+5. پایان Raid باید گروه را به صف بررسی مدیر ببرد؛ نباید از گزارش کلاینت جایزه خودکار پرداخت شود.
+6. خطاهای احتمالی را از `BepInEx/LogOutput.log` و لاگ SPT جمع‌آوری کنید.
