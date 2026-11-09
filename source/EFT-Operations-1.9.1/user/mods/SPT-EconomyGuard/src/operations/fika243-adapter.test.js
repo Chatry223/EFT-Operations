@@ -223,6 +223,18 @@ assert.deepEqual(statusAdapter.getStatus().missingHooks, []);
 assert.equal(statusAdapter.getStatus().matchDeleteHook, true);
 assert.equal(statusAdapter.getStatus().matchCreateHook, true);
 
+// Fika 2.4.3's LocationLifecycleService overrides are synchronous. The observer
+// must not turn its response object / void return into a Promise.
+const syncLifecycleResponse = { location: 'woods', loot: { marker: true } };
+assert.strictEqual(statusInstances.LocationLifecycleService.startLocalRaid('session-sync', { location: 'woods' }), syncLifecycleResponse);
+assert.strictEqual(typeof statusInstances.LocationLifecycleService.startLocalRaid('session-sync', { location: 'woods' })?.then, 'undefined');
+assert.strictEqual(statusInstances.LocationLifecycleService.endLocalRaid('session-sync', {
+    serverId: 'woods.sync',
+    results: { result: 'Survived', exitName: 'Outskirts', playTime: 30 }
+}), undefined);
+assert.ok(statusAdapter.getRecentEvents(10).some(event => event.type === 'player_raid_end' && event.profileId === 'session-sync'),
+    'sync Fika endLocalRaid must still be observed after preserving its void return');
+
 // Fika 2.4.3 can delete a match without endMatch; both paths must create one review event.
 statusMatchService.createMatch({ serverId: 'dedupe-match' });
 statusMatchService.endMatch('dedupe-match', 'test-end');
