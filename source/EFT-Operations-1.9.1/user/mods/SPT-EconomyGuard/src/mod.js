@@ -8,6 +8,7 @@ const { OperationsService } = require('./operations/service');
 const { Fika243OperationsAdapter } = require('./operations/fika243-adapter');
 const { OperationsClientApi } = require('./operations/client-api');
 const { RewardDeliveryService } = require('./operations/reward-delivery');
+const { SvmConfigService } = require('./svm-config');
 
 class SptEconomyGuardMod {
     constructor() {
@@ -89,6 +90,7 @@ class SptEconomyGuardMod {
         try { hashUtil = container.resolve('HashUtil'); } catch (_) { /* reward delivery remains pending if hash utility is unavailable */ }
         try { databaseService = container.resolve('DatabaseService'); } catch (_) { /* reward delivery remains pending if item database is unavailable */ }
         this.rewardDelivery = this.operations ? new RewardDeliveryService({ operations: this.operations, saveServer, mailSendService, hashUtil, databaseService, logger }) : null;
+        this.svmConfig = new SvmConfigService(this.modDir, this.guard.storage.baseDir, logger);
         if (this.operations && config.operations && config.operations.clientApiEnabled !== false) {
             let httpResponseUtil = null;
             try { httpResponseUtil = container.resolve('HttpResponseUtil'); } catch (_) { /* response helper is optional in test/minimal containers */ }
@@ -101,7 +103,7 @@ class SptEconomyGuardMod {
         }
         this.guard.registerHooks(container);
         try {
-            this.adminPanel = new AdminPanelServer(this.modDir, this.guard, logger, config.adminPanel || {}, { launcherController, saveServer, fikaPresenceService, operations: this.operations, fikaOperationsAdapter: this.fikaOperationsAdapter, rewardDelivery: this.rewardDelivery });
+            this.adminPanel = new AdminPanelServer(this.modDir, this.guard, logger, config.adminPanel || {}, { launcherController, saveServer, fikaPresenceService, operations: this.operations, fikaOperationsAdapter: this.fikaOperationsAdapter, rewardDelivery: this.rewardDelivery, svmConfig: this.svmConfig });
             this.adminPanel.start();
         } catch (err) {
             this.guard.health.adminPanel = { enabled: false, error: err.message };
