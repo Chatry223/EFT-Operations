@@ -56,11 +56,8 @@ jobs:
   client-build:
     name: Build BepInEx client plugin (Windows + EFT assemblies)
     needs: [source-status, dependency-archive-check]
-    if: needs.source-status.outputs.source_ready == 'true' && needs.dependency-archive-check.result == 'success' && github.event_name != 'pull_request' && vars.EFT_BUILD_RUNNER_ENABLED == 'true'
-    runs-on: [self-hosted, Windows, X64, eft-build]
-    env:
-      EFT_MANAGED_DIR: ${{ vars.EFT_MANAGED_DIR }}
-      BEPINEX_CORE_DIR: ${{ vars.BEPINEX_CORE_DIR }}
+    if: needs.source-status.outputs.source_ready == 'true' && needs.dependency-archive-check.result == 'success' && github.event_name != 'pull_request'
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - name: Prepare source tree
