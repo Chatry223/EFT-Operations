@@ -85,8 +85,9 @@ The version-gated adapter:
 Important limitations:
 1. Production code does not yet call `recordRaidEvent`; objective counters do not advance from real game events. The test suite manually injects a synthetic extract event, which is not proof that the live adapter collects it.
 2. Fika's `handlePlayerDied` callback contains `serverId` and `profileId`, but not a killer identity. The adapter validates the profile/session relationship and stores an `authenticated_client_report` death event for admin review; it does not progress kill objectives.
-3. SPT `IEndLocalRaidRequestData.results` includes `result`, `killerId`, `killerAid`, and `profile`, but these fields originate from the client request. They are useful for review evidence only, not authoritative reward triggers.
-4. A server-authoritative kill/loot/visit objective feed has not yet been implemented. Admin review remains mandatory.
+3. SPT `IEndLocalRaidRequestData.results.profile.Stats.Eft` includes client-reported `Victims`, `SessionCounters`, `FoundInRaidItems`, and `DroppedItems`. The adapter stores these as untrusted evidence and cross-checks victim profile IDs against Fika death reports when possible.
+4. For loot evidence, the adapter snapshots inventory at raid start and counts only new `SpawnedInSession` items that remain in the SaveServer profile after SPT processes the raid-end request. This is stronger than a raw client list, but it is still not server-authoritative proof of where an item was obtained.
+5. A server-authoritative kill/loot/visit objective feed has not yet been implemented. `recordRaidEvent` accepts only explicitly marked server-verified events and is not called by the production adapter. Admin review remains mandatory.
 
 ## Runtime acceptance still required
 
