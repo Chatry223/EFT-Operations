@@ -117,7 +117,8 @@ class SvmConfigService {
             if (!isObject(input.traderMarkup) || !isObject(preset.Traders.TraderMarkup)) throw new Error('INVALID_SVM_TRADER_MARKUP');
             for (const [trader, value] of Object.entries(input.traderMarkup)) {
                 if (!TRADER_KEYS.has(trader) || !Object.prototype.hasOwnProperty.call(preset.Traders.TraderMarkup, trader)) throw new Error('UNKNOWN_SVM_TRADER');
-                const next = number(value, 0, 1000, 'trader_markup');
+                // SVM stores buy_price_coef = 100 - TraderMarkup; the resulting buyback rate is 0..100%.
+                const next = number(value, 0, 100, 'trader_markup');
                 if (Number(preset.Traders.TraderMarkup[trader]) !== next) {
                     preset.Traders.TraderMarkup[trader] = next;
                     changes.push('Traders.TraderMarkup.' + trader);
