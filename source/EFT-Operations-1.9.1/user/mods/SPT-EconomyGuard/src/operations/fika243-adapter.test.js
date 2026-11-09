@@ -17,6 +17,8 @@ fs.writeFileSync(path.join(fikaDir, 'package.json'), JSON.stringify({ version: '
 
 const adapter = new Fika243OperationsAdapter({ modDir, operations: { dataDir }, logger: { info() {}, warn() {}, debug() {} } });
 assert.equal(adapter.getStatus().enabled, true, 'only the configured Fika 2.4.3 / SPT 3.11 line should enable hooks');
+assert.equal(adapter.getStatus().fikaClientPluginVersion, '1.2.3');
+assert.equal(adapter.getStatus().operationsClientPluginVersion, '0.1.0');
 
 const matchService = {
     getMatch(id) { return id === 'match-1' ? { players: new Map([['profile-a', {}], ['profile-b', {}]]) } : null; },
