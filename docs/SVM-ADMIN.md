@@ -36,3 +36,7 @@ If the SVM package version or SPT target does not match the audited package, the
 ## Not claimed
 
 This integration does not replace Greed.exe, does not change SVM code, and does not hot-reload SVM inside a running server. A successful unit-test run and a real SPT restart with SVM + LiveFleaPrices enabled are still required before calling the full integration runtime-verified.
+
+## ZIP archive inspection
+
+The panel can scan ZIP files under the SPT server root for SVM loader/preset JSON. It never extracts or modifies archives. Preview requires the admin token, rejects paths outside the server root, validates local ZIP headers, methods, size and CRC, and caps a single preview at 50 JSON entries / 4 MiB. The recursive scan is bounded to 200 archives / 512 MiB total and rejects oversized central directories; a truncated result means the configured scan limit was reached, not that no other archives exist.
