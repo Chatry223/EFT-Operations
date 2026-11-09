@@ -23,6 +23,7 @@ namespace EFTOperations.Client
         private MissionListResponse missions = new MissionListResponse();
         private PlayerStateResponse playerState = new PlayerStateResponse();
         private Vector2 scroll;
+        private Vector2 raidHudScroll;
         private float nextRefresh;
         private readonly HashSet<string> knownMissionIds = new HashSet<string>();
         private bool hasInitialMissionSync;
@@ -83,7 +84,17 @@ namespace EFTOperations.Client
                 else status = "Mission board synchronized.";
                 StartCoroutine(Request("/client/eft/operations/state", null, delegate(string stateBody)
                 {
-                    playerState = JsonUtility.FromJson<PlayerStateResponse>(stateBody) ?? new PlayerStateResponse();
+                    PlayerStateResponse nextState = JsonUtility.FromJson<PlayerStateResponse>(stateBody) ?? new PlayerStateResponse();
+                    if (nextState.ok)
+                    {
+                        string previousGroupState = playerState.group == null ? null : playerState.group.state;
+                        string currentGroupState = nextState.group == null ? null : nextState.group.state;
+                        if (currentGroupState == "in_raid" && previousGroupState != "in_raid")
+                            Notify("OPERATION DEPLOYED  /  " + (nextState.mission == null ? "MISSION ACTIVE" : nextState.mission.title));
+                        else if (previousGroupState == "in_raid" && currentGroupState != "in_raid")
+                            Notify("RAID SESSION ENDED  /  RESULT PENDING ADMIN REVIEW");
+                    }
+                    playerState = nextState;
                     if (!playerState.ok) status = "Player state: " + playerState.error;
                 }));
             }));
@@ -324,6 +335,7 @@ namespace EFTOperations.Client
                 GUI.Box(banner, GUIContent.none);
                 GUI.Label(new Rect(banner.x + 14f, banner.y + 8f, banner.width - 28f, 30f), notificationText, NotificationStyle());
             }
+            DrawRaidHud();
             if (!visible) return;
             float width = Mathf.Min(720f, Screen.width - 30f);
             float height = Mathf.Min(680f, Screen.height - 30f);
@@ -395,6 +407,48 @@ namespace EFTOperations.Client
                 GUILayout.EndVertical();
             }
             GUILayout.EndScrollView();
+            GUILayout.EndArea();
+        }
+
+        private void DrawRaidHud()
+        {
+            if (playerState == null || playerState.group == null || playerState.group.state != "in_raid" || playerState.mission == null)
+                return;
+
+            MissionDto mission = playerState.mission;
+            float width = Mathf.Min(420f, Screen.width - 24f);
+            float height = Mathf.Min(270f, Screen.height - 110f);
+            if (width < 220f || height < 130f) return;
+
+            Rect hud = new Rect(Screen.width - width - 12f, 72f, width, height);
+            GUI.Box(hud, GUIContent.none);
+            GUILayout.BeginArea(new Rect(hud.x + 12f, hud.y + 9f, hud.width - 24f, hud.height - 18f));
+            GUILayout.Label("ACTIVE FIELD OPERATION", HeaderStyle());
+            GUILayout.Label(mission.title ?? "UNTITLED OPERATION", NotificationStyle());
+            GUILayout.Label((mission.map ?? "UNKNOWN MAP").ToUpperInvariant(), SmallStyle());
+
+            string briefing = mission.briefing == null ? String.Empty : mission.briefing.body;
+            if (!String.IsNullOrEmpty(briefing))
+                GUILayout.Label(briefing, SmallStyle());
+
+            if (mission.rewards != null)
+                GUILayout.Label("AUTHORIZED REWARD  /  " + mission.rewards.points + " PTS  ·  " + mission.rewards.roubles.ToString("N0") + " RUB", SmallStyle());
+
+            GUILayout.Label("OBJECTIVES  /  MANUAL VERIFICATION", HeaderStyle());
+            raidHudScroll = GUILayout.BeginScrollView(raidHudScroll, GUILayout.Height(Mathf.Max(64f, hud.height - 145f)));
+            if (mission.objectives == null || mission.objectives.Length == 0)
+                GUILayout.Label("No objectives listed.", SmallStyle());
+            else
+            {
+                foreach (ObjectiveDto objective in mission.objectives)
+                {
+                    if (objective == null) continue;
+                    string objectiveName = !String.IsNullOrEmpty(objective.target) ? objective.target : (objective.type ?? "OBJECTIVE");
+                    GUILayout.Label((objective.required ? "[REQUIRED] " : "[OPTIONAL] ") + objectiveName + "  ×" + objective.count, SmallStyle());
+                }
+            }
+            GUILayout.EndScrollView();
+            GUILayout.Label("Completion and rewards are not auto-confirmed. Check the Operations Admin review.", SmallStyle());
             GUILayout.EndArea();
         }
 
