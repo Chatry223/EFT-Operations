@@ -689,6 +689,32 @@ class Fika243OperationsAdapter {
                 }
             }
         }
+        if (missionGroup && mission && this.operations && typeof this.operations.recordRaidEvent === 'function') {
+            const exitStatus = String(results.result || '').trim().toLowerCase();
+            const exitName = String(results.exitName || '').trim().slice(0, 80);
+            const recordClientOutcome = (type, target) => {
+                try {
+                    this.operations.recordRaidEvent(missionGroup.id, {
+                        eventId: `fika-client-${String(matchId || 'raid')}-${identity.profileId}-${type}`,
+                        profileId: identity.profileId,
+                        type,
+                        target: String(target || ''),
+                        amount: 1,
+                        map: mission.map,
+                        matchId: String(matchId || ''),
+                        source: 'fika-client-report',
+                        evidenceTrust: 'client_report_only'
+                    });
+                } catch (err) {
+                    this.log('warn', `Could not record review-only ${type} outcome: ${err.message}`);
+                }
+            };
+            if (exitStatus) recordClientOutcome('raid_complete', exitStatus);
+            if (['survived', 'runner'].includes(exitStatus)) {
+                recordClientOutcome('survive', exitStatus);
+                if (exitName) recordClientOutcome('extract', exitName);
+            }
+        }
         if (snapshotKey) this.raidSnapshots.delete(snapshotKey);
         const foundInRaidItems = Array.isArray(eftStats.FoundInRaidItems) ? eftStats.FoundInRaidItems.slice(0, 100).map(item => ({
             questId: String(object(item).QuestId || '').slice(0, 40),
