@@ -720,7 +720,7 @@ class AdminPanelServer {
                             }
                             reportedCount = seen.size;
                         } else if (objective.type === 'raid_complete') {
-                            reportedCount = raidEnds.filter(event => !!String(event.exitStatus || '').trim()).length;
+                            reportedCount = new Set(raidEnds.filter(event => !!String(event.exitStatus || '').trim()).map(event => String(event.profileId || event.displayName || 'unknown'))).size;
                         }
                         const progressCount = Number((group.progress || {})[objective.id] || 0);
                         const progressTrust = String((group.progressTrust || {})[objective.id] || 'none');
