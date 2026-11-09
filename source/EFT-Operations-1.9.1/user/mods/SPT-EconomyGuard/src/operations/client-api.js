@@ -130,10 +130,11 @@ class OperationsClientApi {
             minPlayers: mission ? mission.minPlayers : 1,
             maxPlayers: mission ? mission.maxPlayers : group.members.length,
             readyCount,
-            members: group.members.map((member, index) => ({
+            isLeader: !!group.members.length && String(group.members[0].profileId) === String(viewerProfileId),
+            leaderName: group.members.length ? group.members[0].displayName : '',
+            members: group.members.map(member => ({
                 displayName: member.displayName,
                 ready: member.ready === true,
-                isLeader: index === 0 && String(member.profileId) === String(viewerProfileId),
                 acceptedAt: member.acceptedAt,
                 result: member.result
             })),
