@@ -1,4 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Intentional TFM choice for this pinned installation:
+    EFT UnityPlayer is 2022.3.43f1 and its Managed folder contains netstandard.dll,
+    but the selected BepInEx 5.4.22.0, Fika.Core 1.2.3.0 and SPT Common 3.11.1.0
+    assemblies declare .NETFramework v4.7.1. net472 is the compatible higher
+    framework target for those references. Re-evaluate only if the pinned runtime
+    or dependency set changes; verify with a Windows build and an in-game load test.
+  -->
   <PropertyGroup>
     <TargetFramework>net472</TargetFramework>
     <LangVersion>7.3</LangVersion>
