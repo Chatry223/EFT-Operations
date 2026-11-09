@@ -1,0 +1,87 @@
+name: EFT Operations CI and Client Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'user/mods/SPT-EconomyGuard/**'
+      - 'client/**'
+      - '.github/workflows/build-client.yml'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eft-operations-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server-tests:
+    name: SPT server checks and tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Verify source is present
+        run: |
+          test -f user/mods/SPT-EconomyGuard/package.json || {
+            echo "::error::Source tree is not present. Import EFT-Operations-1.9.1 source bundle first."
+            exit 1
+          }
+      - name: Install dependencies (if lockfile exists)
+        working-directory: user/mods/SPT-EconomyGuard
+        run: |
+          if [ -f package-lock.json ]; then npm ci; fi
+      - name: Static checks
+        working-directory: user/mods/SPT-EconomyGuard
+        run: npm run check
+      - name: Unit tests
+        working-directory: user/mods/SPT-EconomyGuard
+        run: npm test
+
+  client-build:
+    name: Build BepInEx client plugin (Windows + EFT assemblies)
+    # Configure a self-hosted Windows runner on the machine that has the
+    # user's legally installed EFT / BepInEx assemblies.
+    runs-on: [self-hosted, Windows, X64, eft-build]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate local EFT assembly paths
+        shell: pwsh
+        run: |
+          if (-not $env:EFT_MANAGED_DIR -or -not (Test-Path (Join-Path $env:EFT_MANAGED_DIR 'UnityEngine.CoreModule.dll'))) {
+            throw 'Set repository Actions variable EFT_MANAGED_DIR to EFT_Data/Managed.'
+          }
+          if (-not $env:BEPINEX_CORE_DIR -or -not (Test-Path (Join-Path $env:BEPINEX_CORE_DIR 'BepInEx.dll'))) {
+            throw 'Set repository Actions variable BEPINEX_CORE_DIR to BepInEx/core.'
+          }
+          if (-not (Test-Path 'client/EFT.Operations.Client/EFT.Operations.Client.csproj')) {
+            throw 'Client source project is missing from the repository.'
+          }
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+      - name: Build Release DLL
+        shell: pwsh
+        run: |
+          msbuild client/EFT.Operations.Client/EFT.Operations.Client.csproj /m /p:Configuration=Release /p:ManagedDir="$env:EFT_MANAGED_DIR" /p:BepInExDir="$env:BEPINEX_CORE_DIR" /verbosity:minimal
+      - name: Verify output
+        shell: pwsh
+        run: |
+          $dll = Get-ChildItem -Path client/EFT.Operations.Client/bin/Release -Filter EFTOperations.Client.dll -Recurse | Select-Object -First 1
+          if (-not $dll) { throw 'Build reported success but EFTOperations.Client.dll was not found.' }
+          Get-FileHash $dll.FullName -Algorithm SHA256 | Format-List | Out-File build-report.txt
+          Copy-Item $dll.FullName ./EFTOperations.Client.dll
+      - name: Upload client DLL and report
+        uses: actions/upload-artifact@v4
+        with:
+          name: EFTOperations-Client-${{ github.sha }}
+          path: |
+            EFTOperations.Client.dll
+            build-report.txt
+          if-no-files-found: error
+          retention-days: 30
