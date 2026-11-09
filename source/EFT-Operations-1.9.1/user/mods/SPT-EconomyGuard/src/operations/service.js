@@ -393,8 +393,19 @@ class OperationsService {
         const defaults = [{ name: 'Recruit', points: 0 }, { name: 'Private', points: 1000 }, { name: 'Corporal', points: 3000 }, { name: 'Sergeant', points: 7000 }, { name: 'Lieutenant', points: 15000 }, { name: 'Captain', points: 30000 }, { name: 'Major', points: 50000 }, { name: 'Colonel', points: 80000 }, { name: 'General', points: 120000 }];
         const configured = Array.isArray(this.options.ranks) ? this.options.ranks.filter(r => r && typeof r.name === 'string' && r.name.trim() && Number.isSafeInteger(Number(r.points)) && Number(r.points) >= 0).map(r => ({ name: r.name.trim().slice(0, 40), points: Number(r.points) })) : [];
         const ranks = configured.length ? configured : defaults;
-        const rank = ranks.filter(r => stats.points >= r.points).sort((a,b) => b.points-a.points)[0] || ranks.reduce((a,b) => a.points <= b.points ? a : b);
-        return { profileId, ...clone(stats), rank: rank.name };
+        const orderedRanks = ranks.slice().sort((a, b) => a.points - b.points);
+        const rank = orderedRanks.filter(r => stats.points >= r.points).pop() || orderedRanks[0];
+        const nextRank = orderedRanks.find(r => r.points > stats.points) || null;
+        const pointsToNextRank = nextRank ? Math.max(0, nextRank.points - stats.points) : 0;
+        const rankProgressPercent = nextRank
+            ? Math.max(0, Math.min(100, Math.round(((stats.points - rank.points) / Math.max(1, nextRank.points - rank.points)) * 100)))
+            : 100;
+        return {
+            profileId, ...clone(stats), rank: rank.name,
+            nextRank: nextRank ? nextRank.name : '',
+            nextRankPoints: nextRank ? nextRank.points : 0,
+            pointsToNextRank, rankProgressPercent
+        };
     }
 }
 
