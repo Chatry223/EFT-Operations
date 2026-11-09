@@ -400,7 +400,7 @@ class Fika243OperationsAdapter {
         return rows.reverse();
     }
 
-    getStatus() { return { ...this.status, fikaClientPluginVersion: '1.2.3', fikaClientPluginEvidence: 'BepInEx/config/com.fika.core.cfg (Last Version)', operationsClientPluginVersion: '0.1.0' }; }
+    getStatus() { return { ...this.status, fikaClientTargetVersion: '2.4.3', fikaClientConfigLastVersion: '1.2.3', fikaClientConfigEvidence: 'BepInEx/config/com.fika.core.cfg (Hidden.Last Version; not authoritative)', operationsClientPluginVersion: '0.1.0' }; }
 }
 
 module.exports = { Fika243OperationsAdapter, EXPECTED_FIKA_VERSION };
