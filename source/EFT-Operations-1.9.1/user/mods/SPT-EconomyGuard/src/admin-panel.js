@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const crypto = require('crypto');
+const { SvmArchiveScanner } = require('./svm-archive-scan');
 
 const PROFILE_RE = /^[a-f0-9]{24}$/i;
 const TPL_RE = /^[a-f0-9]{24}$/i;
@@ -614,6 +615,10 @@ class AdminPanelServer {
             if (req.method === 'GET' && pathname === '/api/online') return this.send(res, 200, this.getOnlinePlayers());
             if (req.method === 'GET' && pathname === '/api/board') return this.send(res, 200, this.requireBoard().getAdminState());
             if (req.method === 'GET' && pathname === '/api/svm') return this.send(res, 200, this.svmConfig ? this.svmConfig.getStatus() : { installed: false, available: false, reason: 'SVM_SERVICE_UNAVAILABLE' });
+            if (req.method === 'GET' && pathname === '/api/svm/archives') {
+                const serverRoot = path.resolve(this.modDir, '..', '..', '..');
+                return this.send(res, 200, new SvmArchiveScanner(serverRoot).scan());
+            }
             if (req.method === 'GET' && pathname === '/api/operations') return this.send(res, 200, this.requireOperations().list());
             if (req.method === 'GET' && pathname === '/api/operations/awards') {
                 const operations = this.requireOperations();
