@@ -105,6 +105,7 @@ async function testFika243LifecycleAndAcceptedLootEvidence() {
     assert.strictEqual(raid.evidenceTrust, 'untrusted_client_report');
     assert.strictEqual(raid.rewardEligible, false);
     assert.strictEqual(raid.reportedLootByTpl[lootTpl], 2);
+    assert.strictEqual(raid.acceptedLootByTpl[lootTpl], 2);
     const start = events.find(x => x.type === 'fika_raid_start');
     assert.strictEqual(start.evidenceTrust, 'fika_server_lifecycle');
     const ended = events.find(x => x.type === 'fika_match_end');
