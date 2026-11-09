@@ -6,7 +6,7 @@ const path = require('path');
 const MAX_ARCHIVES = 500;
 const MAX_ENTRIES_PER_ARCHIVE = 20000;
 const MAX_ARCHIVE_BYTES = 512 * 1024 * 1024;
-const TARGET = /(?:^|\/)(?:loader\.json|v[1-9][0-9]*\.json)$/i;
+const TARGET = /(?:^|\/)(?:Loader\/loader\.json|Presets\/v[1-9][0-9]*\.json)$/i;
 
 function findEndRecord(buffer) {
     const min = Math.max(0, buffer.length - 22 - 0xffff);
@@ -67,7 +67,7 @@ class SvmArchiveScanner {
         const errors = [];
         const stack = [this.serverRoot];
         const seen = new Set();
-        while (stack.length && archives.length < this.maxArchives) {
+        while (stack.length && seen.size < this.maxArchives) {
             const dir = stack.pop();
             let entries;
             try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
@@ -93,7 +93,7 @@ class SvmArchiveScanner {
                 } catch (err) {
                     errors.push({ path: path.relative(this.serverRoot, full).split(path.sep).join('/'), error: err.message || 'ZIP_SCAN_FAILED' });
                 }
-                if (archives.length >= this.maxArchives) break;
+                if (seen.size >= this.maxArchives) break;
             }
         }
         return { scannedArchives: seen.size, matchingArchives: archives.length, truncated: stack.length > 0 || seen.size >= this.maxArchives, archives, errors: errors.slice(0, 100) };
