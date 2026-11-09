@@ -177,8 +177,12 @@ namespace EFTOperations.Client
                 foreach (UnityEngine.Object component in components)
                 {
                     if (component == null) continue;
-                    object fikaUi = ReadMember(component, "_fikaMatchMakerUi");
-                    object raidSettings = ReadMember(component, "RaidSettings");
+                    // Fika client 1.2.3 (the user's installed build) uses the lower-camel
+                    // fields `fikaMatchMakerUi` and `raidSettings`. Later Fika builds renamed
+                    // these to `_fikaMatchMakerUi` / `RaidSettings`; support both without
+                    // compiling against Fika's private implementation types.
+                    object fikaUi = ReadMember(component, "fikaMatchMakerUi") ?? ReadMember(component, "_fikaMatchMakerUi");
+                    object raidSettings = ReadMember(component, "raidSettings") ?? ReadMember(component, "RaidSettings");
                     if (fikaUi == null || raidSettings == null) continue;
 
                     object selectedLocation = ReadMember(raidSettings, "SelectedLocation");
