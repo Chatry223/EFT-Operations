@@ -575,7 +575,7 @@ class AdminPanelServer {
                 const events = this.fikaOperationsAdapter && typeof this.fikaOperationsAdapter.getRecentEvents === 'function'
                     ? this.fikaOperationsAdapter.getRecentEvents(500) : [];
                 return this.send(res, 200, queue.map(group => {
-                    const mission = (operations.state.missions || []).find(item => item.id === group.missionId);
+                    const mission = ((operations.state && operations.state.missions) || []).find(item => item.id === group.missionId);
                     const fikaEvidence = events.filter(event => event.groupId
                         ? String(event.groupId) === String(group.id)
                         : (!!group.raidId && String(event.matchId || '') === String(group.raidId)));
