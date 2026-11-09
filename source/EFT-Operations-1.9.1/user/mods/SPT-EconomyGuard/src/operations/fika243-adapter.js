@@ -238,28 +238,34 @@ class Fika243OperationsAdapter {
         }
         const adapter = this;
 
-        if (typeof target.startLocalRaid === 'function' && !target.__egFika243StartLifecycleHook) {
+        // Fika registers its own afterResolution callback with frequency=Always and
+        // reassigns these instance methods. Re-wrap whenever its current method differs
+        // from our wrapper; a one-time boolean flag would silently lose the hook.
+        if (target.startLocalRaid !== target.__egFika243StartLifecycleWrapper) {
             const originalStart = target.startLocalRaid;
-            target.startLocalRaid = async function (sessionId, request, ...rest) {
+            const wrappedStart = async function (sessionId, request, ...rest) {
                 const result = await originalStart.call(this, sessionId, request, ...rest);
                 safe(() => adapter.captureRaidStart(sessionId, request, result));
                 return result;
             };
-            Object.defineProperty(target, '__egFika243StartLifecycleHook', { value: true, enumerable: false });
+            target.__egFika243StartLifecycleWrapper = wrappedStart;
+            target.startLocalRaid = wrappedStart;
         }
 
-        if (!target.__egFika243LifecycleHook) {
+        if (target.endLocalRaid !== target.__egFika243EndLifecycleWrapper) {
             const originalEnd = target.endLocalRaid;
-            target.endLocalRaid = async function (sessionId, request, ...rest) {
+            const wrappedEnd = async function (sessionId, request, ...rest) {
                 let result;
                 try { result = await originalEnd.call(this, sessionId, request, ...rest); }
                 finally { safe(() => adapter.captureRaidEnd(sessionId, request)); }
                 return result;
             };
-            Object.defineProperty(target, '__egFika243LifecycleHook', { value: true, enumerable: false });
+            target.__egFika243EndLifecycleWrapper = wrappedEnd;
+            target.endLocalRaid = wrappedEnd;
         }
 
-        this.status.lifecycleHook = !!(target.__egFika243StartLifecycleHook && target.__egFika243LifecycleHook);
+        this.status.lifecycleHook = target.startLocalRaid === target.__egFika243StartLifecycleWrapper
+            && target.endLocalRaid === target.__egFika243EndLifecycleWrapper;
         return this.status.lifecycleHook;
     }
 
