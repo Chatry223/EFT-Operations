@@ -5,7 +5,7 @@ EFT Operations reads the active SVM preset from the installed server mod folder:
 - `user/mods/[SVM] Server Value Modifier/Loader/loader.json`
 - `user/mods/[SVM] Server Value Modifier/Presets/<active preset>.json`
 
-The editor is intentionally version-gated to SVM `1.11.1` with SPT target `3.11.x`, matching the supplied server package. It does not change the active preset selection and does not rewrite unrelated JSON keys.
+The editor is intentionally version-gated to SVM `1.11.1` with SPT target `3.11.x`, matching the supplied server package. It does not change the active preset selection and does not rewrite unrelated JSON keys. The panel also reads `Traders.EnableTraders` and `Items.EnableItems` so it can distinguish stored values from settings that SVM will actually apply.
 
 ## Admin panel
 
@@ -18,7 +18,7 @@ The page reads and displays:
 - `Items.ItemPriceMult`, a separate global item-price setting (not the same as trader markup).
 - Fence price/preset multipliers and stock-time range.
 
-For the supplied `v6` preset, the inspected values include Skier markup `20`, Prapor `25`, Therapist `15`, Fence `17`, Mechanic `34`, Ragman `27`, Jaeger `33`, Peacekeeper `0`, and Ref `56`. These are the file's current values at audit time, not enforced defaults.
+For the supplied `v6` preset, the inspected values include Skier markup `20`, Prapor `25`, Therapist `15`, Fence `17`, Mechanic `34`, Ragman `27`, Jaeger `33`, Peacekeeper `0`, and Ref `56`. These are the file's current values at audit time, not enforced defaults. SVM applies each TraderMarkup value by setting the trader loyalty-level `buy_price_coef` to `100 - value`; the UI labels this as the raw SVM value to avoid implying it is a direct price multiplier. The supplied preset has `Traders.EnableTraders=true`, but `Items.EnableItems=false`, so `ItemPriceMult=1` is currently stored but the Items section is inactive.
 
 ## Safe write behavior
 
