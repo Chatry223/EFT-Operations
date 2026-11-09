@@ -205,8 +205,8 @@ class OperationsService {
         if (event.evidenceTrust !== 'server_verified' || !['fika-server-adapter', 'spt-server-adapter'].includes(String(event.source || ''))) {
             throw new Error('UNTRUSTED_RAID_EVENT');
         }
-        const eventMap = text(event.map, 40, 'EVENT_MAP').toLowerCase();
-        if (eventMap && eventMap !== String(m.map || '').toLowerCase()) throw new Error('RAID_EVENT_MAP_MISMATCH');
+        const eventMap = text(event.map, 40, 'EVENT_MAP', true).toLowerCase();
+        if (eventMap !== String(m.map || '').toLowerCase()) throw new Error('RAID_EVENT_MAP_MISMATCH');
         const amount = integer(event.amount, 1, 1000, 'EVENT_AMOUNT', 1);
         for (const objective of m.objectives) {
             if (objective.type !== event.type) continue;
