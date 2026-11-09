@@ -28,8 +28,10 @@ The version-gated adapter activates only when the sibling `fika-server/package.j
 - Observes `FikaMatchService.addPlayerToMatch`. An Operations group is linked only after all accepted, Ready members appear in the same Fika match and the match map equals the mission map. It then calls `OperationsService.startGroup` to move the group into `in_raid`.
 - Observes `FikaMatchService.endMatch` and direct `deleteMatch` paths while the roster is still available, then calls `OperationsService.finishGroup` with roster/death flags and matching raid-end reports. A per-match dedupe guard prevents double finalization when `endMatch` calls `deleteMatch`; a reused server ID is reset by `createMatch`. The group moves to `review` with `verified: false`.
 - Observes SPT/Fika `LocationLifecycleService.endLocalRaid`, retaining the client-supplied raid-end fields for review with the trust label `untrusted_client_report`.
+- At raid start, snapshots the mission member's PMC/Scav inventory. At raid end, compares new `SpawnedInSession` items against the pre-raid snapshot and the profile retained by SPT after its post-raid processing; only items still present in the SPT profile are listed as accepted loot evidence.
+- Captures client-reported `Stats.Eft.Victims`, session counters and quest-item reports. Victim profile IDs are cross-checked against authenticated Fika player-death reports where available; the admin UI displays names/roles and corroboration without exposing profile IDs.
 - Stores a bounded Fika evidence stream in `SPT-EconomyGuard-Data/operations/fika-events.jsonl`.
-- No automatic points or item rewards are issued from client-originated extraction data or match-end lifecycle evidence.
+- All kill/loot/exit reports remain untrusted or corroborated client evidence, not server-verified objective progress. No automatic points or item rewards are issued from these records.
 - The protected admin Fika Link tab shows observer state, hook status, event records, and evidence trust labels.
 
 **Important objective-progress gap:** the production adapter does not yet call `OperationsService.recordRaidEvent`. The current test manually injects a synthetic extract event to test the service; it does not prove live objective telemetry. Therefore the HUD can display objectives, but real kill/loot/visit/extract counters do not yet advance automatically.
