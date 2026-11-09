@@ -27,19 +27,22 @@ jobs:
       source_ready: ${{ steps.detect.outputs.source_ready }}
     steps:
       - uses: actions/checkout@v4
-      - name: Detect imported source
+      - name: Detect source layout
         id: detect
         shell: bash
         run: |
           if [ -f user/mods/SPT-EconomyGuard/package.json ] && [ -f client/EFT.Operations.Client/EFT.Operations.Client.csproj ]; then
             echo "source_ready=true" >> "$GITHUB_OUTPUT"
-            echo "Expanded source trees are present."
+            echo "Source is already at repository root."
+          elif [ -f source/EFT-Operations-1.9.1/user/mods/SPT-EconomyGuard/package.json ] && [ -f source/EFT-Operations-1.9.1/client/EFT.Operations.Client/EFT.Operations.Client.csproj ]; then
+            echo "source_ready=true" >> "$GITHUB_OUTPUT"
+            echo "Uploaded source folder detected."
           elif [ -f source/EFT-Operations-1.9.1.zip ]; then
             echo "source_ready=true" >> "$GITHUB_OUTPUT"
-            echo "Source archive is present; downstream jobs will expand it."
+            echo "Uploaded source archive detected."
           else
             echo "source_ready=false" >> "$GITHUB_OUTPUT"
-            echo "Upload source/EFT-Operations-1.9.1.zip or commit the expanded source tree."
+            echo "Expected source folder or archive was not found."
           fi
 
   server-tests:
@@ -49,10 +52,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Expand source bundle when needed
+      - name: Prepare source tree
         shell: bash
         run: |
-          if [ ! -f user/mods/SPT-EconomyGuard/package.json ]; then
+          if [ -f source/EFT-Operations-1.9.1/user/mods/SPT-EconomyGuard/package.json ]; then
+            cp -a source/EFT-Operations-1.9.1/. .
+          elif [ -f source/EFT-Operations-1.9.1.zip ]; then
             unzip -q source/EFT-Operations-1.9.1.zip -d .
           fi
           test -f user/mods/SPT-EconomyGuard/package.json
@@ -81,14 +86,19 @@ jobs:
       BEPINEX_CORE_DIR: ${{ vars.BEPINEX_CORE_DIR }}
     steps:
       - uses: actions/checkout@v4
-      - name: Expand source bundle when needed
+      - name: Prepare source tree
         shell: pwsh
         run: |
           if (-not (Test-Path 'client/EFT.Operations.Client/EFT.Operations.Client.csproj')) {
-            Expand-Archive -LiteralPath 'source/EFT-Operations-1.9.1.zip' -DestinationPath '.' -Force
+            $nested = 'source/EFT-Operations-1.9.1'
+            if (Test-Path (Join-Path $nested 'client/EFT.Operations.Client/EFT.Operations.Client.csproj')) {
+              Copy-Item (Join-Path $nested '*') '.' -Recurse -Force
+            } elseif (Test-Path 'source/EFT-Operations-1.9.1.zip') {
+              Expand-Archive -LiteralPath 'source/EFT-Operations-1.9.1.zip' -DestinationPath '.' -Force
+            }
           }
           if (-not (Test-Path 'client/EFT.Operations.Client/EFT.Operations.Client.csproj')) {
-            throw 'Client source project is missing after source archive extraction.'
+            throw 'Client source project is missing after source preparation.'
           }
       - name: Validate local EFT assembly paths
         shell: pwsh
