@@ -564,14 +564,16 @@ namespace EFTOperations.Client
         {
             if (fikaKillHookInstalled) return true;
             Type coopPlayerType = FindLoadedType("Fika.Core.Coop.Players.CoopPlayer");
-            if (coopPlayerType == null || coopPlayerType.BaseType == null) return false;
-            // EFT 0.16.1.3.35392 exposes OnBeenKilledByAggressor(IPlayer, ...); its first argument is the aggressor.
-            // Patch the EFT Player base implementation, not only Fika's CoopPlayer override, so host-observed AI deaths are covered.
-            Type playerType = coopPlayerType.BaseType;
+            Type playerType = FindLoadedType("EFT.Player");
+            if (coopPlayerType == null || playerType == null || !playerType.IsAssignableFrom(coopPlayerType)) return false;
+            // EFT 0.16.1.3.35392 exposes OnBeenKilledByAggressor(EFT.IPlayer, ...); arg[0] is the aggressor.
+            // Patch the exact EFT base implementation so host-observed AI deaths are covered.
             MethodInfo target = null;
             foreach (MethodInfo candidate in playerType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
             {
-                if (candidate.Name == "OnBeenKilledByAggressor" && candidate.GetParameters().Length == 4)
+                ParameterInfo[] parameters = candidate.GetParameters();
+                if (candidate.Name == "OnBeenKilledByAggressor" && parameters.Length == 4
+                    && parameters[0].ParameterType.FullName == "EFT.IPlayer")
                 {
                     target = candidate;
                     break;
@@ -581,7 +583,7 @@ namespace EFTOperations.Client
             if (target == null || postfix == null) return false;
             try
             {
-                fikaHarmony = new Harmony("com.eft.operations.client.fika-host-evidence");
+                if (fikaHarmony == null) fikaHarmony = new Harmony("com.eft.operations.client.fika-host-evidence");
                 fikaHarmony.Patch(target, null, new HarmonyMethod(postfix), null, null);
                 fikaKillHookInstalled = true;
                 Logger.LogInfo("Fika 1.2.3 host kill telemetry hook installed on EFT Player.OnBeenKilledByAggressor.");
