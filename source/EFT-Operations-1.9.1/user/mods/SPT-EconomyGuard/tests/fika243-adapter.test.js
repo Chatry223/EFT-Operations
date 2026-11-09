@@ -14,7 +14,7 @@ function makeContainer(instances) {
   };
 }
 
-(function testFika243ReadOnlyLifecycleCapture() {
+(async function testFika243ReadOnlyLifecycleCapture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'eg-fika243-'));
   const modDir = path.join(root, 'user', 'mods', 'SPT-EconomyGuard');
   const fikaDir = path.join(root, 'user', 'mods', 'fika-server');
@@ -28,14 +28,16 @@ function makeContainer(instances) {
     endMatch(matchId, reason) { this.ended = [matchId, reason]; }
   };
   const saveServer = { getProfile: () => ({ characters: { pmc: { _id: 'pmc-profile-id' }, scav: { _id: 'scav-profile-id' } } }) };
-  const lifecycleProto = { endLocalRaid(sessionId, request) { this.originalCalled = true; return 'original-result'; } };
-  const lifecycle = Object.create(lifecycleProto);
+  const lifecycle = {
+    async startLocalRaid() { return 'start-result'; },
+    async endLocalRaid() { this.originalCalled = true; return 'original-result'; }
+  };
   const container = makeContainer({ SaveServer: saveServer, FikaMatchService: matchService, LocationLifecycleService: lifecycle });
   const adapter = new Fika243OperationsAdapter({ modDir, operations, logger: { info() {}, warn() {}, debug() {} } });
   assert.strictEqual(adapter.install(container), true);
   assert.strictEqual(adapter.getStatus().serverVersion, '2.4.3');
   assert.strictEqual(adapter.getStatus().fikaClientTargetVersion, '1.2.3');
-  const result = lifecycleProto.endLocalRaid.call(lifecycle, 'session-id', { serverId: 'bigmap.pmc.123', results: { result: 'Survived', exitName: 'ZB-1011', playTime: 600 } });
+  const result = await lifecycle.endLocalRaid('session-id', { serverId: 'bigmap.pmc.123', results: { result: 'Survived', exitName: 'ZB-1011', playTime: 600 } });
   assert.strictEqual(result, 'original-result');
   assert.strictEqual(lifecycle.originalCalled, true);
   matchService.endMatch('fika-match-1', 'host shutdown');
@@ -49,7 +51,7 @@ function makeContainer(instances) {
   const ended = events.find(x => x.type === 'fika_match_end');
   assert.deepStrictEqual(ended.players.sort(), ['other-pmc-id', 'pmc-profile-id']);
   fs.rmSync(root, { recursive: true, force: true });
-})();
+})().catch(error => { console.error(error); process.exitCode = 1; });
 
 (function testUnsupportedVersionDoesNotPatch() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'eg-fika-mismatch-'));
