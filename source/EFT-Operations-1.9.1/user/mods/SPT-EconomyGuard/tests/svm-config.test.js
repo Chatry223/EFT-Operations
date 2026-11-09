@@ -68,6 +68,17 @@ function fixture() {
     } finally { fs.rmSync(f.root, { recursive: true, force: true }); }
 })();
 
+(function testReadOnlyWhenSvmVersionIsNotAudited() {
+    const f = fixture();
+    try {
+        writeJson(path.join(f.svmDir, 'package.json'), { version: '1.12.0', sptVersion: '3.11.x' });
+        const status = f.service.getStatus();
+        assert.strictEqual(status.available, true);
+        assert.strictEqual(status.compatible, false);
+        assert.throws(() => f.service.update({ traderMarkup: { Skier: 21 } }), /SVM_VERSION_NOT_VERIFIED/);
+    } finally { fs.rmSync(f.root, { recursive: true, force: true }); }
+})();
+
 (function testRejectsUnknownTraderAndInvalidFenceRangeWithoutWriting() {
     const f = fixture();
     try {
