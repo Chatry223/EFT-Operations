@@ -34,7 +34,7 @@ assert.equal(matchEvents[0].rewardEligible, false, 'a match-end hook alone must 
 
 // A raid-end request is client-originated. Preserve it for review, but mark it untrusted.
 adapter.services.saveServer = { getProfile() { return { characters: { pmc: { _id: 'abcdef0123456789abcdef01', Info: { Nickname: 'pmc-name' } }, scav: { _id: 'abcdef0123456789abcdef02', Info: { Nickname: 'scav-name' } } } }; } };
-adapter.services.fikaMatchService = { getMatchIdByProfile() { return 'match-1'; } };
+adapter.services.fikaMatchService = { getMatchIdByProfile() { return 'match-1'; }, getMatch(id) { return id === 'match-1' ? { hostUsername: 'pmc-name' } : null; } };
 const raidEnd = adapter.captureRaidEnd('session-1', { serverId: 'woods.123', results: { result: 'Survived', exitName: 'Outskirts', playTime: 1200 } });
 assert.equal(raidEnd.matchId, 'match-1');
 assert.equal(raidEnd.profileId, 'abcdef0123456789abcdef01');
@@ -65,10 +65,11 @@ const fakeRaidCallbacks = {
 assert.equal(adapter.patchRaidCallbacks(fakeRaidCallbacks), true);
 assert.equal(fakeRaidCallbacks.handleRaidCreate('', { serverId: 'match-1', hostUsername: 'pmc-name' }, 'session-1'), 'created');
 assert.equal(fakeRaidCallbacks.handleRaidLeave('', { serverId: 'match-1', profileId: 'abcdef0123456789abcdef02' }, 'session-1'), 'left');
-assert.equal(acceptedRaidCalls, 2);
+assert.equal(fakeRaidCallbacks.handleRaidLeave('', { serverId: 'match-1', profileId: 'match-1' }, 'session-1'), 'left', 'host sentinel must be authenticated using Fika match host identity');
+assert.equal(acceptedRaidCalls, 3);
 assert.throws(() => fakeRaidCallbacks.handleRaidCreate('', { serverId: 'match-2', hostUsername: 'someone-else' }, 'session-1'), /FIKA_HOST_SESSION_IDENTITY_MISMATCH/);
 assert.throws(() => fakeRaidCallbacks.handleRaidLeave('', { serverId: 'match-1', profileId: 'abcdef0123456789abcdef99' }, 'session-1'), /FIKA_SESSION_PROFILE_MISMATCH/);
-assert.equal(acceptedRaidCalls, 2, 'spoofed create/leave requests must be rejected before Fika mutates matches');
+assert.equal(acceptedRaidCalls, 3, 'spoofed create/leave requests must be rejected before Fika mutates matches');
 
 // Exact Fika 2.4.3 lifecycle simulation: bind a ready operation group only
 // after all mission members have joined the same map/match, then create a review
