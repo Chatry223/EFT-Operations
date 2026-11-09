@@ -117,7 +117,14 @@ class SptEconomyGuardMod {
         }
         this.guard.log('info', `Data directory: ${this.guard.storage.baseDir}`);
         this.guard.log('info', `Recognized money TPL count: ${this.guard.moneyTpls.size} (RUB/USD/EUR/GP plus discovered custom currencies)`);
-        this.guard.log('warn', 'Fika Item Sending is not hooked by this build. Disable allowItemSending in fika.jsonc to close that separate transfer route.');
+        const fikaItemSending = this.fikaOperationsAdapter && this.fikaOperationsAdapter.getStatus().itemSending;
+        if (fikaItemSending && fikaItemSending.configured && fikaItemSending.enabled === false) {
+            this.guard.log('info', 'Fika Item Sending is disabled in fika.jsonc; the separate item-transfer route is currently closed.');
+        } else if (fikaItemSending && fikaItemSending.configured && fikaItemSending.enabled === true) {
+            this.guard.log('warn', 'Fika Item Sending is enabled but is not hooked by EconomyGuard. Disable allowItemSending in fika.jsonc until a version-specific transfer hook is implemented and tested.');
+        } else {
+            this.guard.log('warn', 'Could not verify Fika allowItemSending in fika.jsonc. EconomyGuard does not monitor that transfer route; verify that the setting is false.');
+        }
         this.guard.log('info', 'Transaction callbacks are instrumented at prototype scope so already-created SPT DI instances are covered.');
     }
 
