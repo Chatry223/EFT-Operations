@@ -576,11 +576,57 @@ class AdminPanelServer {
                     ? this.fikaOperationsAdapter.getRecentEvents(500) : [];
                 return this.send(res, 200, queue.map(group => {
                     const mission = (operations.state.missions || []).find(item => item.id === group.missionId);
+                    const fikaEvidence = events.filter(event => event.groupId
+                        ? String(event.groupId) === String(group.id)
+                        : (!!group.raidId && String(event.matchId || '') === String(group.raidId)));
+                    const raidEnds = fikaEvidence.filter(event => event.type === 'player_raid_end');
+                    const victims = raidEnds.flatMap(event => event.reportedVictims || []);
+                    const normalizeRole = role => {
+                        const value = String(role || '').toLowerCase();
+                        if (value.startsWith('pmc')) return 'pmc';
+                        if (value === 'assault' || value === 'marksman' || value.includes('scav')) return 'scav';
+                        if (value.startsWith('boss')) return 'boss';
+                        if (value.includes('follower')) return 'boss_guard';
+                        if (value.includes('raider')) return 'raider';
+                        if (value.includes('rogue')) return 'rogue';
+                        if (value.includes('cultist')) return 'cultist';
+                        return value;
+                    };
+                    const objectiveEvidence = (mission && mission.objectives || []).map(objective => {
+                        const target = String(objective.target || '').toLowerCase();
+                        let reportedCount = 0;
+                        if (objective.type === 'kill' || objective.type === 'kill_type') {
+                            reportedCount = victims.filter(victim => !target || normalizeRole(victim.role) === target
+                                || String(victim.role || '').toLowerCase() === target).length;
+                        } else if (objective.type === 'collect') {
+                            reportedCount = raidEnds.reduce((sum, event) => sum + Number((event.reportedLootByTpl || {})[objective.target] || 0), 0);
+                        } else if (objective.type === 'extract' || objective.type === 'survive') {
+                            const seen = new Set();
+                            for (const event of raidEnds) {
+                                const exitMatches = !target || String(event.exitName || '').toLowerCase() === target;
+                                if (exitMatches && String(event.exitStatus || '').toLowerCase() === 'survived') seen.add(String(event.profileId || event.displayName || 'unknown'));
+                            }
+                            reportedCount = seen.size;
+                        } else if (objective.type === 'raid_complete') {
+                            reportedCount = fikaEvidence.filter(event => event.type === 'fika_match_end').length;
+                        }
+                        const verifiedCount = Number((group.progress || {})[objective.id] || 0);
+                        return {
+                            objectiveId: objective.id,
+                            type: objective.type,
+                            target: objective.target || '',
+                            requiredCount: objective.count,
+                            required: objective.required !== false,
+                            verifiedCount,
+                            reportedCount,
+                            evidenceStatus: verifiedCount >= objective.count ? 'server_verified' : reportedCount > 0 ? 'client_report_only' : 'no_evidence'
+                        };
+                    });
                     return {
                         ...group,
                         missionTitle: mission ? mission.title : group.missionId,
-                        fikaEvidence: events.filter(event => String(event.groupId || '') === String(group.id)
-                            || (!!group.raidId && String(event.matchId || '') === String(group.raidId)))
+                        fikaEvidence,
+                        objectiveEvidence
                     };
                 }));
             }
