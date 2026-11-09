@@ -498,6 +498,7 @@ class Fika243OperationsAdapter {
         const missionGroup = groups.find(group => ['forming', 'in_raid'].includes(group.state)
             && (group.members || []).some(member => String(member.profileId || '') === identity.profileId));
         if (!missionGroup) return null;
+        if (missionGroup.state === 'in_raid' && missionGroup.raidId && matchId && String(missionGroup.raidId) !== String(matchId)) return null;
         const profile = this.services.saveServer.getProfile(sessionId);
         const characters = object(profile && profile.characters);
         const side = String(object(request).playerSide || object(request).side || 'pmc').toLowerCase();
