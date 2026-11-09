@@ -38,8 +38,8 @@ The public repository intentionally does not contain EFT or BepInEx assemblies. 
 
 - Player identity is resolved server-side from the authenticated SPT session.
 - Ready mission groups are linked to Fika matches only after every accepted member is present in the same map/match. PMC and Scav character IDs are both matched to the same SPT account.
-- Fika's server-side player roster/death state is recorded before match deletion.
-- Client-submitted extraction and raid results remain untrusted. They can populate a manual review record but cannot auto-award.
+- Fika's authenticated registered-player roster is captured before match deletion. Cached death flags originate from player update callbacks and are corroborating, not authoritative proof.
+- Fika player registration/create/leave callbacks are bound to the authenticated SPT session. A player's own death flag and extraction/raid-result report still originate from that client; they can populate a manual review record but cannot auto-award.
 - Manual approval requires an evidence reference and explicit administrator confirmation of objectives and all member extractions.
 - No client route can submit mission progress or award requests.
 
