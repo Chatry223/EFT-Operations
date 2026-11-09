@@ -45,10 +45,18 @@ jobs:
             echo "Expected source folder or archive was not found."
           fi
 
+  dependency-archive-check:
+    name: Verify bundled EFT / BepInEx dependency archives
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify archive integrity, target hashes and Fika config
+        run: python3 source/EFT-Operations-1.9.1/tools/verify-dependency-archives.py
+
   client-build:
     name: Build BepInEx client plugin (Windows + EFT assemblies)
-    needs: source-status
-    if: needs.source-status.outputs.source_ready == 'true' && github.event_name != 'pull_request' && vars.EFT_BUILD_RUNNER_ENABLED == 'true'
+    needs: [source-status, dependency-archive-check]
+    if: needs.source-status.outputs.source_ready == 'true' && needs.dependency-archive-check.result == 'success' && github.event_name != 'pull_request' && vars.EFT_BUILD_RUNNER_ENABLED == 'true'
     runs-on: [self-hosted, Windows, X64, eft-build]
     env:
       EFT_MANAGED_DIR: ${{ vars.EFT_MANAGED_DIR }}
@@ -69,14 +77,58 @@ jobs:
           if (-not (Test-Path 'client/EFT.Operations.Client/EFT.Operations.Client.csproj')) {
             throw 'Client source project is missing after source preparation.'
           }
+      - name: Prepare bundled build dependencies
+        shell: pwsh
+        run: |
+          $managed = $env:EFT_MANAGED_DIR
+          $core = $env:BEPINEX_CORE_DIR
+          if (-not $managed -or -not (Test-Path (Join-Path $managed 'Assembly-CSharp.dll'))) {
+            $dependencyRoot = Join-Path $env:RUNNER_TEMP 'EFT-Operations-Dependencies'
+            $eftRoot = Join-Path $dependencyRoot 'eft'
+            $bepRoot = Join-Path $dependencyRoot 'bepinex'
+            New-Item -ItemType Directory -Path $eftRoot,$bepRoot -Force | Out-Null
+            Expand-Archive -LiteralPath 'source/EscapeFromTarkov_Data.zip' -DestinationPath $eftRoot -Force
+            $managedMatch = Get-ChildItem -LiteralPath $eftRoot -Filter 'Assembly-CSharp.dll' -File -Recurse |
+              Where-Object { Test-Path (Join-Path $_.DirectoryName 'UnityEngine.CoreModule.dll') } |
+              Select-Object -First 1
+            if (-not $managedMatch) { throw 'Assembly-CSharp.dll and UnityEngine.CoreModule.dll were not found in the bundled EFT archive.' }
+            $managed = $managedMatch.DirectoryName
+            if (-not $core -or -not (Test-Path (Join-Path $core 'BepInEx.dll'))) {
+              Expand-Archive -LiteralPath 'source/BepInEx.zip' -DestinationPath $bepRoot -Force
+              $coreMatch = Get-ChildItem -LiteralPath $bepRoot -Filter 'BepInEx.dll' -File -Recurse |
+                Where-Object { Test-Path (Join-Path $_.DirectoryName '0Harmony.dll') } |
+                Select-Object -First 1
+              if (-not $coreMatch) { throw 'BepInEx.dll and 0Harmony.dll were not found in the bundled BepInEx archive.' }
+              $core = $coreMatch.DirectoryName
+            }
+          }
+          if (-not $core -or -not (Test-Path (Join-Path $core 'BepInEx.dll'))) {
+            $dependencyRoot = Join-Path $env:RUNNER_TEMP 'EFT-Operations-Dependencies'
+            $bepRoot = Join-Path $dependencyRoot 'bepinex'
+            New-Item -ItemType Directory -Path $bepRoot -Force | Out-Null
+            Expand-Archive -LiteralPath 'source/BepInEx.zip' -DestinationPath $bepRoot -Force
+            $coreMatch = Get-ChildItem -LiteralPath $bepRoot -Filter 'BepInEx.dll' -File -Recurse |
+              Where-Object { Test-Path (Join-Path $_.DirectoryName '0Harmony.dll') } |
+              Select-Object -First 1
+            if (-not $coreMatch) { throw 'BepInEx.dll and 0Harmony.dll were not found in the bundled BepInEx archive.' }
+            $core = $coreMatch.DirectoryName
+          }
+          if (-not (Test-Path (Join-Path $managed 'UnityEngine.CoreModule.dll'))) { throw 'EFT Managed path is invalid.' }
+          if (-not (Test-Path (Join-Path $core '0Harmony.dll'))) { throw 'BepInEx core path is invalid.' }
+          "EFT_MANAGED_DIR=$managed" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "BEPINEX_CORE_DIR=$core" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "Using EFT Managed: $managed"
+          Write-Host "Using BepInEx core: $core"
       - name: Validate local EFT assembly paths
         shell: pwsh
         run: |
-          if (-not $env:EFT_MANAGED_DIR -or -not (Test-Path (Join-Path $env:EFT_MANAGED_DIR 'UnityEngine.CoreModule.dll'))) {
-            throw 'Set repository Actions variable EFT_MANAGED_DIR to EFT_Data/Managed.'
+          if (-not (Test-Path (Join-Path $env:EFT_MANAGED_DIR 'UnityEngine.CoreModule.dll')) -or
+              -not (Test-Path (Join-Path $env:EFT_MANAGED_DIR 'Assembly-CSharp.dll'))) {
+            throw 'EFT dependency archive did not produce a valid Managed folder.'
           }
-          if (-not $env:BEPINEX_CORE_DIR -or -not (Test-Path (Join-Path $env:BEPINEX_CORE_DIR 'BepInEx.dll'))) {
-            throw 'Set repository Actions variable BEPINEX_CORE_DIR to BepInEx/core.'
+          if (-not (Test-Path (Join-Path $env:BEPINEX_CORE_DIR 'BepInEx.dll')) -or
+              -not (Test-Path (Join-Path $env:BEPINEX_CORE_DIR '0Harmony.dll'))) {
+            throw 'BepInEx dependency archive did not produce a valid core folder.'
           }
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
