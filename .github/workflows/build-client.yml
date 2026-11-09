@@ -19,8 +19,22 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  source-status:
+    name: Source bundle readiness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Report source readiness
+        run: |
+          if [ -f user/mods/SPT-EconomyGuard/package.json ] && [ -f client/EFT.Operations.Client/EFT.Operations.Client.csproj ]; then
+            echo 'Server and client source trees are present.'
+          else
+            echo 'Bootstrap only: import the 1.9.1 source bundle before CI/build jobs can run.'
+          fi
+
   server-tests:
     name: SPT server checks and tests
+    if: hashFiles('user/mods/SPT-EconomyGuard/package.json') != ''
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
