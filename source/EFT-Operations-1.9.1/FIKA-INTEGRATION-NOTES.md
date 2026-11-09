@@ -77,6 +77,9 @@ This is source-level integration and regression coverage, not yet a runtime vali
 
 ## Fika callback trust boundary and identity hardening
 
+Fika 2.4.3 uses `serverId` as a synthetic host player key when creating a match; it is not the host's SPT profile ID. The adapter validates `hostUsername` against the authenticated session's PMC/Scav nickname at raid creation. On host shutdown, Fika sends the same synthetic key in both `serverId` and `profileId`; the adapter verifies the match's registered `hostUsername` against the caller's authenticated session. Normal member leave still requires the supplied profile ID to belong to that session.
+
+
 Inspection of the exact v2.4.3 callbacks showed that `FikaUpdateCallbacks.handleRaidAddPlayer` and `handlePlayerDied` receive the authenticated SPT `sessionID` but the upstream callback ignores it before passing the request profile ID to `FikaMatchService`. The adapter now wraps both callbacks and verifies that the requested PMC or Scav profile ID belongs to the authenticated SPT session. It also wraps `FikaRaidCallbacks.handleRaidCreate` and `handleRaidLeave` to bind the host/member profile ID to that session before a match can be created or a member removed / match ended.
 
 This prevents one logged-in account from adding, marking dead, creating a match as, or removing another account's profile through those Fika callbacks. It does **not** make a player's own death report authoritative: `/fika/update/playerdied` is still initiated by that player's client, and `endLocalRaid` result/extraction fields are client-originated. The Fika match roster is therefore an authenticated registered-player roster, while cached death flags and raid-end results remain corroborating, unverified signals. No automatic reward is issued from them.
