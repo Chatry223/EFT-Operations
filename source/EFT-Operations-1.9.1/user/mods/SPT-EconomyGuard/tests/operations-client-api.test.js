@@ -69,12 +69,12 @@ const hostA = api.acceptMission('', { missionId: hostMission.id }, 'session-a').
 const hostB = api.acceptMission('', { missionId: hostMission.id }, 'session-b').wrapped;
 api.setReady('', { groupId: hostA.group.id, ready: true }, 'session-a');
 api.setReady('', { groupId: hostA.group.id, ready: true }, 'session-b');
-operations.startGroup(hostA.group.id, 'fika-match-001');
+operations.startGroup(hostA.group.id, playerA);
 
-const hostKill = { eventId: 'host-kill-001', groupId: hostA.group.id, matchId: 'fika-match-001',
+const hostKill = { eventId: 'host-kill-001', groupId: hostA.group.id, matchId: playerA,
     killerProfileId: 'abcdef0123456789abcdef10', victimProfileId: 'abcdef0123456789abcdef11',
     victimRole: 'assault', victimSide: 'Savage', victimIsAi: true };
-assert.equal(api.hostRaidEvent('', hostKill, 'session-b').wrapped.error, 'HOST_NOT_ACTIVE_SQUAD_LEADER');
+assert.equal(api.hostRaidEvent('', hostKill, 'session-b').wrapped.error, 'HOST_PROFILE_MISMATCH');
 assert.equal(api.hostRaidEvent('', Object.assign({}, hostKill, { killerProfileId: 'abcdef0123456789abcdef99' }), 'session-a').wrapped.error, 'KILLER_NOT_GROUP_MEMBER');
 assert.equal(api.hostRaidEvent('', Object.assign({}, hostKill, { victimIsAi: false }), 'session-a').wrapped.error, 'INVALID_HOST_KILL_EVIDENCE');
 const firstKill = api.hostRaidEvent('', hostKill, 'session-a').wrapped;
