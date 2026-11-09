@@ -37,6 +37,7 @@ function Write-Log([string]$message) {
     [System.Windows.Forms.Application]::DoEvents()
 }
 function Resolve-ManagedDir([string]$selected) {
+    if ([string]::IsNullOrWhiteSpace($selected)) { return $null }
     $candidates = @($selected,
         (Join-Path $selected 'EscapeFromTarkov_Data\Managed'),
         (Join-Path $selected 'EFT_Data\Managed'),
@@ -49,6 +50,7 @@ function Resolve-ManagedDir([string]$selected) {
     return $null
 }
 function Resolve-BepInExCore([string]$selected) {
+    if ([string]::IsNullOrWhiteSpace($selected)) { return $null }
     $candidates = @($selected, (Join-Path $selected 'BepInEx\core'), (Join-Path $selected 'core'))
     foreach ($candidate in $candidates) {
         if ((Test-Path (Join-Path $candidate 'BepInEx.dll')) -and
