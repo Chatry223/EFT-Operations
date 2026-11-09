@@ -20,8 +20,9 @@ function fixture() {
     writeJson(path.join(svmDir, 'Loader', 'loader.json'), { CurrentlySelectedPreset: 'v6' });
     writeJson(path.join(svmDir, 'Presets', 'v6.json'), {
         PresetNotes: 'fixture',
-        Items: { ItemPriceMult: 1 },
+        Items: { EnableItems: false, ItemPriceMult: 1 },
         Traders: {
+            EnableTraders: true,
             TraderMarkup: { Prapor: 25, Skier: 20, Fence: 17 },
             TraderSell: { Prapor: 6.45, Skier: 5.1 },
             Fence: { PriceMult: 1.2, PresetMult: 2, StockTime_Min: 50, StockTime_Max: 150 }
@@ -41,6 +42,9 @@ function fixture() {
         assert.strictEqual(status.activePreset, 'v6');
         assert.strictEqual(status.traderMarkup.Skier, 20);
         assert.strictEqual(status.itemPriceMultiplier, 1);
+        assert.strictEqual(status.tradersEnabled, true);
+        assert.strictEqual(status.itemsEnabled, false);
+        assert.strictEqual(status.itemPriceMultiplierActive, false);
     } finally { fs.rmSync(f.root, { recursive: true, force: true }); }
 })();
 
