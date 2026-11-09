@@ -107,6 +107,9 @@ function readZipJsonEntries(file, options = {}) {
             if (entry.localOffset + 30 > stat.size) return { name: entry.name, ok: false, error: 'ZIP_LOCAL_HEADER_INVALID' };
             const local = readAt(fd, 30, entry.localOffset);
             if (local.readUInt32LE(0) !== 0x04034b50) return { name: entry.name, ok: false, error: 'ZIP_LOCAL_HEADER_INVALID' };
+            const localFlags = local.readUInt16LE(6);
+            const localMethod = local.readUInt16LE(8);
+            if (localMethod !== entry.method || !!(localFlags & 1) !== !!(entry.flags & 1)) return { name: entry.name, ok: false, error: 'ZIP_LOCAL_METADATA_MISMATCH' };
             const localNameLength = local.readUInt16LE(26);
             const localExtraLength = local.readUInt16LE(28);
             const dataOffset = entry.localOffset + 30 + localNameLength + localExtraLength;
