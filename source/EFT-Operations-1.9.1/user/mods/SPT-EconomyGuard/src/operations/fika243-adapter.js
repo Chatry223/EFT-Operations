@@ -665,6 +665,29 @@ class Fika243OperationsAdapter {
             lootItems.push({ tpl, count: acceptedDeltaCount, itemId: id, acceptedBySpt: true });
             lootByTpl[tpl] = (lootByTpl[tpl] || 0) + acceptedDeltaCount;
         }
+        const missionGroup = activeGroup || (raidSnapshot && this.operations && this.operations.state
+            ? this.operations.state.groups.find(group => group.id === raidSnapshot.groupId && group.state === 'in_raid') : null);
+        const mission = missionGroup && this.operations && typeof this.operations.get === 'function'
+            ? this.operations.get(missionGroup.missionId) : null;
+        if (raidSnapshot && acceptedAccount && missionGroup && mission && this.operations && typeof this.operations.recordRaidEvent === 'function') {
+            for (const [tpl, count] of Object.entries(lootByTpl)) {
+                try {
+                    this.operations.recordRaidEvent(missionGroup.id, {
+                        eventId: `spt-loot-${String(matchId || 'raid')}-${identity.profileId}-${tpl}`,
+                        profileId: identity.profileId,
+                        type: 'collect',
+                        target: tpl,
+                        amount: count,
+                        map: mission.map,
+                        matchId: String(matchId || ''),
+                        source: 'spt-server-adapter',
+                        evidenceTrust: 'server_verified'
+                    });
+                } catch (err) {
+                    this.log('warn', `Could not record SPT-accepted loot objective for ${tpl}: ${err.message}`);
+                }
+            }
+        }
         if (snapshotKey) this.raidSnapshots.delete(snapshotKey);
         const foundInRaidItems = Array.isArray(eftStats.FoundInRaidItems) ? eftStats.FoundInRaidItems.slice(0, 100).map(item => ({
             questId: String(object(item).QuestId || '').slice(0, 40),
