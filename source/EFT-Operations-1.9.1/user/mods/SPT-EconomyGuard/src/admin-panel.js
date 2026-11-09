@@ -11,6 +11,52 @@ const CHANNELS = new Set(['any', 'trader-money', 'trader-barter', 'flea-money', 
 
 function safeCall(fn, fallback) { try { return fn(); } catch (_) { return fallback; } }
 function safeArray(value) { return Array.isArray(value) ? value : []; }
+function sanitizeFikaEvent(event) {
+    const item = event || {};
+    return {
+        eventId: item.eventId || '',
+        type: item.type || '',
+        timestamp: item.timestamp || '',
+        displayName: item.displayName || '',
+        map: item.map || '',
+        playerSide: item.playerSide || '',
+        exitStatus: item.exitStatus || '',
+        exitName: item.exitName || '',
+        playTimeSeconds: item.playTimeSeconds,
+        reason: item.reason || '',
+        evidenceTrust: item.evidenceTrust || '',
+        rewardEligible: item.rewardEligible === true,
+        reportedVictimCount: Number(item.reportedVictimCount || 0),
+        reportedVictims: safeArray(item.reportedVictims).map(victim => ({
+            name: victim.name || '',
+            role: victim.role || '',
+            side: victim.side || '',
+            level: victim.level,
+            distance: victim.distance,
+            weapon: victim.weapon || '',
+            location: victim.location || '',
+            corroboratedByFikaDeathReport: victim.corroboratedByFikaDeathReport === true
+        })),
+        reportedKillCountsByRole: item.reportedKillCountsByRole || {},
+        corroboratedVictimCount: Number(item.corroboratedVictimCount || 0),
+        reportedSessionCounters: safeArray(item.reportedSessionCounters).map(counter => ({
+            key: safeArray(counter.key).map(value => String(value).slice(0, 40)),
+            value: Number(counter.value || 0)
+        })),
+        lootSnapshotAvailable: item.lootSnapshotAvailable === true,
+        serverProfileAvailable: item.serverProfileAvailable === true,
+        reportedLootItemCount: Number(item.reportedLootItemCount || 0),
+        reportedLootByTpl: item.reportedLootByTpl || {},
+        reportedLootItems: safeArray(item.reportedLootItems).map(loot => ({
+            tpl: loot.tpl || '',
+            count: Number(loot.count || 0),
+            acceptedBySpt: loot.acceptedBySpt === true
+        })),
+        foundInRaidQuestItemCount: safeArray(item.reportedFoundInRaidQuestItems).length,
+        droppedQuestItemCount: safeArray(item.reportedDroppedQuestItems).length,
+        playerCount: safeArray(item.players).length
+    };
+}
 
 class AdminPanelServer {
     constructor(modDir, guard, logger, config, serverContext = {}) {
@@ -629,12 +675,12 @@ class AdminPanelServer {
                     return {
                         ...group,
                         missionTitle: mission ? mission.title : group.missionId,
-                        fikaEvidence,
+                        fikaEvidence: fikaEvidence.map(sanitizeFikaEvent),
                         objectiveEvidence
                     };
                 }));
             }
-            if (req.method === 'GET' && pathname === '/api/operations/fika') return this.send(res, 200, this.fikaOperationsAdapter ? { status: this.fikaOperationsAdapter.getStatus(), events: this.fikaOperationsAdapter.getRecentEvents(150) } : { status: { detected: false, enabled: false, reason: 'OPERATIONS_OR_FIKA_ADAPTER_DISABLED' }, events: [] });
+            if (req.method === 'GET' && pathname === '/api/operations/fika') return this.send(res, 200, this.fikaOperationsAdapter ? { status: this.fikaOperationsAdapter.getStatus(), events: this.fikaOperationsAdapter.getRecentEvents(150).map(sanitizeFikaEvent) } : { status: { detected: false, enabled: false, reason: 'OPERATIONS_OR_FIKA_ADAPTER_DISABLED' }, events: [] });
             if (req.method === 'GET' && pathname === '/api/operations/leaderboard') {
                 const operations = this.requireOperations();
                 const names = new Map();
