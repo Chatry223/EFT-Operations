@@ -41,6 +41,21 @@ assert.equal(raidEnd.profileId, 'abcdef0123456789abcdef01');
 assert.equal(raidEnd.evidenceTrust, 'untrusted_client_report');
 assert.equal(raidEnd.rewardEligible, false, 'client raid-result payloads must never authorize rewards');
 
+// Fika 2.4.3 update callbacks receive the authenticated SPT session ID.
+// Reject attempts to add/mark a different account's profile in the match.
+let acceptedUpdateCalls = 0;
+const fakeUpdateCallbacks = {
+    handleRaidAddPlayer(url, info, sessionId) { acceptedUpdateCalls++; return 'added'; },
+    handlePlayerDied(url, info, sessionId) { acceptedUpdateCalls++; return 'dead'; }
+};
+assert.equal(adapter.patchUpdateCallbacks(fakeUpdateCallbacks), true);
+assert.equal(fakeUpdateCallbacks.handleRaidAddPlayer('', { profileId: 'abcdef0123456789abcdef01' }, 'session-1'), 'added');
+assert.equal(fakeUpdateCallbacks.handlePlayerDied('', { profileId: 'abcdef0123456789abcdef02' }, 'session-1'), 'dead');
+assert.equal(acceptedUpdateCalls, 2);
+assert.throws(() => fakeUpdateCallbacks.handleRaidAddPlayer('', { profileId: 'abcdef0123456789abcdef99' }, 'session-1'), /FIKA_UPDATE_IDENTITY_MISMATCH/);
+assert.throws(() => fakeUpdateCallbacks.handlePlayerDied('', { profileId: 'abcdef0123456789abcdef99' }, 'session-1'), /FIKA_UPDATE_IDENTITY_MISMATCH/);
+assert.equal(acceptedUpdateCalls, 2, 'mismatched account IDs must be rejected before Fika mutates its match registry');
+
 // Exact Fika 2.4.3 lifecycle simulation: bind a ready operation group only
 // after all mission members have joined the same map/match, then create a review
 // record at match end. Client extraction reports remain untrusted and award nothing.
