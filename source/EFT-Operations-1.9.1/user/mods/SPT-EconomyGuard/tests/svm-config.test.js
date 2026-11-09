@@ -97,6 +97,23 @@ function fixture() {
     } finally { fs.rmSync(f.root, { recursive: true, force: true }); }
 })();
 
+(function testRejectsPresetSymlinkOutsideSvmDirectory() {
+    const f = fixture();
+    try {
+        if (process.platform === 'win32') return; // Symlink creation may require elevated Windows privileges.
+        const external = path.join(f.root, 'external-preset.json');
+        writeJson(external, { Traders: { EnableTraders: true, TraderMarkup: { Skier: 99 } } });
+        const active = path.join(f.svmDir, 'Presets', 'v6.json');
+        fs.unlinkSync(active);
+        fs.symlinkSync(external, active);
+        const status = f.service.getStatus();
+        assert.strictEqual(status.available, false);
+        assert.strictEqual(status.reason, 'SVM_PRESET_OUTSIDE_DIRECTORY');
+        assert.throws(() => f.service.update({ traderMarkup: { Skier: 20 } }), /SVM_PRESET_OUTSIDE_DIRECTORY/);
+        assert.strictEqual(JSON.parse(fs.readFileSync(external, 'utf8')).Traders.TraderMarkup.Skier, 99);
+    } finally { fs.rmSync(f.root, { recursive: true, force: true }); }
+})();
+
 (function testReadOnlyWhenSvmVersionIsNotAudited() {
     const f = fixture();
     try {
