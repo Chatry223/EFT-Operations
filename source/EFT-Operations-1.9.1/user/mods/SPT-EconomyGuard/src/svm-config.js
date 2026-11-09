@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const TRADER_KEYS = new Set(['Prapor', 'Therapist', 'Fence', 'Skier', 'Peacekeeper', 'Mechanic', 'Ragman', 'Jaeger', 'Ref']);
 
@@ -142,7 +143,7 @@ class SvmConfigService {
         const backupDir = path.join(this.dataDir, 'backups', 'svm');
         fs.mkdirSync(backupDir, { recursive: true });
         const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const backupFile = path.join(backupDir, active.selected + '-' + stamp + '.json');
+        const backupFile = path.join(backupDir, active.selected + '-' + stamp + '-' + crypto.randomBytes(4).toString('hex') + '.json');
         fs.copyFileSync(active.presetFile, backupFile);
         const tempFile = active.presetFile + '.eftoperations.tmp';
         try {
