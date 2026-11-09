@@ -73,3 +73,10 @@ The Fika server's `IFikaPlayer.isDead` is server-side match state. The raid-end 
 The adapter deliberately requires exact map ID equality between the mission and Fika match location. If the server's configured map label differs from Fika's `locationData.Id`, the group will not auto-link; this is fail-safe and should be handled by an explicit map-alias setting after the installed map IDs are confirmed.
 
 This is source-level integration and regression coverage, not yet a runtime validation on the user's Windows SPT 3.11.1 + Fika 2.4.3 server.
+
+
+## Fika callback trust boundary and identity hardening
+
+Inspection of the exact v2.4.3 callbacks showed that `FikaUpdateCallbacks.handleRaidAddPlayer` and `handlePlayerDied` receive the authenticated SPT `sessionID` but the upstream callback ignores it before passing the request profile ID to `FikaMatchService`. The adapter now wraps both callbacks and verifies that the requested PMC or Scav profile ID belongs to the authenticated SPT session. It also wraps `FikaRaidCallbacks.handleRaidCreate` and `handleRaidLeave` to bind the host/member profile ID to that session before a match can be created or a member removed / match ended.
+
+This prevents one logged-in account from adding, marking dead, creating a match as, or removing another account's profile through those Fika callbacks. It does **not** make a player's own death report authoritative: `/fika/update/playerdied` is still initiated by that player's client, and `endLocalRaid` result/extraction fields are client-originated. The Fika match roster is therefore an authenticated registered-player roster, while cached death flags and raid-end results remain corroborating, unverified signals. No automatic reward is issued from them.
