@@ -460,18 +460,19 @@ class Fika243OperationsAdapter {
         const identity = this.resolveIdentity(sessionId);
         const requestedProfileId = String(object(info).profileId || '');
         const matchId = String(object(info).serverId || this.resolveMatchId(sessionId, identity) || '');
-        const member = this.operations && this.operations.state && Array.isArray(this.operations.state.groups)
-            ? this.operations.state.groups
-                .filter(group => group.state === 'in_raid' && String(group.raidId || '') === matchId)
-                .flatMap(group => group.members || [])
-                .find(item => String(item.profileId || '') === requestedProfileId || String(item.scavProfileId || '') === requestedProfileId)
+        const group = this.operations && this.operations.state && Array.isArray(this.operations.state.groups)
+            ? this.operations.state.groups.find(item => item.state === 'in_raid' && String(item.raidId || '') === matchId
+                && (item.members || []).some(member => String(member.profileId || '') === requestedProfileId || String(member.scavProfileId || '') === requestedProfileId))
             : null;
+        const member = group ? (group.members || []).find(item => String(item.profileId || '') === requestedProfileId || String(item.scavProfileId || '') === requestedProfileId) : null;
         const event = {
             eventId: `death-${Date.now()}-${requestedProfileId}`,
             type: 'fika_player_died',
             timestamp: new Date().toISOString(),
             fikaServerVersion: EXPECTED_FIKA_VERSION,
             matchId,
+            groupId: group ? group.id : null,
+            missionId: group ? group.missionId : null,
             profileId: member ? String(member.profileId) : identity.profileId,
             displayName: member ? String(member.displayName || '') : identity.displayName,
             reportedCharacterProfileId: requestedProfileId,
@@ -534,7 +535,7 @@ class Fika243OperationsAdapter {
             evidenceTrust: 'fika_server_lifecycle',
             rewardEligible: false
         });
-        return { matchId: String(matchId), itemCount: items.length, side: snapshot.side };
+        return { matchId: matchId ? String(matchId) : null, groupId: missionGroup.id, itemCount: items.length, side: snapshot.side };
     }
 
     captureRaidEnd(sessionId, request) {
@@ -629,6 +630,7 @@ class Fika243OperationsAdapter {
             timestamp: new Date().toISOString(),
             fikaServerVersion: EXPECTED_FIKA_VERSION,
             matchId: matchId ? String(matchId) : null,
+            groupId: raidSnapshot ? raidSnapshot.groupId : (activeGroup ? activeGroup.id : null),
             profileId: identity.profileId,
             displayName: identity.displayName,
             map,
