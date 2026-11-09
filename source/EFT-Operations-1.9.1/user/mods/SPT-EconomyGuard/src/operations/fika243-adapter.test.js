@@ -55,7 +55,7 @@ const mission = ops.save({ title: 'Fika linked mission', map: 'woods', mode: 'sq
     objectives: [{ id: 'extract', type: 'extract', count: 1, required: true }], rewards: { points: 100, roubles: 0, items: [] } });
 ops.setStatus(mission.id, 'published');
 const group = ops.accept(mission.id, 'abcdef0123456789abcdef11', 'One');
-ops.accept(mission.id, 'abcdef0123456789abcdef12', 'Two');
+ops.accept(mission.id, 'abcdef0123456789abcdef12', 'Two', 'abcdef0123456789abcdef13');
 ops.setReady(group.id, 'abcdef0123456789abcdef11', true);
 ops.setReady(group.id, 'abcdef0123456789abcdef12', true);
 const lifecycleAdapter = new Fika243OperationsAdapter({ modDir: lifecycleModDir, operations: ops, logger: { info() {}, warn() {}, debug() {} } });
@@ -68,13 +68,14 @@ class FakeFikaMatchService {
 }
 const liveMatchService = new FakeFikaMatchService();
 lifecycleAdapter.services.fikaMatchService = liveMatchService;
-lifecycleAdapter.services.saveServer = { getProfile(sessionId) { return { characters: { pmc: { _id: sessionId }, scav: { _id: sessionId } } }; } };
+lifecycleAdapter.services.saveServer = { getProfile(sessionId) { return { characters: { pmc: { _id: sessionId }, scav: { _id: sessionId === 'abcdef0123456789abcdef12' ? 'abcdef0123456789abcdef13' : 'abcdef0123456789abcdef14' } } }; } };
 assert.equal(lifecycleAdapter.patchMatchService(liveMatchService), true);
 liveMatchService.addPlayerToMatch('match-live', 'abcdef0123456789abcdef11', { isDead: false });
 assert.equal(ops.state.groups.find(x => x.id === group.id).state, 'forming', 'one member is not enough to bind a two-person mission');
-liveMatchService.addPlayerToMatch('match-live', 'abcdef0123456789abcdef12', { isDead: false });
+liveMatchService.addPlayerToMatch('match-live', 'abcdef0123456789abcdef13', { isDead: false });
 assert.equal(ops.state.groups.find(x => x.id === group.id).state, 'in_raid', 'all ready members in the same Fika match starts the operation');
 assert.equal(ops.state.groups.find(x => x.id === group.id).raidId, 'match-live');
+assert.deepEqual(ops.state.groups.find(x => x.id === group.id).members.map(x => x.scavProfileId), [null, 'abcdef0123456789abcdef13']);
 ops.recordRaidEvent(group.id, { type: 'extract', amount: 1 });
 lifecycleAdapter.captureRaidEnd('abcdef0123456789abcdef11', { serverId: 'woods.1', results: { result: 'Survived', exitName: 'Outskirts' } });
 lifecycleAdapter.captureRaidEnd('abcdef0123456789abcdef12', { serverId: 'woods.1', results: { result: 'Survived', exitName: 'Outskirts' } });
@@ -82,6 +83,8 @@ liveMatchService.endMatch('match-live', 'host_left');
 const finishedGroup = ops.state.groups.find(x => x.id === group.id);
 assert.equal(finishedGroup.state, 'review', 'Fika match end must enter manual review, not auto-award');
 assert.equal(finishedGroup.reviewData.evidenceTrust, 'lifecycle_observation_plus_client_report');
+assert.deepEqual(finishedGroup.reviewData.aliveProfileIds.sort(), ['abcdef0123456789abcdef11', 'abcdef0123456789abcdef12']);
+assert.deepEqual(finishedGroup.reviewData.extractedProfileIds.sort(), ['abcdef0123456789abcdef11', 'abcdef0123456789abcdef12']);
 assert.equal(ops.state.awards.length, 0, 'untrusted extraction reports must never issue rewards');
 assert.equal(lifecycleAdapter.getRecentEvents(20).some(x => x.type === 'mission_group_linked'), true);
 assert.equal(lifecycleAdapter.getRecentEvents(20).some(x => x.type === 'mission_group_review_created'), true);
