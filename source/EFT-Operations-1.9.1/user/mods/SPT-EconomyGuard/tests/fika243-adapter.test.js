@@ -129,6 +129,9 @@ function testUnsupportedVersionDoesNotPatch() {
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
-})();
+}
 
-process.stdout.write('Fika 2.4.3 adapter tests passed\n');
+Promise.resolve().then(testFika243LifecycleAndAcceptedLootEvidence).then(() => {
+  testUnsupportedVersionDoesNotPatch();
+  process.stdout.write('Fika 2.4.3 adapter tests passed\\n');
+}).catch(error => { console.error(error); process.exitCode = 1; });
