@@ -42,7 +42,9 @@ class OperationsClientApi {
         return { profileId, scavProfileId: PROFILE_ID_RE.test(scavId) && scavId !== profileId ? scavId : null, displayName: String(displayName).slice(0, 40) };
     }
 
-    publicMission(mission) {
+    publicMission(mission, profileId = null) {
+        const eligibility = profileId ? this.operations.getMissionEligibility(mission.id, profileId)
+            : { available: true, reason: null, currentPoints: 0, requiredPoints: Number(mission.requiredPoints || 0), missingPrerequisites: [] };
         return {
             id: mission.id,
             revision: mission.revision,
@@ -53,6 +55,13 @@ class OperationsClientApi {
             mode: mission.mode,
             minPlayers: mission.minPlayers,
             maxPlayers: mission.maxPlayers,
+            campaignId: mission.campaignId || '',
+            campaignOrder: Number(mission.campaignOrder || 0),
+            requiredPoints: Number(mission.requiredPoints || 0),
+            locked: !eligibility.available,
+            lockReason: eligibility.reason || '',
+            currentPoints: Number(eligibility.currentPoints || 0),
+            missingPrerequisites: eligibility.missingPrerequisites || [],
             objectives: mission.objectives.map(o => ({ id: o.id, type: o.type, target: o.target, count: o.count, required: o.required, params: o.params })),
             rewards: mission.rewards,
             startAt: mission.startAt,
@@ -63,11 +72,11 @@ class OperationsClientApi {
 
     listMissions(_url, _info, sessionId) {
         try {
-            this.resolvePlayer(sessionId);
+            const player = this.resolvePlayer(sessionId);
             const now = Date.now();
             const missions = this.operations.list({ status: 'published' })
                 .filter(m => (!m.startAt || Date.parse(m.startAt) <= now) && (!m.endAt || Date.parse(m.endAt) > now))
-                .map(m => this.publicMission(m));
+                .map(m => this.publicMission(m, player.profileId));
             return this.response({ ok: true, missions });
         } catch (err) { return this.response({ ok: false, error: this.errorCode(err) }); }
     }
@@ -78,7 +87,7 @@ class OperationsClientApi {
             const group = this.operations.state.groups.find(g => ['forming', 'in_raid', 'review'].includes(g.state) && g.members.some(m => m.profileId === player.profileId));
             const mission = group ? this.operations.get(group.missionId) : null;
             const canStart = this.canStartGroup(group, mission);
-            return this.response({ ok: true, player: this.operations.getPlayer(player.profileId), group: group ? this.publicGroup(group, player.profileId) : null, mission: mission ? this.publicMission(mission) : null, canStart });
+            return this.response({ ok: true, player: this.operations.getPlayer(player.profileId), group: group ? this.publicGroup(group, player.profileId) : null, mission: mission ? this.publicMission(mission, player.profileId) : null, canStart });
         } catch (err) { return this.response({ ok: false, error: this.errorCode(err) }); }
     }
 
