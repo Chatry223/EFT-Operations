@@ -1,6 +1,6 @@
 'use strict';
 
-const ROUble_TPL = '5449016a4bdc2d6f028b456f';
+const ROUBLE_TPL = '5449016a4bdc2d6f028b456f';
 const MAX_MAIL_ITEMS = 100;
 
 class RewardDeliveryService {
@@ -22,6 +22,14 @@ class RewardDeliveryService {
     deliverAward(award) {
         const now = new Date().toISOString();
         try {
+            const hasInventoryRewards = Number(award.roubles) > 0 || (Array.isArray(award.items) && award.items.length > 0);
+            if (!hasInventoryRewards) {
+                award.status = 'delivered';
+                award.deliveryMethod = 'points_only';
+                award.deliveredAt = now;
+                this.persist();
+                return { awardId: award.id, status: award.status, itemCount: 0 };
+            }
             if (!this.saveServer || typeof this.saveServer.getProfiles !== 'function') throw new Error('SAVE_SERVER_UNAVAILABLE');
             const sessionId = this.findSessionId(award.profileId);
             if (!sessionId) throw new Error('PLAYER_PROFILE_NOT_FOUND');
@@ -90,7 +98,7 @@ class RewardDeliveryService {
             ? this.databaseService.getItems()
             : null;
         if (!templates) throw new Error('ITEM_DATABASE_UNAVAILABLE');
-        if (Number(award.roubles) > 0) this.appendStacks(items, ROUble_TPL, Number(award.roubles), templates);
+        if (Number(award.roubles) > 0) this.appendStacks(items, ROUBLE_TPL, Number(award.roubles), templates);
         for (const reward of Array.isArray(award.items) ? award.items : []) {
             this.appendStacks(items, String(reward.tpl || ''), Number(reward.count), templates);
         }
@@ -121,4 +129,4 @@ class RewardDeliveryService {
     }
 }
 
-module.exports = { RewardDeliveryService, ROUble_TPL };
+module.exports = { RewardDeliveryService, ROUBLE_TPL };
