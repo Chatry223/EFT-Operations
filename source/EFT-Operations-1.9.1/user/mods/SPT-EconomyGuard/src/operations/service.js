@@ -78,7 +78,7 @@ class OperationsService {
         if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('INVALID_MISSION');
         const title = text(input.title, 100, 'TITLE', true);
         const description = text(input.description, 4000, 'DESCRIPTION');
-        const map = text(input.map, 40, 'MAP', true);
+        const map = text(input.map, 40, 'MAP', true).toLowerCase();
         const mode = input.mode || 'solo';
         if (!['solo', 'squad', 'either'].includes(mode)) throw new Error('INVALID_MODE');
         const minPlayers = integer(input.minPlayers, 1, 8, 'MIN_PLAYERS', mode === 'squad' ? 2 : 1);
