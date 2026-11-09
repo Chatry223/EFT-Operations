@@ -37,8 +37,23 @@ class OperationsService {
     load() {
         try {
             const value = JSON.parse(fs.readFileSync(this.file, 'utf8'));
-            if (!value || typeof value !== 'object' || !Array.isArray(value.missions) || !Array.isArray(value.awards)) throw new Error('INVALID_STORE');
-            return value;
+            if (!value || typeof value !== 'object' || Array.isArray(value)
+                || !Array.isArray(value.missions) || !Array.isArray(value.awards)
+                || (Object.prototype.hasOwnProperty.call(value, 'groups') && !Array.isArray(value.groups))
+                || (Object.prototype.hasOwnProperty.call(value, 'playerStats') &&
+                    (!value.playerStats || typeof value.playerStats !== 'object' || Array.isArray(value.playerStats)))) {
+                throw new Error('INVALID_STORE');
+            }
+            const playerStats = value.playerStats || {};
+            for (const [profileId, stats] of Object.entries(playerStats)) {
+                if (!PROFILE_ID_RE.test(profileId) || !stats || typeof stats !== 'object'
+                    || !Number.isSafeInteger(stats.points) || stats.points < 0
+                    || !Number.isSafeInteger(stats.completedMissions) || stats.completedMissions < 0) {
+                    throw new Error('INVALID_PLAYER_STATS');
+                }
+            }
+            // Backward-compatible schema-1 migration: early stores may not have groups/playerStats yet.
+            return { ...value, schemaVersion: 1, groups: value.groups || [], playerStats };
         } catch (err) {
             if (err.code !== 'ENOENT') {
                 try { fs.renameSync(this.file, `${this.file}.corrupt-${Date.now()}.bak`); } catch (_) { /* retain original if backup cannot be made */ }
@@ -186,12 +201,18 @@ class OperationsService {
         const g = this.state.groups.find(x => x.id === groupId && x.state === 'in_raid');
         if (!g) throw new Error('RAID_NOT_ACTIVE');
         const m = this.state.missions.find(x => x.id === g.missionId);
-        if (!event || typeof event !== 'object' || !event.type) throw new Error('INVALID_RAID_EVENT');
+        if (!event || typeof event !== 'object' || !OBJECTIVES.has(event.type)) throw new Error('INVALID_RAID_EVENT');
+        if (event.evidenceTrust !== 'server_verified' || !['fika-server-adapter', 'spt-server-adapter'].includes(String(event.source || ''))) {
+            throw new Error('UNTRUSTED_RAID_EVENT');
+        }
+        const eventMap = text(event.map, 40, 'EVENT_MAP').toLowerCase();
+        if (eventMap && eventMap !== String(m.map || '').toLowerCase()) throw new Error('RAID_EVENT_MAP_MISMATCH');
+        const amount = integer(event.amount, 1, 1000, 'EVENT_AMOUNT', 1);
         for (const objective of m.objectives) {
             if (objective.type !== event.type) continue;
-            if (objective.target && String(event.target || '') !== objective.target) continue;
-            if (objective.params.map && objective.params.map !== m.map) continue;
-            g.progress[objective.id] = Math.min(objective.count, (g.progress[objective.id] || 0) + integer(event.amount, 1, 1000, 'EVENT_AMOUNT', 1));
+            if (objective.target && String(event.target || '').toLowerCase() !== String(objective.target).toLowerCase()) continue;
+            if (objective.params.map && String(objective.params.map).toLowerCase() !== (eventMap || String(m.map || '').toLowerCase())) continue;
+            g.progress[objective.id] = Math.min(objective.count, (g.progress[objective.id] || 0) + amount);
         }
         this.persist(); return clone(g.progress);
     }
