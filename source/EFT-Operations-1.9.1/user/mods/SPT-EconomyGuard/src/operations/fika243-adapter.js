@@ -25,6 +25,7 @@ class Fika243OperationsAdapter {
         this.raidSnapshots = new Map();
         this.patched = new Set();
         this.status = this.detectVersion();
+        this.status.itemSending = this.readItemSendingSetting();
         this.status.saveServerHook = false;
         this.status.updateIdentityHook = false;
         this.status.raidIdentityHook = false;
@@ -69,6 +70,20 @@ class Fika243OperationsAdapter {
                 reason: 'FIKA_SERVER_PACKAGE_NOT_FOUND',
                 detail: err && err.code ? err.code : 'READ_FAILED'
             };
+        }
+    }
+
+    readItemSendingSetting() {
+        const configPath = path.resolve(this.modDir || '.', '..', 'fika-server', 'assets', 'configs', 'fika.jsonc');
+        try {
+            const raw = fs.readFileSync(configPath, 'utf8');
+            // Fika's JSONC may contain comments; the setting is a single boolean
+            // and this narrow extraction avoids a new JSONC parser dependency.
+            const match = raw.match(/"allowItemSending"\\s*:\\s*(true|false)/i);
+            if (!match) return { configured: false, enabled: null, configPath, reason: 'SETTING_NOT_FOUND' };
+            return { configured: true, enabled: match[1].toLowerCase() === 'true', configPath, reason: null };
+        } catch (err) {
+            return { configured: false, enabled: null, configPath, reason: err && err.code ? err.code : 'READ_FAILED' };
         }
     }
 
@@ -753,7 +768,10 @@ class Fika243OperationsAdapter {
         return rows.reverse();
     }
 
-    getStatus() { return { ...this.status, fikaServerVersion: EXPECTED_FIKA_VERSION, fikaClientTargetVersion: '1.2.3', fikaClientConfigLastVersion: '1.2.3', fikaClientConfigEvidence: 'BepInEx/config/com.fika.core.cfg [Hidden] Last Version (advisory only; loaded BepInEx plugin metadata is authoritative)', operationsClientPluginVersion: '0.1.0' }; }
+    getStatus() {
+        const itemSending = this.readItemSendingSetting();
+        return { ...this.status, itemSending, fikaServerVersion: EXPECTED_FIKA_VERSION, fikaClientTargetVersion: '1.2.3', fikaClientConfigLastVersion: '1.2.3', fikaClientConfigEvidence: 'BepInEx/config/com.fika.core.cfg [Hidden] Last Version (advisory only; loaded BepInEx plugin metadata is authoritative)', operationsClientPluginVersion: '0.1.0' };
+    }
 }
 
 module.exports = { Fika243OperationsAdapter, EXPECTED_FIKA_VERSION };
