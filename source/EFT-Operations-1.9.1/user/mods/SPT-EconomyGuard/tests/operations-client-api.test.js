@@ -18,7 +18,7 @@ const saveServer = { getProfile(sessionId) {
 const responses = { noBody: value => ({ wrapped: value }) };
 const api = new OperationsClientApi({ operations, saveServer, httpResponseUtil: responses, logger: { info() {}, warn() {} } });
 const mission = operations.save({ title: 'Client API Mission', description: 'Safe player bridge', map: 'woods', mode: 'squad', minPlayers: 2, maxPlayers: 2,
-    objectives: [{ id: 'scavs', type: 'kill', target: 'scav', count: 2 }, { id: 'boss', type: 'kill_type', target: 'boss', count: 1 }, { id: 'extract', type: 'extract', count: 1 }], rewards: { points: 50, roubles: 1000, items: [] } });
+    objectives: [{ id: 'scavs', type: 'kill', target: 'scav', count: 2 }, { id: 'boss', type: 'kill_type', target: 'boss', count: 1 }, { id: 'visit', type: 'visit', target: 'bunker2', count: 1 }, { id: 'extract', type: 'extract', count: 1 }], rewards: { points: 50, roubles: 1000, items: [] } });
 operations.setStatus(mission.id, 'published');
 
 const list = api.listMissions('', {}, 'session-a').wrapped;
@@ -91,10 +91,18 @@ const bossKill = api.hostRaidEvent('', Object.assign({}, hostKill, {
 }), 'session-b').wrapped;
 assert.equal(bossKill.ok, true);
 assert.equal(bossKill.group.objectiveProgress.find(x => x.id === 'boss').progress, 1);
+const nonHostVisit = api.hostRaidEvent('', { type: 'visit', eventId: 'host-visit-001', matchId: 'abcdef0123456789abcdef10', actorProfileId: 'abcdef0123456789abcdef10', triggerId: 'bunker2' }, 'session-a').wrapped;
+assert.equal(nonHostVisit.error, 'HOST_PROFILE_MISMATCH');
+const hostVisit = api.hostRaidEvent('', { type: 'visit', eventId: 'host-visit-001', matchId: 'abcdef0123456789abcdef10', actorProfileId: 'abcdef0123456789abcdef10', triggerId: 'bunker2' }, 'session-b').wrapped;
+assert.equal(hostVisit.ok, true);
+assert.equal(hostVisit.group.objectiveProgress.find(x => x.id === 'visit').progress, 1);
+assert.equal(hostVisit.group.objectiveProgress.find(x => x.id === 'visit').trust, 'host_attested');
+const duplicateVisit = api.hostRaidEvent('', { type: 'visit', eventId: 'host-visit-001', matchId: 'abcdef0123456789abcdef10', actorProfileId: 'abcdef0123456789abcdef10', triggerId: 'bunker2' }, 'session-b').wrapped;
+assert.equal(duplicateVisit.group.objectiveProgress.find(x => x.id === 'visit').progress, 1);
 const hostReview = operations.finishGroup(hostA.group.id, { verified: true, aliveProfileIds: [playerA, playerB], extractedProfileIds: [playerA, playerB] });
 assert.equal(hostReview.state, 'review', 'host-attested kills never trigger automatic completion or rewards');
 assert.equal(operations.state.awards.length, 0);
-assert.equal(hostReview.reviewData.objectiveEvidence.length, 2);
+assert.equal(hostReview.reviewData.objectiveEvidence.length, 3);
 
 const soloMission = operations.save({ title: 'Empty Squad Cleanup', map: 'customs', mode: 'solo', minPlayers: 1, maxPlayers: 1, objectives: [{ id: 'exit', type: 'extract' }] });
 operations.setStatus(soloMission.id, 'published');
