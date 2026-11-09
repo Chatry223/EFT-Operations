@@ -26,6 +26,9 @@ assert.match(adapter.getStatus().fikaClientConfigEvidence, /advisory only/);
 assert.equal(adapter.getStatus().operationsClientPluginVersion, '0.1.0');
 assert.deepEqual(adapter.getStatus().itemSending.configured, true);
 assert.equal(adapter.getStatus().itemSending.enabled, false, 'disabled Fika item sending should be reported as a closed transfer route');
+fs.writeFileSync(path.join(fikaDir, 'assets', 'configs', 'fika.jsonc'), JSON.stringify({ server: { allowItemSending: true } }));
+assert.equal(adapter.getStatus().itemSending.enabled, true, 'enabled Fika item sending must be surfaced as an unmonitored transfer route');
+fs.writeFileSync(path.join(fikaDir, 'assets', 'configs', 'fika.jsonc'), JSON.stringify({ server: { allowItemSending: false } }));
 
 const matchService = {
     getMatch(id) { return id === 'match-1' ? { players: new Map([['profile-a', {}], ['profile-b', {}]]) } : null; },
