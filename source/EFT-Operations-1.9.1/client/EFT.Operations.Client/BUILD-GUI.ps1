@@ -232,7 +232,7 @@ $buildButton.Add_Click({
         Write-Log "Fika.Core: $fikaVersion; SPT.Common: $sptCommonVersion"
         Write-Log "MSBuild: $msbuild"
         Write-Log 'Building Release / net472...'
-        $output = & $msbuild $project '/m' '/p:Configuration=Release' "/p:GameManagedDir=$managed" "/p:BepInExCoreDir=$core" '/verbosity:minimal' 2>&1
+        $output = & $msbuild $project '/restore' '/m' '/p:Configuration=Release' "/p:GameManagedDir=$managed" "/p:BepInExCoreDir=$core" '/verbosity:minimal' 2>&1
         foreach ($line in $output) { Write-Log ([string]$line) }
         if ($LASTEXITCODE -ne 0) { throw "MSBuild failed with exit code $LASTEXITCODE." }
         $dll = Join-Path $PSScriptRoot 'bin\Release\net472\EFTOperations.Client.dll'
