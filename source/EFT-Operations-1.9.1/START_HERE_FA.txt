@@ -64,8 +64,8 @@ EFT OPERATIONS / EconomyGuard 1.9.1
 
 خروجی Build تأییدشده:
 - DLL: EFTOperations.Client.dll
-- SHA-256: 276ecad202e8ccf473b52c2d6ff8f1b17a7bd2d7ed0ba1909a2c76928f1fcd1f
-- GitHub Actions Artifact: https://github.com/Chatry223/EFT-Operations/actions/runs/42687196015/artifacts/13704528374
+- SHA-256: 443602390928327e748d6e8d7cc6e810b7d04bf8e0abed9b9d8fe325b0e0d4ef
+- GitHub Actions Artifact: https://github.com/Chatry223/EFT-Operations/actions/runs/42687894189/artifacts/13705463291
 - نصب دستی: فایل DLL را داخل BepInEx/plugins/EFTOperations قرار بده.
 - این خروجی کامپایل شده، اما هنوز در اجرای واقعی بازی با Fika تست Runtime نشده است.
 
