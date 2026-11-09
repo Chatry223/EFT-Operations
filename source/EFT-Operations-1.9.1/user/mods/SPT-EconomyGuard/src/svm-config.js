@@ -85,6 +85,7 @@ class SvmConfigService {
         const preset = active.preset;
         const changes = [];
         const number = (value, min, max, field, integer = false) => {
+            if (value === '' || value == null) throw new Error('INVALID_SVM_' + field.toUpperCase());
             const n = Number(value);
             if (!Number.isFinite(n) || n < min || n > max || (integer && !Number.isInteger(n))) throw new Error('INVALID_SVM_' + field.toUpperCase());
             return n;
