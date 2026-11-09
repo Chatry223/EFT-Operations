@@ -106,6 +106,33 @@ assert.equal(hostReview.state, 'review', 'host-attested kills never trigger auto
 assert.equal(operations.state.awards.length, 0);
 assert.equal(hostReview.reviewData.objectiveEvidence.length, 3);
 
+const campaignOps = new OperationsService(path.join(root, 'campaign-data'), { info() {}, warn() {} });
+const campaignMission1 = campaignOps.save({ title: 'Blackout 01', map: 'woods', mode: 'solo', minPlayers: 1, maxPlayers: 1, campaignId: 'Operation Blackout', campaignOrder: 1, objectives: [{ id: 'exit', type: 'extract' }], rewards: { points: 500, roubles: 0, items: [] } });
+const campaignMission2 = campaignOps.save({ title: 'Blackout 02', map: 'woods', mode: 'solo', minPlayers: 1, maxPlayers: 1, campaignId: 'operation-blackout', campaignOrder: 2, requiredPoints: 0, objectives: [{ id: 'exit', type: 'extract' }], rewards: { points: 200, roubles: 0, items: [] } });
+const campaignMission3 = campaignOps.save({ title: 'Blackout 03', map: 'woods', mode: 'solo', minPlayers: 1, maxPlayers: 1, campaignId: 'operation-blackout', campaignOrder: 3, requiredPoints: 600, objectives: [{ id: 'exit', type: 'extract' }], rewards: { points: 0, roubles: 0, items: [] } });
+assert.equal(campaignMission1.campaignId, 'operation-blackout');
+assert.equal(campaignMission1.campaignOrder, 1);
+campaignOps.setStatus(campaignMission1.id, 'published');
+campaignOps.setStatus(campaignMission2.id, 'published');
+campaignOps.setStatus(campaignMission3.id, 'published');
+const campaignApi = new OperationsClientApi({ operations: campaignOps, saveServer, httpResponseUtil: responses, logger: { info() {}, warn() {} } });
+const lockedCampaignList = campaignApi.listMissions('', {}, 'session-a').wrapped;
+const lockedSecond = lockedCampaignList.missions.find(item => item.id === campaignMission2.id);
+const lockedThird = lockedCampaignList.missions.find(item => item.id === campaignMission3.id);
+assert.equal(lockedSecond.locked, true);
+assert.equal(lockedSecond.lockReason, 'CAMPAIGN_PREREQUISITES_NOT_MET');
+assert.equal(lockedThird.locked, true);
+assert.equal(lockedThird.lockReason, 'RANK_REQUIREMENT_NOT_MET');
+assert.throws(() => campaignOps.accept(campaignMission2.id, playerA, 'Alpha'), /CAMPAIGN_PREREQUISITES_NOT_MET/);
+campaignOps.award(campaignMission1, { id: 'approved-blackout-01' }, playerA);
+assert.equal(campaignOps.getMissionEligibility(campaignMission2.id, playerA).available, true);
+campaignOps.accept(campaignMission2.id, playerA, 'Alpha');
+campaignOps.award(campaignMission2, { id: 'approved-blackout-02' }, playerA);
+assert.equal(campaignOps.getPlayer(playerA).points, 700);
+assert.equal(campaignOps.getMissionEligibility(campaignMission3.id, playerA).available, true);
+const unlockedCampaignList = campaignApi.listMissions('', {}, 'session-a').wrapped;
+assert.equal(unlockedCampaignList.missions.find(item => item.id === campaignMission3.id).locked, false);
+
 const soloMission = operations.save({ title: 'Empty Squad Cleanup', map: 'customs', mode: 'solo', minPlayers: 1, maxPlayers: 1, objectives: [{ id: 'exit', type: 'extract' }] });
 operations.setStatus(soloMission.id, 'published');
 const soloGroup = operations.accept(soloMission.id, 'abcdef0123456789abcdef03', 'Solo');
