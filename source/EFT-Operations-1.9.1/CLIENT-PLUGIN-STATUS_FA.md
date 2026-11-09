@@ -28,7 +28,7 @@
 
 ## Fika 2.4.3 native host bridge
 
-- The client checks the loaded BepInEx plugin metadata for `com.fika.core` and requires version `2.4.3`.
+- The client checks loaded BepInEx plugin metadata for `com.fika.core` and requires **Fika client 1.2.3** (`1.2.3` or `1.2.3.0`). The server package is separately verified as **Fika Server 2.4.3** from the user's SPT server archive.
 - For the installed Fika client `Fika.Core.dll 1.2.3`, the bridge reads the exact `MatchMakerUIScript` fields `fikaMatchMakerUi` and `raidSettings`; it retains fallbacks for later field names. This was checked against the upstream `v1.2.3` source, not inferred from a newer release.
 - It locates the existing `Fika.Core.UI.Custom.MatchMakerUIScript` and its native `MatchMakerUI.StartButton` using reflection; it does not create a fake Fika match or bypass Fika's Force IP / Force Bind IP checks.
 - The action is available only to the authenticated squad leader when the server reports all required members ready and the selected EFT `RaidSettings.SelectedLocation._Id` matches the mission map.
