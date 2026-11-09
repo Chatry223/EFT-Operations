@@ -452,10 +452,11 @@ namespace EFTOperations.Client
                 GUILayout.BeginHorizontal();
                 GUILayout.FlexibleSpace();
                 bool canAccept = !mission.locked && (playerState.group == null);
-                GUI.enabled = canAccept;
+                bool previousGuiEnabled = GUI.enabled;
+                GUI.enabled = previousGuiEnabled && canAccept;
                 string acceptLabel = mission.locked ? "LOCKED" : (playerState.group != null ? "ALREADY ASSIGNED" : "ACCEPT OPERATION");
                 if (GUILayout.Button(acceptLabel, GUILayout.Width(190f), GUILayout.Height(32f)) && canAccept) Accept(mission.id);
-                GUI.enabled = true;
+                GUI.enabled = previousGuiEnabled;
                 GUILayout.EndHorizontal();
                 GUILayout.EndVertical();
             }
