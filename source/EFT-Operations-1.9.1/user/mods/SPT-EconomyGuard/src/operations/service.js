@@ -203,12 +203,14 @@ class OperationsService {
         const m = this.state.missions.find(x => x.id === g.missionId);
         if (!event || typeof event !== 'object' || !OBJECTIVES.has(event.type)) throw new Error('INVALID_RAID_EVENT');
         const source = String(event.source || '');
-        const serverVerified = event.evidenceTrust === 'server_verified' && ['fika-server-adapter', 'spt-server-adapter'].includes(source);
+        const serverVerified = event.evidenceTrust === 'server_verified' && source === 'fika-server-adapter';
+        const sptAccepted = event.evidenceTrust === 'spt_accepted_client_delta' && source === 'spt-server-adapter'
+            && event.type === 'collect' && event.acceptedBySpt === true;
         const hostAttested = event.evidenceTrust === 'host_attested' && source === 'fika-host-client'
             && event.reporterProfileId && g.members.some(member => String(member.profileId) === String(event.reporterProfileId) || String(member.scavProfileId || '') === String(event.reporterProfileId))
             && String(event.reporterProfileId) === String(event.matchId) && event.type === 'kill' && event.victimIsAi === true
             && String(event.matchId || '') === String(g.raidId || '');
-        if (!serverVerified && !hostAttested) throw new Error('UNTRUSTED_RAID_EVENT');
+        if (!serverVerified && !sptAccepted && !hostAttested) throw new Error('UNTRUSTED_RAID_EVENT');
         const eventId = text(event.eventId, 120, 'EVENT_ID', true);
         const eventMap = text(event.map, 40, 'EVENT_MAP', true).toLowerCase();
         if (eventMap !== String(m.map || '').toLowerCase()) throw new Error('RAID_EVENT_MAP_MISMATCH');
