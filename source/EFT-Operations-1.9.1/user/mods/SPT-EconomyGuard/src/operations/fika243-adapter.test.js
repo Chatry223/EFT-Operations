@@ -29,7 +29,7 @@ const matchEvents = adapter.getRecentEvents(10);
 assert.equal(matchEvents.length, 1);
 assert.equal(matchEvents[0].type, 'fika_match_end');
 assert.deepEqual(matchEvents[0].players.sort(), ['profile-a', 'profile-b']);
-assert.equal(matchEvents[0].evidenceTrust, 'lifecycle_observation');
+assert.equal(matchEvents[0].evidenceTrust, 'fika_match_end_lifecycle_with_authenticated_roster');
 assert.equal(matchEvents[0].rewardEligible, false, 'a match-end hook alone must never authorize rewards');
 
 // A raid-end request is client-originated. Preserve it for review, but mark it untrusted.
