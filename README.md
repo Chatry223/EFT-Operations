@@ -34,6 +34,12 @@ Visual Studio must include MSBuild and the .NET Framework 4.7.2 targeting pack. 
 
 The public repository intentionally does not contain EFT or BepInEx assemblies. To enable the optional CI DLL build, configure a private self-hosted Windows runner on the EFT machine with labels `self-hosted`, `Windows`, `X64`, `eft-build`; set Actions variables `EFT_MANAGED_DIR` and `BEPINEX_CORE_DIR`; then set `EFT_BUILD_RUNNER_ENABLED=true`. Until that explicit flag is enabled, the client build job is skipped rather than left queued indefinitely.
 
+## Tested server-mod package
+
+The latest successful Actions run publishes an installable archive named `EFT-Operations-ServerMod-<commit>`. Extract it into the SPT server root so the included `user/mods/SPT-EconomyGuard` path is preserved. Stop the SPT server first and back up the existing `user/mods/SPT-EconomyGuard` folder; the separate `SPT-EconomyGuard-Data` directory contains live server data and is not part of the package. This is one updated server mod, not a second SPT server installation. The CI package includes a ZIP integrity check and SHA-256 file.
+
+The package is a CI-tested server-mod build, not yet a runtime-certified release. Validate it on a backed-up test server before replacing the live installation.
+
 ## Mission and reward trust model
 
 - Player identity is resolved server-side from the authenticated SPT session.
