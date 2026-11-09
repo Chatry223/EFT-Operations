@@ -131,6 +131,10 @@ class Fika243OperationsAdapter {
             target[methodName] = function (url, info, sessionId, ...rest) {
                 if (methodName === 'handleRaidCreate') {
                     adapter.assertRaidHostBelongsToSession(sessionId, object(info).hostUsername);
+                } else if (String(object(info).serverId || '') === String(object(info).profileId || '')) {
+                    const match = adapter.services.fikaMatchService && adapter.services.fikaMatchService.getMatch(object(info).serverId);
+                    if (!match) throw new Error('FIKA_HOST_MATCH_NOT_FOUND');
+                    adapter.assertRaidHostBelongsToSession(sessionId, match.hostUsername);
                 } else {
                     adapter.assertProfileBelongsToSession(sessionId, object(info).profileId, methodName);
                 }
