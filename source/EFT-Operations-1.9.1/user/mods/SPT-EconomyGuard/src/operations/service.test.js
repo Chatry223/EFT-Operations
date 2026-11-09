@@ -31,7 +31,7 @@ assert.throws(() => service.recordRaidEvent(g.id, { type: 'kill', target: 'scav'
 assert.throws(() => service.recordRaidEvent(g.id, { eventId: 'bad-actor', type: 'kill', target: 'scav', amount: 1, map: 'woods', source: 'fika-server-adapter', evidenceTrust: 'server_verified' }), /RAID_EVENT_ACTOR_REQUIRED/);
 assert.throws(() => service.recordRaidEvent(g.id, { eventId: 'test-event-1', profileId: 'abcdef0123456789abcdef01', type: 'kill', target: 'scav', amount: 1, map: 'customs', source: 'fika-server-adapter', evidenceTrust: 'server_verified' }), /RAID_EVENT_MAP_MISMATCH/);
 service.recordRaidEvent(g.id, { eventId: 'test-event-2', profileId: 'abcdef0123456789abcdef01', type: 'kill', target: 'scav', amount: 2, map: 'woods', source: 'fika-server-adapter', evidenceTrust: 'server_verified' });
-assert.deepEqual(service.recordRaidEvent(g.id, { eventId: 'test-event-3', profileId: 'abcdef0123456789abcdef01', type: 'kill', target: 'scav', amount: 2, map: 'woods', source: 'fika-server-adapter', evidenceTrust: 'server_verified' }), { kills: 2, extract: 0 }, 'duplicate server event IDs must not advance objective progress twice');
+assert.deepEqual(service.recordRaidEvent(g.id, { eventId: 'test-event-2', profileId: 'abcdef0123456789abcdef01', type: 'kill', target: 'scav', amount: 2, map: 'woods', source: 'fika-server-adapter', evidenceTrust: 'server_verified' }), { kills: 2, extract: 0 }, 'duplicate server event IDs must not advance objective progress twice');
 service.recordRaidEvent(g.id, { eventId: 'test-event-3', type: 'extract', amount: 1, map: 'woods', source: 'fika-server-adapter', evidenceTrust: 'server_verified' });
 const done = service.finishGroup(g.id, { verified: true, evidenceTrust: 'server_verified', source: 'fika-server-adapter', aliveProfileIds: ['abcdef0123456789abcdef01', 'abcdef0123456789abcdef02'], extractedProfileIds: ['abcdef0123456789abcdef01', 'abcdef0123456789abcdef02'] });
 assert.equal(done.state, 'completed');
@@ -79,7 +79,7 @@ reloaded.accept(reviewMission.id, 'abcdef0123456789abcdef06', 'Review Two');
 reloaded.setReady(reviewGroup.id, 'abcdef0123456789abcdef05', true);
 reloaded.setReady(reviewGroup.id, 'abcdef0123456789abcdef06', true);
 reloaded.startGroup(reviewGroup.id, 'raid-review');
-reloaded.recordRaidEvent(reviewGroup.id, { eventId: 'test-event-5', profileId: 'abcdef0123456789abcdef01', type: 'kill', target: 'scav', amount: 1, map: 'customs', source: 'fika-server-adapter', evidenceTrust: 'server_verified' });
+reloaded.recordRaidEvent(reviewGroup.id, { eventId: 'test-event-5', profileId: 'abcdef0123456789abcdef05', type: 'kill', target: 'scav', amount: 1, map: 'customs', source: 'fika-server-adapter', evidenceTrust: 'server_verified' });
 reloaded.recordRaidEvent(reviewGroup.id, { eventId: 'test-event-6', type: 'extract', amount: 1, map: 'customs', source: 'fika-server-adapter', evidenceTrust: 'server_verified' });
 const pendingReview = reloaded.finishGroup(reviewGroup.id, { verified: false, aliveProfileIds: ['abcdef0123456789abcdef05', 'abcdef0123456789abcdef06'], extractedProfileIds: ['abcdef0123456789abcdef05', 'abcdef0123456789abcdef06'] });
 assert.equal(pendingReview.state, 'review');
