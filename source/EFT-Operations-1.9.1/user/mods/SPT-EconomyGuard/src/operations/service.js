@@ -147,6 +147,7 @@ class OperationsService {
     }
 
     getMissionEligibility(missionId, profileId) {
+        profileId = requireProfileId(profileId);
         const mission = this.state.missions.find(item => item.id === missionId);
         if (!mission) return { available: false, reason: 'MISSION_NOT_FOUND', missingPrerequisites: [] };
         const stats = this.state.playerStats[profileId] || { points: 0 };
