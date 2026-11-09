@@ -116,11 +116,17 @@ $buildButton.Add_Click({
         foreach ($dependency in @($fikaDll,$sptCommonDll,$fikaConfig)) {
             if (-not (Test-Path -LiteralPath $dependency -PathType Leaf)) { throw "Missing required target dependency: $dependency" }
         }
+        $fikaVersion = [Reflection.AssemblyName]::GetAssemblyName($fikaDll).Version.ToString()
+        $sptCommonVersion = [Reflection.AssemblyName]::GetAssemblyName($sptCommonDll).Version.ToString()
+        if ($fikaVersion -ne '1.2.3.0') { throw "Expected Fika.Core 1.2.3.0; found $fikaVersion" }
+        if ($sptCommonVersion -ne '3.11.1.0') { throw "Expected SPT.Common 3.11.1.0; found $sptCommonVersion" }
         $fikaHeader = Get-Content -LiteralPath $fikaConfig -TotalCount 2 -ErrorAction Stop | Select-Object -First 1
         if ($fikaHeader -notmatch 'Fika\.Core v1\.2\.3') { throw "Expected Fika client 1.2.3 config marker; found: $fikaHeader" }
+        $gameAssemblyVersion = [Reflection.AssemblyName]::GetAssemblyName((Join-Path $managed 'Assembly-CSharp.dll')).Version.ToString()
         Write-Log "EFT references: $managed"
+        Write-Log "Assembly-CSharp assembly version: $gameAssemblyVersion"
         Write-Log "BepInEx references: $core"
-        Write-Log 'Fika client marker: 1.2.3; SPT common bridge assembly found.'
+        Write-Log "Fika.Core: $fikaVersion; SPT.Common: $sptCommonVersion"
         Write-Log "MSBuild: $msbuild"
         Write-Log 'Building Release / net472...'
         $output = & $msbuild $project '/m' '/p:Configuration=Release' "/p:GameManagedDir=$managed" "/p:BepInExCoreDir=$core" '/verbosity:minimal' 2>&1
