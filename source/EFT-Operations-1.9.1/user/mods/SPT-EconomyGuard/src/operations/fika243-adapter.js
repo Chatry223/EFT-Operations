@@ -111,17 +111,111 @@ class Fika243OperationsAdapter {
     patchMatchService(instance) {
         if (!instance) return false;
         const proto = Object.getPrototypeOf(instance);
-        const target = proto && Object.prototype.hasOwnProperty.call(proto, 'endMatch') ? proto : instance;
-        if (!target || typeof target.endMatch !== 'function' || target.__egFika243MatchHook) return false;
+        const target = proto || instance;
         const adapter = this;
-        const original = target.endMatch;
-        target.endMatch = function (matchId, reason, ...rest) {
-            safe(() => adapter.captureMatchEnd(this, matchId, reason));
-            return original.call(this, matchId, reason, ...rest);
-        };
-        Object.defineProperty(target, '__egFika243MatchHook', { value: true, enumerable: false });
-        this.status.matchEndHook = true;
-        return true;
+        let patched = false;
+
+        if (typeof target.endMatch === 'function' && !target.__egFika243MatchHook) {
+            const original = target.endMatch;
+            target.endMatch = function (matchId, reason, ...rest) {
+                safe(() => adapter.captureMatchEnd(this, matchId, reason));
+                return original.call(this, matchId, reason, ...rest);
+            };
+            Object.defineProperty(target, '__egFika243MatchHook', { value: true, enumerable: false });
+            this.status.matchEndHook = true;
+            patched = true;
+        }
+
+        // Fika 2.4.3 updates IFikaMatch.players after the in-raid registration path.
+        // Bind a mission only after every accepted, ready member appears in this match.
+        if (typeof target.addPlayerToMatch === 'function' && !target.__egFika243PlayerJoinHook) {
+            const original = target.addPlayerToMatch;
+            target.addPlayerToMatch = function (matchId, playerId, data, ...rest) {
+                const result = original.call(this, matchId, playerId, data, ...rest);
+                safe(() => adapter.tryStartMissionGroup(this, matchId));
+                return result;
+            };
+            Object.defineProperty(target, '__egFika243PlayerJoinHook', { value: true, enumerable: false });
+            this.status.playerJoinHook = true;
+            patched = true;
+        }
+        return patched;
+    }
+
+    tryStartMissionGroup(service, matchId) {
+        if (!this.operations || !this.operations.state || !Array.isArray(this.operations.state.groups)) return false;
+        const match = safe(() => service.getMatch && service.getMatch(matchId), null);
+        if (!match || !(match.players instanceof Map)) return false;
+        const players = new Set([...match.players.keys()].map(String));
+        const location = String(object(match.locationData).Id || object(match.raidConfig).location || '').toLowerCase();
+        if (!location) return false;
+
+        for (const group of this.operations.state.groups) {
+            if (group.state !== 'forming' || !group.members || !group.members.length) continue;
+            const mission = safe(() => this.operations.get(group.missionId), null);
+            if (!mission || String(mission.map || '').toLowerCase() !== location) continue;
+            if (!group.members.every(member => member.ready === true && players.has(String(member.profileId)))) continue;
+            try {
+                this.operations.startGroup(group.id, String(matchId));
+                this.appendEvent({
+                    eventId: `mission-link-${Date.now()}-${String(matchId)}`,
+                    type: 'mission_group_linked',
+                    timestamp: new Date().toISOString(),
+                    fikaServerVersion: EXPECTED_FIKA_VERSION,
+                    matchId: String(matchId),
+                    groupId: group.id,
+                    missionId: group.missionId,
+                    players: group.members.map(member => member.profileId),
+                    map: location,
+                    evidenceTrust: 'server_lifecycle_observation',
+                    rewardEligible: false
+                });
+                this.log('info', `Mission group ${group.id} linked to Fika match ${matchId} after all ready members joined.`);
+                return true;
+            } catch (err) {
+                this.log('warn', `Could not link mission group ${group.id} to Fika match ${matchId}: ${err.message}`);
+            }
+        }
+        return false;
+    }
+
+    finishMissionGroup(service, matchId, match) {
+        if (!this.operations || !this.operations.state || !Array.isArray(this.operations.state.groups)) return null;
+        const group = this.operations.state.groups.find(item => item.state === 'in_raid' && String(item.raidId) === String(matchId));
+        if (!group) return null;
+        const memberIds = new Set(group.members.map(member => String(member.profileId)));
+        const aliveProfileIds = match && match.players instanceof Map
+            ? [...match.players.entries()].filter(([playerId, player]) => memberIds.has(String(playerId)) && object(player).isDead !== true).map(([playerId]) => String(playerId))
+            : [];
+        const extractedProfileIds = this.getRecentEvents(500)
+            .filter(event => event.type === 'player_raid_end' && String(event.matchId || '') === String(matchId)
+                && memberIds.has(String(event.profileId || ''))
+                && String(event.exitStatus || '').toLowerCase() === 'survived')
+            .map(event => String(event.profileId));
+        try {
+            const result = this.operations.finishGroup(group.id, {
+                verified: false,
+                aliveProfileIds,
+                extractedProfileIds,
+                evidenceTrust: 'lifecycle_observation_plus_client_report',
+                source: 'fika-server-adapter'
+            });
+            this.appendEvent({
+                eventId: `mission-finish-${Date.now()}-${String(matchId)}`,
+                type: 'mission_group_review_created',
+                timestamp: new Date().toISOString(),
+                fikaServerVersion: EXPECTED_FIKA_VERSION,
+                matchId: String(matchId),
+                groupId: group.id,
+                players: group.members.map(member => member.profileId),
+                evidenceTrust: 'mixed_unverified',
+                rewardEligible: false
+            });
+            return result;
+        } catch (err) {
+            this.log('warn', `Could not finish mission group ${group.id} for Fika match ${matchId}: ${err.message}`);
+            return null;
+        }
     }
 
     resolveIdentity(sessionId) {
@@ -181,6 +275,7 @@ class Fika243OperationsAdapter {
             rewardEligible: false
         };
         this.appendEvent(event);
+        this.finishMissionGroup(service, matchId, match);
         return event;
     }
 
