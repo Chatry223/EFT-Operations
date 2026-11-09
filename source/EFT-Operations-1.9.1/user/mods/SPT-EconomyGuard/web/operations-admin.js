@@ -103,7 +103,7 @@
             ? '<details><summary>' + esc(objectiveLabel + ' · ' + objectiveRows.length + ' objectives') + '</summary><pre>' + esc(JSON.stringify(objectiveRows, null, 2)) + '</pre></details>'
             : objectiveLabel;
           const evidence = events.length || hostEvidence.length
-            ? '<details><summary>' + esc(summary + ' · ' + hostEvidence.length + ' host-attested kill events') + '</summary><pre>' + esc(JSON.stringify({ raidEvents: safeEvidence, hostEvidence, objectiveEvidence: objectiveRows }, null, 2)) + '</pre></details>'
+            ? '<details><summary>' + esc(summary + ' · ' + hostEvidence.length + ' host-attested events') + '</summary><pre>' + esc(JSON.stringify({ raidEvents: safeEvidence, hostEvidence, objectiveEvidence: objectiveRows }, null, 2)) + '</pre></details>'
             : 'No linked Fika evidence';
           return `<tr><td class="mono">${esc(String(g.id).slice(0, 12))}</td><td>${esc(g.missionTitle || g.missionId)}</td><td>${(g.members || []).map(m => esc(m.displayName || 'Unknown operator')).join(', ')}</td><td>${objectiveHtml}</td><td>${evidence}</td><td>${dateValue(g.finishedAt)}</td><td><button class="action-btn" data-op-review="approve" data-group="${esc(g.id)}">Approve</button> <button class="action-btn danger" data-op-review="deny" data-group="${esc(g.id)}">Deny</button></td></tr>`;
         }).join('');
