@@ -5,7 +5,7 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'EFT Operations - Client Plugin Builder'
-$form.Size = New-Object System.Drawing.Size(760, 500)
+$form.Size = New-Object System.Drawing.Size(760, 560)
 $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedDialog'
 $form.MaximizeBox = $false
@@ -56,6 +56,19 @@ function Resolve-BepInExCore([string]$selected) {
     foreach ($candidate in $candidates) {
         if ((Test-Path (Join-Path $candidate 'BepInEx.dll')) -and
             (Test-Path (Join-Path $candidate '0Harmony.dll'))) { return $candidate }
+    }
+    return $null
+}
+function Resolve-InstallBepInExRoot([string]$selected) {
+    if ([string]::IsNullOrWhiteSpace($selected)) { return $null }
+    $candidates = @($selected, (Join-Path $selected 'BepInEx'), (Join-Path $selected 'BepInEx\core'),
+        (Join-Path $selected 'core'), (Split-Path $selected -Parent))
+    foreach ($candidate in $candidates) {
+        if ([string]::IsNullOrWhiteSpace($candidate)) { continue }
+        $full = [System.IO.Path]::GetFullPath($candidate)
+        if ($full -match '[\\/]EFT-Operations[\\/]Dependencies([\\/]|$)') { continue }
+        if ((Test-Path (Join-Path $full 'core\BepInEx.dll')) -and
+            (Test-Path (Join-Path $full 'plugins'))) { return $full }
     }
     return $null
 }
@@ -138,13 +151,16 @@ Add-Label 'EFT Operations - Build and install the BepInEx client plugin' 22 18 7
 Add-Label 'Select EFT Managed (or game root); bundled source ZIPs can be loaded automatically:' 22 65 700 22 | Out-Null
 $managedBox = Add-TextBox 22 90 590
 $managedButton = Add-Button 'Browse...' 625 88 100 30
-Add-Label 'Select BepInEx core (or BepInEx root):' 22 135 700 22 | Out-Null
+Add-Label 'Select BepInEx core (or BepInEx root) for references:' 22 135 700 22 | Out-Null
 $coreBox = Add-TextBox 22 160 590
 $coreButton = Add-Button 'Browse...' 625 158 100 30
-$buildButton = Add-Button 'Build and Install DLL' 22 207 190 38
-$bundledButton = Add-Button 'Load bundled ZIPs' 225 207 180 38
+Add-Label 'Select the actual installed BepInEx root (required for installation):' 22 205 700 22 | Out-Null
+$installBox = Add-TextBox 22 230 590
+$installButton = Add-Button 'Browse...' 625 228 100 30
+$buildButton = Add-Button 'Build and Install DLL' 22 275 190 38
+$bundledButton = Add-Button 'Load bundled ZIPs' 225 275 180 38
 $logBox = New-Object System.Windows.Forms.TextBox
-$logBox.Location = New-Object System.Drawing.Point(22,260)
+$logBox.Location = New-Object System.Drawing.Point(22,325)
 $logBox.Size = New-Object System.Drawing.Size(703,175)
 $logBox.Multiline = $true; $logBox.ReadOnly = $true; $logBox.ScrollBars = 'Vertical'
 $logBox.BackColor = [System.Drawing.Color]::FromArgb(10,16,23)
@@ -160,12 +176,18 @@ $coreButton.Add_Click({
     $dialog.Description = 'Choose BepInEx\core or the BepInEx folder'
     if ($dialog.ShowDialog() -eq 'OK') { $coreBox.Text = $dialog.SelectedPath }
 })
+$installButton.Add_Click({
+    $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+    $dialog.Description = 'Choose the actual installed BepInEx root (or the SPT game root)'
+    if ($dialog.ShowDialog() -eq 'OK') { $installBox.Text = $dialog.SelectedPath }
+})
 $bundledButton.Add_Click({
     try {
         $dependencies = Load-BundledDependencies
         $managedBox.Text = $dependencies.ManagedDir
-        $coreBox.Text = $dependencies.CoreDir
+        if ([string]::IsNullOrWhiteSpace($coreBox.Text)) { $coreBox.Text = $dependencies.CoreDir }
         Write-Log 'Bundled EFT and BepInEx archives loaded into the local build cache.'
+        Write-Log 'The actual game BepInEx install folder must still be selected below.'
         Write-Log ('EFT Managed: ' + $dependencies.ManagedDir)
         Write-Log ('BepInEx core: ' + $dependencies.CoreDir)
     } catch {
@@ -186,6 +208,13 @@ $buildButton.Add_Click({
         }
         if (-not $managed) { throw 'EFT Managed folder was not found. Choose the folder containing Assembly-CSharp.dll and UnityEngine.CoreModule.dll.' }
         if (-not $core) { throw 'BepInEx core folder was not found. Choose the folder containing BepInEx.dll and 0Harmony.dll.' }
+        if ([string]::IsNullOrWhiteSpace($installBox.Text) -and $managed -notmatch '[\\/]EFT-Operations[\\/]Dependencies([\\/]|$)') {
+            $gameRoot = Split-Path (Split-Path $managed -Parent) -Parent
+            $candidateRoot = Join-Path $gameRoot 'BepInEx'
+            if (Test-Path (Join-Path $candidateRoot 'core\BepInEx.dll')) { $installBox.Text = $candidateRoot }
+        }
+        $installRoot = Resolve-InstallBepInExRoot $installBox.Text
+        if (-not $installRoot) { throw 'Select the actual installed BepInEx root in the third field. Do not install the DLL into the temporary build cache.' }
         $project = Join-Path $PSScriptRoot 'EFT.Operations.Client.csproj'
         if (-not (Test-Path $project)) { throw 'EFT.Operations.Client.csproj is missing.' }
         $msbuild = Find-MSBuild
@@ -238,7 +267,7 @@ $buildButton.Add_Click({
         $dll = Join-Path $PSScriptRoot 'bin\Release\net472\EFTOperations.Client.dll'
         if (-not (Test-Path $dll)) { throw 'Build finished without producing EFTOperations.Client.dll.' }
 
-        $pluginDir = Join-Path (Split-Path $core -Parent) 'plugins\EFTOperations'
+        $pluginDir = Join-Path $installRoot 'plugins\EFTOperations'
         New-Item -ItemType Directory -Path $pluginDir -Force | Out-Null
         $destination = Join-Path $pluginDir 'EFTOperations.Client.dll'
         if (Test-Path -LiteralPath $destination -PathType Leaf) {
@@ -251,9 +280,10 @@ $buildButton.Add_Click({
         $gameHash = (Get-FileHash -LiteralPath (Join-Path $managed 'Assembly-CSharp.dll') -Algorithm SHA256).Hash
         $fikaHash = (Get-FileHash -LiteralPath $fikaDll -Algorithm SHA256).Hash
         $sptHash = (Get-FileHash -LiteralPath $sptCommonDll -Algorithm SHA256).Hash
-        $report = @("Build time: $(Get-Date -Format o)", "Target: EFT 0.16.1.3.35392-P2P / SPT 3.11.1 / Fika Server 2.4.3 / Fika Client 1.2.3", "Target: net472", "EFT Managed: $managed", "BepInEx core: $core", "Assembly-CSharp SHA256: $gameHash", "Fika.Core SHA256: $fikaHash", "spt-common SHA256: $sptHash", "DLL: $destination", "SHA256: $hash")
+        $report = @("Build time: $(Get-Date -Format o)", "Target: EFT 0.16.1.3.35392-P2P / SPT 3.11.1 / Fika Server 2.4.3 / Fika Client 1.2.3", "Target: net472", "EFT Managed: $managed", "BepInEx core references: $core", "Installed BepInEx root: $installRoot", "Assembly-CSharp SHA256: $gameHash", "Fika.Core SHA256: $fikaHash", "spt-common SHA256: $sptHash", "DLL: $destination", "SHA256: $hash")
         Set-Content -LiteralPath (Join-Path $pluginDir 'build-report.txt') -Value $report -Encoding UTF8
         Write-Log "SUCCESS: Installed $destination"
+        Write-Log "Target BepInEx root: $installRoot"
         Write-Log "SHA256: $hash"
         [System.Windows.Forms.MessageBox]::Show(("Build and installation completed." + [Environment]::NewLine + [Environment]::NewLine + $destination + [Environment]::NewLine + [Environment]::NewLine + "SHA256: " + $hash),'EFT Operations',[System.Windows.Forms.MessageBoxButtons]::OK,[System.Windows.Forms.MessageBoxIcon]::Information) | Out-Null
     } catch {
@@ -261,5 +291,5 @@ $buildButton.Add_Click({
         [System.Windows.Forms.MessageBox]::Show($_.Exception.Message,'EFT Operations - Build failed',[System.Windows.Forms.MessageBoxButtons]::OK,[System.Windows.Forms.MessageBoxIcon]::Error) | Out-Null
     } finally { $buildButton.Enabled = $true }
 })
-Write-Log 'Choose folders, load bundled ZIPs, or click Build to use the bundled ZIPs automatically.'
+Write-Log 'Load bundled ZIPs for exact build references, then choose the actual BepInEx install root before building.'
 [void]$form.ShowDialog()
