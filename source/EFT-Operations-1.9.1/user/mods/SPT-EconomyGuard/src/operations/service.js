@@ -205,8 +205,8 @@ class OperationsService {
         const source = String(event.source || '');
         const serverVerified = event.evidenceTrust === 'server_verified' && ['fika-server-adapter', 'spt-server-adapter'].includes(source);
         const hostAttested = event.evidenceTrust === 'host_attested' && source === 'fika-host-client'
-            && event.reporterProfileId && g.members.length && String(event.reporterProfileId) === String(g.members[0].profileId)
-            && event.type === 'kill' && event.victimIsAi === true
+            && event.reporterProfileId && g.members.some(member => String(member.profileId) === String(event.reporterProfileId) || String(member.scavProfileId || '') === String(event.reporterProfileId))
+            && String(event.reporterProfileId) === String(event.matchId) && event.type === 'kill' && event.victimIsAi === true
             && String(event.matchId || '') === String(g.raidId || '');
         if (!serverVerified && !hostAttested) throw new Error('UNTRUSTED_RAID_EVENT');
         const eventId = text(event.eventId, 120, 'EVENT_ID', true);
@@ -228,12 +228,13 @@ class OperationsService {
         if (g.processedEventIds.includes(eventId)) return clone(g.progress);
         if (hostAttested) {
             const reporterId = requireProfileId(event.reporterProfileId);
-            if (reporterId !== String(g.members[0].profileId)) throw new Error('HOST_REPORTER_NOT_LEADER');
+            if (!g.members.some(member => member.profileId === reporterId || member.scavProfileId === reporterId)) throw new Error('HOST_REPORTER_NOT_MEMBER');
+            if (reporterId !== String(event.matchId)) throw new Error('HOST_REPORTER_MATCH_MISMATCH');
             if (event.matchId !== g.raidId) throw new Error('RAID_EVENT_MATCH_MISMATCH');
             const victimId = requireProfileId(event.victimProfileId);
             if (g.members.some(member => member.profileId === victimId || member.scavProfileId === victimId)) throw new Error('RAID_EVENT_VICTIM_IS_MEMBER');
             const category = text(event.targetCategory, 40, 'EVENT_TARGET_CATEGORY', true).toLowerCase();
-            if (!['scav', 'boss', 'raider', 'rogue', 'cultist', 'pmc', 'follower', 'other', 'unknown'].includes(category)) throw new Error('INVALID_EVENT_TARGET_CATEGORY');
+            if (!['scav', 'boss', 'boss_guard', 'raider', 'rogue', 'cultist', 'pmc', 'follower', 'other', 'unknown'].includes(category)) throw new Error('INVALID_EVENT_TARGET_CATEGORY');
         }
         if (!g.progress || typeof g.progress !== 'object' || Array.isArray(g.progress)) {
             g.progress = Object.fromEntries(m.objectives.map(objective => [objective.id, 0]));
