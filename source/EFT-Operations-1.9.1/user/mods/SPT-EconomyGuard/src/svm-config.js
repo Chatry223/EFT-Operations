@@ -8,6 +8,11 @@ const TRADER_KEYS = new Set(['Prapor', 'Therapist', 'Fence', 'Skier', 'Peacekeep
 
 function isObject(value) { return !!value && typeof value === 'object' && !Array.isArray(value); }
 
+function isPathInside(parent, candidate) {
+    const relative = path.relative(parent, candidate);
+    return relative !== '' && relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative);
+}
+
 class SvmConfigService {
     constructor(modDir, dataDir, logger = console) {
         this.modDir = modDir;
@@ -30,12 +35,19 @@ class SvmConfigService {
 
     resolveActivePreset() {
         if (!this.svmDir) throw new Error('SVM_NOT_INSTALLED');
-        const loaderFile = path.join(this.svmDir, 'Loader', 'loader.json');
+        const modsRoot = fs.realpathSync(path.resolve(this.modDir, '..'));
+        const svmRoot = fs.realpathSync(this.svmDir);
+        if (!isPathInside(modsRoot, svmRoot)) throw new Error('SVM_DIRECTORY_OUTSIDE_MODS');
+        const loaderCandidate = path.join(svmRoot, 'Loader', 'loader.json');
+        const loaderFile = fs.realpathSync(loaderCandidate);
+        if (!isPathInside(svmRoot, loaderFile)) throw new Error('SVM_LOADER_OUTSIDE_DIRECTORY');
         const loader = this.readJson(loaderFile);
         const selected = String(loader.CurrentlySelectedPreset || '').trim();
         if (!/^v[1-9][0-9]*$/.test(selected)) throw new Error('SVM_PRESET_NOT_SELECTED');
-        const presetFile = path.join(this.svmDir, 'Presets', selected + '.json');
-        if (!fs.existsSync(presetFile)) throw new Error('SVM_ACTIVE_PRESET_MISSING');
+        const presetCandidate = path.join(svmRoot, 'Presets', selected + '.json');
+        if (!fs.existsSync(presetCandidate)) throw new Error('SVM_ACTIVE_PRESET_MISSING');
+        const presetFile = fs.realpathSync(presetCandidate);
+        if (!isPathInside(svmRoot, presetFile)) throw new Error('SVM_PRESET_OUTSIDE_DIRECTORY');
         const preset = this.readJson(presetFile);
         if (!isObject(preset.Traders)) throw new Error('SVM_TRADER_SECTION_MISSING');
         return { loaderFile, presetFile, selected, preset };
