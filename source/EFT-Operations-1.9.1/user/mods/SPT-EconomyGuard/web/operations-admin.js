@@ -61,7 +61,43 @@
     function syncCurrentForm() { const f=$('#opMissionForm'); if(!f) return; const draft=collectForm(f); selected=draft; objectives=draft.objectives.map(x=>({...x})); }
     async function loadLeaderboard() { try { const rows=await api('/api/operations/leaderboard'); $('#opLeaderboard').innerHTML=`<div class="table-wrap"><table><thead><tr><th>PLAYER PROFILE</th><th>RANK</th><th>POINTS</th><th>COMPLETED</th></tr></thead><tbody>${rows.map(x=>`<tr><td class="mono">${esc(x.profileId)}</td><td>${esc(x.rank)}</td><td>${Number(x.points).toLocaleString()}</td><td>${x.completedMissions}</td></tr>`).join('')||'<tr><td colspan="4" class="empty">No verified awards yet.</td></tr>'}</tbody></table></div>`; } catch(e) { toast(e.message,true); } }
     async function loadAwards() { try { const rows=await api('/api/operations/awards'); $('#opAwards').innerHTML=`<div class="table-wrap"><table><thead><tr><th>MISSION</th><th>GROUP</th><th>PROFILE</th><th>POINTS</th><th>ROUBLES</th><th>DELIVERY</th><th>DATE</th></tr></thead><tbody>${rows.map(x=>`<tr><td class="mono">${esc(x.missionId)}</td><td class="mono">${esc(x.groupId)}</td><td class="mono">${esc(x.profileId)}</td><td>${x.points}</td><td>${Number(x.roubles||0).toLocaleString()}</td><td title="${esc(x.deliveryError||'')}">${esc(x.status)} ${['delivery_attention_required','delivering'].includes(x.status)?'<button class="action-btn" data-op-delivery="'+esc(x.id)+'">RECONCILE</button>':''}</td><td>${dateValue(x.createdAt)}</td></tr>`).join('')||'<tr><td colspan="8" class="empty">No awards recorded.</td></tr>'}</tbody></table></div>`; } catch(e) { toast(e.message,true); } }
-    async function loadReviews() { try { const rows=await api('/api/operations/reviews'); $('#opReviews').innerHTML=`<div class="table-wrap"><table><thead><tr><th>GROUP</th><th>MISSION</th><th>MEMBERS</th><th>OBJECTIVES</th><th>SUBMITTED</th><th>ACTION</th></tr></thead><tbody>${rows.map(g=>`<tr><td class="mono">${esc(g.id)}</td><td class="mono">${esc(g.missionId)}</td><td>${(g.members||[]).map(m=>esc(m.displayName||m.profileId)).join(', ')}</td><td>${g.reviewData?.requiredDone?'Complete':'Incomplete'}</td><td>${dateValue(g.finishedAt)}</td><td><button class="action-btn" data-op-review="approve" data-group="${esc(g.id)}">Approve</button> <button class="action-btn danger" data-op-review="deny" data-group="${esc(g.id)}">Deny</button></td></tr>`).join('')||'<tr><td colspan="6" class="empty">No raids waiting for review.</td></tr>'}</tbody></table></div>`; } catch(e) { toast(e.message,true); } }
+    async function loadReviews() {
+      try {
+        const rows = await api('/api/operations/reviews');
+        const rowHtml = rows.map(g => {
+          const events = Array.isArray(g.fikaEvidence) ? g.fikaEvidence : [];
+          const raidEnds = events.filter(x => x.type === 'player_raid_end');
+          const deathReports = events.filter(x => x.type === 'fika_player_died').length;
+          const victimCount = raidEnds.reduce((sum, x) => sum + Number(x.reportedVictimCount || 0), 0);
+          const corroboratedCount = raidEnds.reduce((sum, x) => sum + Number(x.corroboratedVictimCount || 0), 0);
+          const lootCount = raidEnds.reduce((sum, x) => sum + Number(x.reportedLootItemCount || 0), 0);
+          const safeEvidence = events.map(x => ({
+            type: x.type,
+            operator: x.displayName || '',
+            map: x.map || '',
+            exitStatus: x.exitStatus || '',
+            exitName: x.exitName || '',
+            trust: x.evidenceTrust || '',
+            victims: (x.reportedVictims || []).map(v => ({
+              name: v.name, role: v.role, side: v.side, level: v.level,
+              distance: v.distance, weapon: v.weapon, location: v.location,
+              corroboratedByFikaDeathReport: v.corroboratedByFikaDeathReport
+            })),
+            lootByTemplate: x.reportedLootByTpl || {},
+            lootItems: (x.reportedLootItems || []).map(v => ({ tpl: v.tpl, count: v.count, acceptedBySpt: v.acceptedBySpt })),
+            sessionCounters: x.reportedSessionCounters || []
+          }));
+          const summary = raidEnds.length
+            ? raidEnds.length + ' raid reports · ' + victimCount + ' victims · ' + corroboratedCount + ' Fika corroborated · ' + lootCount + ' accepted loot units · ' + deathReports + ' death reports'
+            : events.length + ' Fika events · ' + deathReports + ' death reports';
+          const evidence = events.length
+            ? '<details><summary>' + esc(summary) + '</summary><pre>' + esc(JSON.stringify(safeEvidence, null, 2)) + '</pre></details>'
+            : 'No linked Fika evidence';
+          return `<tr><td class="mono">${esc(String(g.id).slice(0, 12))}</td><td>${esc(g.missionTitle || g.missionId)}</td><td>${(g.members || []).map(m => esc(m.displayName || 'Unknown operator')).join(', ')}</td><td>${g.reviewData?.requiredDone ? 'Complete' : 'Incomplete'}</td><td>${evidence}</td><td>${dateValue(g.finishedAt)}</td><td><button class="action-btn" data-op-review="approve" data-group="${esc(g.id)}">Approve</button> <button class="action-btn danger" data-op-review="deny" data-group="${esc(g.id)}">Deny</button></td></tr>`;
+        }).join('');
+        $('#opReviews').innerHTML = `<div class="table-wrap"><table><thead><tr><th>GROUP</th><th>MISSION</th><th>MEMBERS</th><th>OBJECTIVES</th><th>FIKA EVIDENCE</th><th>SUBMITTED</th><th>ACTION</th></tr></thead><tbody>${rowHtml || '<tr><td colspan="7" class="empty">No raids waiting for review.</td></tr>'}</tbody></table></div>`;
+      } catch (e) { toast(e.message, true); }
+    }
     async function loadFika() { try { const data=await api('/api/operations/fika'); const s=data.status||{}; $('#opFikaStatus').innerHTML=`<div class="callout"><b>${s.enabled?'Fika Server '+esc(s.serverVersion)+' detected':'Fika observer unavailable'}</b><p>Fika client target: ${esc(s.fikaClientTargetVersion||'unknown')} · config Last Version (advisory only): ${esc(s.fikaClientConfigLastVersion||'unknown')} · Operations plugin source: ${esc(s.operationsClientPluginVersion||'not built')} · ${esc(s.observerInstalled?'All required Fika hooks are active':'Hook state: '+(s.hookState||'pending')+' · Missing: '+((s.missingHooks||[]).join(', ')||'unknown'))}</p><p>Lifecycle hook: ${s.lifecycleHook?'installed':'waiting'} · Update identity guard: ${s.updateIdentityHook?'installed':'waiting'} · Raid identity guard: ${s.raidIdentityHook?'installed':'waiting'} · Player-join hook: ${s.playerJoinHook?'installed':'waiting'} · Match lifecycle hook: ${(s.matchEndHook&&s.matchDeleteHook&&s.matchCreateHook)?'installed':'waiting'}</p><p>Raid reports are labelled <code>untrusted_client_report</code>; no automatic mission awards are generated from these records.</p></div>`; const rows=data.events||[]; $('#opFikaEvents').innerHTML=`<div class="table-wrap"><table><thead><tr><th>TYPE</th><th>OPERATOR / MATCH</th><th>MAP</th><th>RESULT</th><th>EXIT</th><th>RAID EVIDENCE</th><th>TRUST</th><th>TIME</th></tr></thead><tbody>${rows.map(x=>`<tr><td>${esc(x.type)}</td><td class="mono">${esc(x.displayName||x.matchId||'—')}</td><td>${esc(x.map||'—')}</td><td>${esc(x.exitStatus||x.reason||'—')}</td><td>${esc(x.exitName||'—')}</td><td>${x.type==='player_raid_end' ? '<details><summary>'+esc((x.reportedVictimCount||0)+' victims · '+(x.corroboratedVictimCount||0)+' Fika corroborated · '+(x.reportedLootItemCount||0)+' accepted loot units · '+(x.reportedSessionCounters||[]).length+' counters')+'</summary><pre>'+esc(JSON.stringify({victims:(x.reportedVictims||[]).map(v=>({name:v.name,role:v.role,side:v.side,level:v.level,distance:v.distance,weapon:v.weapon,location:v.location,corroboratedByFikaDeathReport:v.corroboratedByFikaDeathReport})),lootByTemplate:x.reportedLootByTpl||{},lootItems:(x.reportedLootItems||[]).map(v=>({tpl:v.tpl,count:v.count,acceptedBySpt:v.acceptedBySpt})),lootSnapshotAvailable:!!x.lootSnapshotAvailable,sessionCounters:x.reportedSessionCounters||[]},null,2))+'</pre></details>' : x.type==='fika_player_died' ? 'Authenticated player-death report; no killer identity' : '—'}</td><td>${esc(x.evidenceTrust||'—')}</td><td>${dateValue(x.timestamp)}</td></tr>`).join('')||'<tr><td colspan="7" class="empty">No Fika raid records yet.</td></tr>'}</tbody></table></div>`; } catch(e) { toast(e.message,true); } }
     view.addEventListener('submit', async e=>{ if(e.target.id!=='opMissionForm') return; e.preventDefault(); try { const result=await api('/api/operations/save',collectForm(e.target)); selected=null; objectives=[]; await refresh(); toast(`Saved draft: ${result.mission.title}`); } catch(err) { toast(err.message,true); } });
     view.addEventListener('click', async e=>{
