@@ -201,7 +201,7 @@ class OperationsService {
         const requiredDone = m.objectives.filter(o => o.required).every(o => (g.progress[o.id] || 0) >= o.count);
         const alive = new Set(Array.isArray(raidOutcome && raidOutcome.aliveProfileIds) ? raidOutcome.aliveProfileIds : []);
         const extracted = new Set(Array.isArray(raidOutcome && raidOutcome.extractedProfileIds) ? raidOutcome.extractedProfileIds : []);
-        const raidVerified = raidOutcome && raidOutcome.verified === true;
+        const raidVerified = raidOutcome && raidOutcome.verified === true && raidOutcome.evidenceTrust === 'server_verified' && raidOutcome.source === 'fika-server-adapter';
         const results = [];
         for (const member of g.members) {
             const survived = alive.has(member.profileId);
@@ -216,7 +216,7 @@ class OperationsService {
         if (raidVerified) g.state = 'completed';
         else {
             g.state = 'review';
-            g.reviewData = { requiredDone, aliveProfileIds: [...alive], extractedProfileIds: [...extracted], submittedAt: g.finishedAt };
+            g.reviewData = { requiredDone, aliveProfileIds: [...alive], extractedProfileIds: [...extracted], evidenceTrust: String(raidOutcome && raidOutcome.evidenceTrust || 'untrusted_client_report'), source: String(raidOutcome && raidOutcome.source || 'unknown'), submittedAt: g.finishedAt };
         }
         this.persist(); return clone(g);
     }
@@ -230,7 +230,7 @@ class OperationsService {
 
     reviewQueue() { return this.state.groups.filter(g => g.state === 'review').map(clone); }
 
-    resolveReview(groupId, decision, note, reviewer = 'ADMIN') {
+    resolveReview(groupId, decision, note, reviewer = 'ADMIN', attestation = {}) {
         const g = this.state.groups.find(x => x.id === groupId && x.state === 'review');
         if (!g) throw new Error('REVIEW_NOT_FOUND');
         if (!['approve', 'deny'].includes(decision)) throw new Error('INVALID_REVIEW_DECISION');
@@ -247,7 +247,7 @@ class OperationsService {
         } else {
             for (const member of g.members) member.result = 'denied';
         }
-        g.state = 'completed'; g.review = { decision, note: reviewNote, reviewer: reviewedBy, reviewedAt: new Date().toISOString() };
+        g.state = 'completed'; g.review = { decision, note: reviewNote, reviewer: reviewedBy, attested: decision === 'approve', attestationMethod: decision === 'approve' ? 'admin_manual_evidence_confirmation' : null, reviewedAt: new Date().toISOString() };
         this.persist(); return clone(g);
     }
 
