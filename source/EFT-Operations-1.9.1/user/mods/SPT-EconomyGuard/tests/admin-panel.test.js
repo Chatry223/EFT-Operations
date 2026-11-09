@@ -98,6 +98,16 @@ const { OperationsService } = require('../src/operations/service');
   assert.strictEqual(leaderboardRows[0].displayName,'Alpha PMC');
   assert.ok(!JSON.stringify(leaderboardRows).includes(profileId),'leaderboard API must not expose profile IDs');
 
+  operations.state.groups.push({id:'GROUPSECRET',missionId:savedMission.id,members:[{profileId:'AWARDPROFILESECRET',displayName:'Alpha PMC'}]});
+  operations.state.awards.push({id:'award-test-1',key:'award-test-key',missionId:savedMission.id,groupId:'GROUPSECRET',profileId:'AWARDPROFILESECRET',points:75,roubles:1000,items:[],createdAt:'2026-11-09T20:06:00.000Z',status:'pending_delivery'});
+  const awardsResponse=await fetch(`http://127.0.0.1:${port}/api/operations/awards`,{headers:opsHeaders});
+  assert.strictEqual(awardsResponse.status,200);
+  const awardRows=await awardsResponse.json();
+  assert.strictEqual(awardRows[0].displayName,'Alpha PMC');
+  const safeAwardsJson=JSON.stringify(awardRows);
+  for(const secret of ['AWARDPROFILESECRET','GROUPSECRET','0123456789abcdef01234567'])
+    assert.ok(!safeAwardsJson.includes(secret),`award API must not expose internal identifier ${secret}`);
+
   const fikaResponse=await fetch(`http://127.0.0.1:${port}/api/operations/fika`,{headers:opsHeaders});
   assert.strictEqual(fikaResponse.status,200);
   const safeFikaJson=JSON.stringify(await fikaResponse.json());
