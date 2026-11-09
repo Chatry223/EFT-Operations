@@ -12,6 +12,7 @@ using UnityEngine;
 namespace EFTOperations.Client
 {
     [BepInPlugin("com.eft.operations.client", "EFT Operations", "0.1.0")]
+    [BepInDependency("com.fika.core", BepInDependency.DependencyFlags.SoftDependency)]
     public sealed class Plugin : BaseUnityPlugin
     {
         private ConfigEntry<KeyCode> toggleKey;
@@ -287,7 +288,7 @@ namespace EFTOperations.Client
             StartCoroutine(Request("/client/eft/operations/ready", body, delegate(string responseBody)
             {
                 ActionResponse response = JsonUtility.FromJson<ActionResponse>(responseBody);
-                status = response != null && response.ok ? (response.canStart ? "All members ready. Host start is not yet automated." : "Ready status updated.") : "Ready failed: " + (response == null ? "INVALID_RESPONSE" : response.error);
+                status = response != null && response.ok ? (response.canStart ? "All members ready. The squad leader can start through Fika." : "Ready status updated.") : "Ready failed: " + (response == null ? "INVALID_RESPONSE" : response.error);
                 RefreshAll();
             }));
         }
@@ -353,6 +354,10 @@ namespace EFTOperations.Client
                     if (GUILayout.Button(fikaStartRequested ? "FIKA HOST REQUEST SENT" : "START OPERATION THROUGH FIKA", GUILayout.Height(38f)))
                         StartFikaHost();
                     GUI.enabled = true;
+                }
+                else if (group.state == "forming" && playerState.canStart && !group.isLeader)
+                {
+                    GUILayout.Label("Squad is ready. Wait for " + (group.leaderName ?? "the squad leader") + " to host through Fika, then join the raid from Fika's raid list.", SmallStyle());
                 }
                 GUILayout.BeginHorizontal();
                 if (GUILayout.Button("READY", GUILayout.Height(32f))) Ready(true);
