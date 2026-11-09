@@ -31,6 +31,7 @@ The version-gated adapter activates only when the sibling `fika-server/package.j
 - At raid start, snapshots the mission member's PMC/Scav inventory. At raid end, compares new `SpawnedInSession` items against the pre-raid snapshot and the profile retained by SPT after its post-raid processing; only items still present in the SPT profile are listed as accepted loot evidence.
 - Captures client-reported `Stats.Eft.Victims`, session counters and quest-item reports. Victim profile IDs are cross-checked against authenticated Fika player-death reports where available; the admin UI displays names/roles and corroboration without exposing profile IDs.
 - Stores a bounded Fika evidence stream in `SPT-EconomyGuard-Data/operations/fika-events.jsonl`.
+- The protected mission review queue now shows per-objective **server-verified progress** separately from **client-reported evidence** (victim roles, loot template counts, exits, and Fika match completion); profile IDs are not displayed in the UI.
 - All kill/loot/exit reports remain untrusted or corroborated client evidence, not server-verified objective progress. No automatic points or item rewards are issued from these records.
 - The protected admin Fika Link tab shows observer state, hook status, event records, and evidence trust labels.
 
