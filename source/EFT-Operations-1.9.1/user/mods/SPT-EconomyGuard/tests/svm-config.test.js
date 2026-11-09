@@ -112,6 +112,7 @@ function fixture() {
     const f = fixture();
     try {
         assert.throws(() => f.service.update({ traderMarkup: { UnknownTrader: 20 } }), /UNKNOWN_SVM_TRADER/);
+        assert.throws(() => f.service.update({ traderMarkup: { Skier: 100.1 } }), /INVALID_SVM_TRADER_MARKUP/);
         assert.throws(() => f.service.update({ fence: { stockTimeMin: 200, stockTimeMax: 100 } }), /INVALID_SVM_FENCE_STOCK_RANGE/);
         const preset = JSON.parse(fs.readFileSync(path.join(f.svmDir, 'Presets', 'v6.json'), 'utf8'));
         assert.strictEqual(preset.Traders.TraderMarkup.Skier, 20);
