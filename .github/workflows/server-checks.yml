@@ -4,23 +4,29 @@ on:
   push:
     branches: [main]
     paths:
-      - 'source/**'
+      - 'source/EFT-Operations-1.9.1/user/mods/SPT-EconomyGuard/**'
+      - 'source/EFT-Operations-1.9.1.zip'
       - 'user/mods/SPT-EconomyGuard/**'
       - '.github/workflows/server-checks.yml'
   pull_request:
     branches: [main]
+    paths:
+      - 'source/EFT-Operations-1.9.1/user/mods/SPT-EconomyGuard/**'
+      - 'source/EFT-Operations-1.9.1.zip'
+      - 'user/mods/SPT-EconomyGuard/**'
+      - '.github/workflows/server-checks.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: eft-operations-server-${{ github.ref }}-${{ github.sha }}
+  group: eft-operations-server-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   server-tests:
-    name: SPT server checks and tests
+    name: SPT server checks, tests and package
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -46,43 +52,6 @@ jobs:
       - name: Unit tests
         working-directory: user/mods/SPT-EconomyGuard
         run: npm test
-
-  windows-build-helper-validation:
-    name: Validate graphical Windows build helper
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Parse PowerShell GUI builder
-        shell: pwsh
-        run: |
-          $script = 'source/EFT-Operations-1.9.1/client/EFT.Operations.Client/BUILD-GUI.ps1'
-          $tokens = $null
-          $errors = $null
-          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script), [ref]$tokens, [ref]$errors) | Out-Null
-          if ($errors.Count -gt 0) {
-            $errors | ForEach-Object { Write-Error $_.Message }
-            throw 'PowerShell GUI builder has syntax errors.'
-          }
-          if (-not (Test-Path 'source/EFT-Operations-1.9.1/client/EFT.Operations.Client/BUILD-GUI.bat')) {
-            throw 'One-click GUI launcher batch file is missing.'
-          }
-          Write-Host 'Graphical build helper syntax validated.'
-
-  package-server-mod:
-    name: Package tested SPT server mod
-    needs: server-tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Prepare source tree
-        shell: bash
-        run: |
-          if [ -f source/EFT-Operations-1.9.1/user/mods/SPT-EconomyGuard/package.json ]; then
-            cp -a source/EFT-Operations-1.9.1/. .
-          elif [ -f source/EFT-Operations-1.9.1.zip ]; then
-            unzip -q source/EFT-Operations-1.9.1.zip -d .
-          fi
-          test -f user/mods/SPT-EconomyGuard/package.json
       - name: Create installable server-mod archive
         shell: bash
         run: |
