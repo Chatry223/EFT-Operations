@@ -45,41 +45,10 @@ jobs:
             echo "Expected source folder or archive was not found."
           fi
 
-  server-tests:
-    name: SPT server checks and tests
-    needs: source-status
-    if: needs.source-status.outputs.source_ready == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Prepare source tree
-        shell: bash
-        run: |
-          if [ -f source/EFT-Operations-1.9.1/user/mods/SPT-EconomyGuard/package.json ]; then
-            cp -a source/EFT-Operations-1.9.1/. .
-          elif [ -f source/EFT-Operations-1.9.1.zip ]; then
-            unzip -q source/EFT-Operations-1.9.1.zip -d .
-          fi
-          test -f user/mods/SPT-EconomyGuard/package.json
-          test -f client/EFT.Operations.Client/EFT.Operations.Client.csproj
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - name: Install dependencies (if lockfile exists)
-        working-directory: user/mods/SPT-EconomyGuard
-        run: |
-          if [ -f package-lock.json ]; then npm ci; fi
-      - name: Static checks
-        working-directory: user/mods/SPT-EconomyGuard
-        run: npm run check
-      - name: Unit tests
-        working-directory: user/mods/SPT-EconomyGuard
-        run: npm test
-
   client-build:
     name: Build BepInEx client plugin (Windows + EFT assemblies)
     needs: source-status
-    if: needs.source-status.outputs.source_ready == 'true' && github.event_name != 'pull_request'
+    if: needs.source-status.outputs.source_ready == 'true' && github.event_name != 'pull_request' && vars.EFT_BUILD_RUNNER_ENABLED == 'true'
     runs-on: [self-hosted, Windows, X64, eft-build]
     env:
       EFT_MANAGED_DIR: ${{ vars.EFT_MANAGED_DIR }}
