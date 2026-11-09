@@ -13,6 +13,7 @@ class OperationsClientApi {
         this.httpResponseUtil = httpResponseUtil;
         this.logger = logger || console;
         this.registered = false;
+        this.hostEventWindows = new Map();
     }
 
     log(level, message) {
@@ -112,6 +113,77 @@ class OperationsClientApi {
         } catch (err) { return this.response({ ok: false, error: this.errorCode(err) }); }
     }
 
+    hostRaidEvent(_url, info, sessionId) {
+        try {
+            const reporter = this.resolvePlayer(sessionId);
+            const eventId = String(info && info.eventId || '').trim();
+            const matchId = String(info && info.matchId || '').trim();
+            const killerProfileId = String(info && info.killerProfileId || '').trim();
+            const victimProfileId = String(info && info.victimProfileId || '').trim();
+            const victimRole = String(info && info.victimRole || '').trim().slice(0, 60);
+            const victimSide = String(info && info.victimSide || '').trim().slice(0, 20);
+            if (!eventId || eventId.length > 120) throw new Error('INVALID_EVENT_ID');
+            if (!matchId || matchId.length > 100) throw new Error('INVALID_MATCH_ID');
+            if (!PROFILE_ID_RE.test(killerProfileId)) throw new Error('INVALID_KILLER_PROFILE');
+            if (!PROFILE_ID_RE.test(victimProfileId)) throw new Error('INVALID_VICTIM_PROFILE');
+            if (!victimRole || info.victimIsAi !== true) throw new Error('INVALID_HOST_KILL_EVIDENCE');
+
+            const groups = this.operations && this.operations.state && Array.isArray(this.operations.state.groups) ? this.operations.state.groups : [];
+            const group = groups.find(item => item.state === 'in_raid' && String(item.raidId || '') === matchId
+                && item.members && item.members.length && String(item.members[0].profileId) === reporter.profileId);
+            if (!group) throw new Error('HOST_NOT_ACTIVE_SQUAD_LEADER');
+            if (info.groupId && String(info.groupId) !== String(group.id)) throw new Error('RAID_GROUP_MISMATCH');
+
+            const member = group.members.find(item => String(item.profileId) === killerProfileId || String(item.scavProfileId || '') === killerProfileId);
+            if (!member) throw new Error('KILLER_NOT_GROUP_MEMBER');
+            if (group.members.some(item => String(item.profileId) === victimProfileId || String(item.scavProfileId || '') === victimProfileId)) {
+                throw new Error('VICTIM_IS_SQUAD_MEMBER');
+            }
+
+            const now = Date.now();
+            const window = this.hostEventWindows.get(reporter.profileId) || { startedAt: now, count: 0 };
+            if (now - window.startedAt >= 60000) { window.startedAt = now; window.count = 0; }
+            window.count++;
+            this.hostEventWindows.set(reporter.profileId, window);
+            if (window.count > 180) throw new Error('HOST_EVENT_RATE_LIMIT');
+            if (this.hostEventWindows.size > 1000) {
+                for (const [key, value] of this.hostEventWindows) if (now - value.startedAt > 120000) this.hostEventWindows.delete(key);
+            }
+
+            const role = victimRole.toLowerCase();
+            const side = victimSide.toLowerCase();
+            let targetCategory = 'other';
+            if (role.indexOf('follower') >= 0) targetCategory = 'follower';
+            else if (role.indexOf('boss') >= 0) targetCategory = 'boss';
+            else if (role.indexOf('raider') >= 0) targetCategory = 'raider';
+            else if (role.indexOf('rogue') >= 0) targetCategory = 'rogue';
+            else if (role.indexOf('cultist') >= 0) targetCategory = 'cultist';
+            else if (role.indexOf('pmc') >= 0 || side.indexOf('usec') >= 0 || side.indexOf('bear') >= 0) targetCategory = 'pmc';
+            else if (side.indexOf('savage') >= 0 || role.indexOf('assault') >= 0 || role.indexOf('marksman') >= 0 || role.indexOf('cursed') >= 0) targetCategory = 'scav';
+
+            const mission = this.operations.get(group.missionId);
+            if (!mission) throw new Error('MISSION_NOT_FOUND');
+            const progress = this.operations.recordRaidEvent(group.id, {
+                eventId,
+                type: 'kill',
+                profileId: member.profileId,
+                amount: 1,
+                map: mission.map,
+                target: victimRole,
+                targetCategory,
+                victimProfileId,
+                victimRole,
+                victimSide,
+                victimIsAi: true,
+                matchId,
+                reporterProfileId: reporter.profileId,
+                source: 'fika-host-client',
+                evidenceTrust: 'host_attested'
+            });
+            return this.response({ ok: true, progress, group: this.publicGroup(group, reporter.profileId), evidenceTrust: 'host_attested' });
+        } catch (err) { return this.response({ ok: false, error: this.errorCode(err) }); }
+    }
+
     canStartGroup(group, mission) {
         const now = Date.now();
         return !!group && group.state === 'forming' && !!mission && mission.status === 'published'
@@ -139,6 +211,13 @@ class OperationsClientApi {
                 acceptedAt: member.acceptedAt,
                 result: member.result
             })),
+            objectiveProgress: mission ? mission.objectives.map(objective => ({
+                id: objective.id,
+                progress: Math.min(objective.count, Math.max(0, Number(group.progress && group.progress[objective.id]) || 0)),
+                count: objective.count,
+                required: objective.required === true,
+                trust: String(group.progressTrust && group.progressTrust[objective.id] || 'none')
+            })) : [],
             createdAt: group.createdAt,
             startedAt: group.startedAt || null,
             finishedAt: group.finishedAt || null
@@ -166,7 +245,8 @@ class OperationsClientApi {
             { url: '/client/eft/operations/state', action: (url, info, sessionId) => api.playerState(url, info, sessionId) },
             { url: '/client/eft/operations/accept', action: (url, info, sessionId) => api.acceptMission(url, info, sessionId) },
             { url: '/client/eft/operations/ready', action: (url, info, sessionId) => api.setReady(url, info, sessionId) },
-            { url: '/client/eft/operations/leave', action: (url, info, sessionId) => api.leaveGroup(url, info, sessionId) }
+            { url: '/client/eft/operations/leave', action: (url, info, sessionId) => api.leaveGroup(url, info, sessionId) },
+            { url: '/client/eft/operations/host-event', action: (url, info, sessionId) => api.hostRaidEvent(url, info, sessionId) }
         ];
         try {
             routerService.registerStaticRouter('EFTOperationsClientApi', routes, 'EFTOperations');
