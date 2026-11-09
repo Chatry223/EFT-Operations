@@ -35,7 +35,13 @@
 - SPT Common assembly version برابر `3.11.1.0`
 - وجود فایل پیکربندی Fika با marker نسخه `1.2.3`
 
-GitHub Actions نیز آرشیوها را بررسی و روی Windows Hosted Runner کامپایل می‌کند. اولین تلاش Build به دلیل نبود NuGet Restore در MSBuild شکست خورد؛ گزینه `/restore` به Workflow و GUI اضافه شده است. تا موفق‌شدن اجرای بعدی و بررسی artifact، DLL کامپایل‌شده را آماده اعلام نمی‌کنیم.
+GitHub Actions آرشیوها را بررسی و روی Windows Hosted Runner کامپایل کرده است. پس از افزودن `/restore`، Build در commit `f6e2441c6ffd825b68d4e41effadcb47671e3e1e` موفق شد.
+
+- حجم DLL: 27,136 بایت
+- SHA-256: `276ecad202e8ccf473b52c2d6ff8f1b17a7bd2d7ed0ba1909a2c76928f1fcd1f`
+- Artifact: [دانلود از GitHub Actions](https://github.com/Chatry223/EFT-Operations/actions/runs/42687196015/artifacts/13704528374)
+
+این نتیجه Build را تأیید می‌کند؛ تست Runtime داخل بازی و نصب روی پوشه واقعی SPT هنوز انجام نشده است.
 
 ## هنوز تکمیل نشده
 - پیشرفت زنده و معتبر برای Kill / Loot / Visit / Extract؛ سرویس `recordRaidEvent` وجود دارد، اما Adapter تولیدی هنوز رویداد Objective به آن نمی‌فرستد.
