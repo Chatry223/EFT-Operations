@@ -1,7 +1,7 @@
 'use strict';
 
-// Read-only integration observer for the user's verified Fika Server 2.4.3 build.
-// It never changes raid state, player profiles, rewards, or Fika's match lifecycle.
+// Version-gated Fika Server 2.4.3 observer and mission-group lifecycle bridge.
+// It never changes Fika's own raid state or trusts client reports for automatic rewards.
 const fs = require('fs');
 const path = require('path');
 
@@ -75,7 +75,7 @@ class Fika243OperationsAdapter {
         });
         this.hook(container, 'LocationLifecycleService', instance => this.patchLifecycle(instance));
         this.status.observerInstalled = true;
-        this.log('info', `Read-only hooks installed for Fika Server ${EXPECTED_FIKA_VERSION}; raid outcomes remain untrusted until reviewed.`);
+        this.log('info', `Fika ${EXPECTED_FIKA_VERSION} match/player lifecycle hooks installed; mission groups link after all ready members join. Client outcomes remain untrusted.`);
         return true;
     }
 
