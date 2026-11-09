@@ -5,6 +5,14 @@ const os = require('os');
 const path = require('path');
 const { OperationsService } = require('./service');
 
+const legacyRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'eft-ops-legacy-'));
+fs.mkdirSync(path.join(legacyRoot, 'operations'), { recursive: true });
+fs.writeFileSync(path.join(legacyRoot, 'operations', 'operations.json'), JSON.stringify({ schemaVersion: 1, missions: [], awards: [] }));
+const migrated = new OperationsService(legacyRoot, { info() {}, warn() {} });
+assert.deepEqual(migrated.state.groups, [], 'older stores without groups should migrate safely');
+assert.deepEqual(migrated.state.playerStats, {}, 'older stores without playerStats should migrate safely');
+fs.rmSync(legacyRoot, { recursive: true, force: true });
+
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'eft-ops-'));
 const service = new OperationsService(root, { info() {}, warn() {} });
 const mission = service.save({ title: 'North Clearance', description: 'Test mission', map: 'woods', mode: 'squad', minPlayers: 2, maxPlayers: 2,
@@ -19,8 +27,10 @@ assert.equal(service.setReady(g.id, 'abcdef0123456789abcdef01', true).canStart, 
 assert.equal(service.setReady(g.id, 'abcdef0123456789abcdef02', true).canStart, true);
 assert.throws(() => service.startGroup(g.id, ''), /INVALID_RAID_ID/);
 service.startGroup(g.id, 'raid-001');
-service.recordRaidEvent(g.id, { type: 'kill', target: 'scav', amount: 2 });
-service.recordRaidEvent(g.id, { type: 'extract', amount: 1 });
+assert.throws(() => service.recordRaidEvent(g.id, { type: 'kill', target: 'scav', amount: 1, map: 'woods', source: 'client', evidenceTrust: 'authenticated_client_report' }), /UNTRUSTED_RAID_EVENT/);
+assert.throws(() => service.recordRaidEvent(g.id, { type: 'kill', target: 'scav', amount: 1, map: 'customs', source: 'fika-server-adapter', evidenceTrust: 'server_verified' }), /RAID_EVENT_MAP_MISMATCH/);
+service.recordRaidEvent(g.id, { type: 'kill', target: 'scav', amount: 2, map: 'woods', source: 'fika-server-adapter', evidenceTrust: 'server_verified' });
+service.recordRaidEvent(g.id, { type: 'extract', amount: 1, map: 'woods', source: 'fika-server-adapter', evidenceTrust: 'server_verified' });
 const done = service.finishGroup(g.id, { verified: true, evidenceTrust: 'server_verified', source: 'fika-server-adapter', aliveProfileIds: ['abcdef0123456789abcdef01', 'abcdef0123456789abcdef02'], extractedProfileIds: ['abcdef0123456789abcdef01', 'abcdef0123456789abcdef02'] });
 assert.equal(done.state, 'completed');
 assert.equal(service.getPlayer('abcdef0123456789abcdef01').points, 1000);
@@ -32,7 +42,7 @@ service.setStatus(untrustedMission.id, 'published');
 const untrustedGroup = service.accept(untrustedMission.id, 'abcdef0123456789abcdef08', 'Untrusted');
 service.setReady(untrustedGroup.id, 'abcdef0123456789abcdef08', true);
 service.startGroup(untrustedGroup.id, 'raid-untrusted');
-service.recordRaidEvent(untrustedGroup.id, { type: 'extract', amount: 1 });
+service.recordRaidEvent(untrustedGroup.id, { type: 'extract', amount: 1, map: 'woods', source: 'fika-server-adapter', evidenceTrust: 'server_verified' });
 const untrustedFinish = service.finishGroup(untrustedGroup.id, { verified: true, aliveProfileIds: ['abcdef0123456789abcdef08'], extractedProfileIds: ['abcdef0123456789abcdef08'] });
 assert.equal(untrustedFinish.state, 'review', 'a bare verified boolean must not authorize automatic rewards');
 assert.equal(service.getPlayer('abcdef0123456789abcdef08').points, 0);
@@ -67,8 +77,8 @@ reloaded.accept(reviewMission.id, 'abcdef0123456789abcdef06', 'Review Two');
 reloaded.setReady(reviewGroup.id, 'abcdef0123456789abcdef05', true);
 reloaded.setReady(reviewGroup.id, 'abcdef0123456789abcdef06', true);
 reloaded.startGroup(reviewGroup.id, 'raid-review');
-reloaded.recordRaidEvent(reviewGroup.id, { type: 'kill', target: 'scav', amount: 1 });
-reloaded.recordRaidEvent(reviewGroup.id, { type: 'extract', amount: 1 });
+reloaded.recordRaidEvent(reviewGroup.id, { type: 'kill', target: 'scav', amount: 1, map: 'customs', source: 'fika-server-adapter', evidenceTrust: 'server_verified' });
+reloaded.recordRaidEvent(reviewGroup.id, { type: 'extract', amount: 1, map: 'customs', source: 'fika-server-adapter', evidenceTrust: 'server_verified' });
 const pendingReview = reloaded.finishGroup(reviewGroup.id, { verified: false, aliveProfileIds: ['abcdef0123456789abcdef05', 'abcdef0123456789abcdef06'], extractedProfileIds: ['abcdef0123456789abcdef05', 'abcdef0123456789abcdef06'] });
 assert.equal(pendingReview.state, 'review');
 assert.ok(reloaded.reviewQueue().some(x => x.id === reviewGroup.id));
