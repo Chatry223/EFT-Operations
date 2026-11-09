@@ -81,6 +81,7 @@ class SvmConfigService {
                 itemPriceMultiplierActive: !!(active.preset.Items && active.preset.Items.EnableItems === true),
                 itemPriceMultiplier: active.preset.Items && numeric(active.preset.Items.ItemPriceMult),
                 fence: {
+                    enabled: fence.EnableFence === true,
                     priceMultiplier: numeric(fence.PriceMult),
                     presetMultiplier: numeric(fence.PresetMult),
                     stockTimeMin: numeric(fence.StockTime_Min),
