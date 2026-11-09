@@ -73,6 +73,9 @@ try {
     assert.ok(result.archives.some(item => item.path === 'settings-backup.zip'));
     assert.ok(result.archives.some(item => item.path === 'user/mods/nested.zip'));
     assert.ok(!result.archives.some(item => item.path === 'ordinary.zip'));
+    const boundedScan = new SvmArchiveScanner(root, { maxDirectories: 1 }).scan();
+    assert.strictEqual(boundedScan.scannedDirectories, 1);
+    assert.strictEqual(boundedScan.truncated, true);
 
     // Windows-style separators in archive entry names are normalized before matching.
     const windowsPath = path.join(root, 'windows-path.zip');
