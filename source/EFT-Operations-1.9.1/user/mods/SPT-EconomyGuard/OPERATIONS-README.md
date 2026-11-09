@@ -19,6 +19,9 @@ This is the mission/operations module integrated into the existing SPT-EconomyGu
 
 ## Mission flow
 
+Fika 2.4.3 uses `serverId` as a synthetic host player key when creating a match; it is not the host's SPT profile ID. The adapter validates `hostUsername` against the authenticated session's PMC/Scav nickname at raid creation. On host shutdown, Fika sends the same synthetic key in both `serverId` and `profileId`; the adapter verifies the match's registered `hostUsername` against the caller's authenticated session. Normal member leave still requires the supplied profile ID to belong to that session.
+
+
 1. Admin creates and publishes a mission.
 2. Players accept; the server resolves their account identity from their authenticated SPT session.
 3. Members set Ready in the in-game Operations panel.
