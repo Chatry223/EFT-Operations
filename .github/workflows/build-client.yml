@@ -127,6 +127,9 @@ jobs:
               -not (Test-Path (Join-Path $env:BEPINEX_CORE_DIR '0Harmony.dll'))) {
             throw 'BepInEx dependency archive did not produce a valid core folder.'
           }
+          $bepinexVersion = [Reflection.AssemblyName]::GetAssemblyName((Join-Path $env:BEPINEX_CORE_DIR 'BepInEx.dll')).Version.ToString()
+          if ($bepinexVersion -ne '5.4.22.0') { throw "Expected BepInEx 5.4.22.0; found $bepinexVersion" }
+          Write-Host "BepInEx version verified: $bepinexVersion"
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
       - name: Build Release DLL
