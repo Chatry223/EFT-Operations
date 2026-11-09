@@ -357,6 +357,7 @@ class Fika243OperationsAdapter {
             if (!group.members.every(member => member.ready === true && (players.has(String(member.profileId)) || (member.scavProfileId && players.has(String(member.scavProfileId)))))) continue;
             try {
                 this.operations.startGroup(group.id, String(matchId));
+                this.bindPendingRaidSnapshots(group, matchId, location);
                 this.appendEvent({
                     eventId: `mission-link-${Date.now()}-${String(matchId)}`,
                     type: 'mission_group_linked',
@@ -377,6 +378,18 @@ class Fika243OperationsAdapter {
             }
         }
         return false;
+    }
+
+    bindPendingRaidSnapshots(group, matchId, location) {
+        for (const member of group.members || []) {
+            const pendingKey = `pending:${String(member.profileId)}`;
+            const snapshot = this.raidSnapshots.get(pendingKey);
+            if (!snapshot) continue;
+            this.raidSnapshots.delete(pendingKey);
+            snapshot.matchId = String(matchId);
+            snapshot.map = snapshot.map || String(location || '').toLowerCase();
+            this.raidSnapshots.set(`${matchId}:${String(member.profileId)}`, snapshot);
+        }
     }
 
     finishMissionGroup(service, matchId, match) {
@@ -473,11 +486,11 @@ class Fika243OperationsAdapter {
     captureRaidStart(sessionId, request, response) {
         const identity = this.resolveIdentity(sessionId);
         const matchId = this.resolveMatchId(sessionId, identity);
-        if (!matchId || !this.services.saveServer || typeof this.services.saveServer.getProfile !== 'function') return null;
+        if (!this.services.saveServer || typeof this.services.saveServer.getProfile !== 'function') return null;
         const groups = this.operations && this.operations.state && Array.isArray(this.operations.state.groups) ? this.operations.state.groups : [];
-        const hasMissionGroup = groups.some(group => ['forming', 'in_raid'].includes(group.state)
+        const missionGroup = groups.find(group => ['forming', 'in_raid'].includes(group.state)
             && (group.members || []).some(member => String(member.profileId || '') === identity.profileId));
-        if (!hasMissionGroup) return null;
+        if (!missionGroup) return null;
         const profile = this.services.saveServer.getProfile(sessionId);
         const characters = object(profile && profile.characters);
         const side = String(object(request).playerSide || object(request).side || 'pmc').toLowerCase();
@@ -494,9 +507,10 @@ class Fika243OperationsAdapter {
                 count: Math.max(1, Number(object(object(item).upd).StackObjectsCount) || 1)
             };
         }
-        const key = `${matchId}:${identity.profileId}`;
+        const key = matchId ? `${matchId}:${identity.profileId}` : `pending:${identity.profileId}`;
         const snapshot = {
-            matchId: String(matchId),
+            matchId: matchId ? String(matchId) : null,
+            groupId: missionGroup.id,
             profileId: identity.profileId,
             displayName: identity.displayName,
             map: String(object(request).location || object(response).location || '').toLowerCase(),
@@ -510,7 +524,8 @@ class Fika243OperationsAdapter {
             eventId: `raid-start-${Date.now()}-${identity.profileId}`,
             type: 'fika_raid_start',
             timestamp: new Date().toISOString(),
-            matchId: String(matchId),
+            matchId: matchId ? String(matchId) : null,
+            groupId: missionGroup.id,
             profileId: identity.profileId,
             displayName: identity.displayName,
             map: snapshot.map,
@@ -525,7 +540,10 @@ class Fika243OperationsAdapter {
     captureRaidEnd(sessionId, request) {
         const results = object(object(request).results);
         const identity = this.resolveIdentity(sessionId);
-        const matchId = this.resolveMatchId(sessionId, identity);
+        const groups = this.operations && this.operations.state && Array.isArray(this.operations.state.groups) ? this.operations.state.groups : [];
+        const activeGroup = groups.find(group => group.state === 'in_raid'
+            && (group.members || []).some(member => String(member.profileId || '') === identity.profileId));
+        const matchId = this.resolveMatchId(sessionId, identity) || (activeGroup && activeGroup.raidId ? String(activeGroup.raidId) : null);
         const serverId = String(object(request).serverId || '');
         const map = serverId.split('.')[0] || '';
         const profile = object(results.profile);
@@ -561,8 +579,10 @@ class Fika243OperationsAdapter {
             key: Array.isArray(object(item).Key) ? item.Key.map(value => String(value).slice(0, 40)).slice(0, 6) : [],
             value: Number.isFinite(Number(object(item).Value)) ? Number(item.Value) : 0
         })) : [];
-        const snapshotKey = matchId ? `${matchId}:${identity.profileId}` : '';
-        const raidSnapshot = snapshotKey ? this.raidSnapshots.get(snapshotKey) : null;
+        const directSnapshotKey = matchId ? `${matchId}:${identity.profileId}` : '';
+        const pendingSnapshotKey = `pending:${identity.profileId}`;
+        const snapshotKey = directSnapshotKey && this.raidSnapshots.has(directSnapshotKey) ? directSnapshotKey : pendingSnapshotKey;
+        const raidSnapshot = this.raidSnapshots.get(snapshotKey) || null;
         const acceptedAccount = safe(() => this.services.saveServer && this.services.saveServer.getProfile(sessionId), null);
         const acceptedCharacters = object(acceptedAccount && acceptedAccount.characters);
         const acceptedCharacter = raidSnapshot && raidSnapshot.side === 'scav' ? object(acceptedCharacters.scav) : object(acceptedCharacters.pmc);
