@@ -22,6 +22,8 @@ EXPECTED = {
         "Managed/UnityEngine.dll": "8a1b7a377c5ac8de13d8249ebda361073e5771579d964ca0d1523f1cfbe00c3e",
         "Managed/UnityEngine.CoreModule.dll": "f7cfb53eb5b6a652d6bef329b33c154d8ccb0de7448ac5bfa1318762e10f7241",
         "Managed/UnityEngine.IMGUIModule.dll": "a6bb11554b72c1a49c0333345092edb3857680f6bbcc8dab62de5fc0979cc8fa",
+        "Managed/UnityEngine.InputLegacyModule.dll": "483a31d01a8fc3190e378c3f56e59b6242614e60044964ae61940da1ad06b944",
+        "Managed/UnityEngine.TextRenderingModule.dll": "9815737853459a5a775f8ccf26729a354348461fa93995afac27e8b54c44ea6f",
         "Managed/UnityEngine.UnityWebRequestModule.dll": "2a92eec461655f7a19e1222094e708d68f3125fd95cc43a81b5458b41fa319ac",
         "Managed/UnityEngine.JSONSerializeModule.dll": "7b51d5f7edd879a6e52e176c9f1efcab3a0a31a5e107d16602fbe4aba875b8b5",
     },
