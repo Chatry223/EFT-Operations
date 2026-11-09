@@ -28,6 +28,7 @@ namespace EFTOperations.Client
         private readonly HashSet<string> knownMissionIds = new HashSet<string>();
         private bool hasInitialMissionSync;
         private bool fikaStartRequested;
+        private float fikaStartRequestedUntil;
         private string notificationText = String.Empty;
         private float notificationUntil;
 
@@ -42,6 +43,11 @@ namespace EFTOperations.Client
 
         private void Update()
         {
+            if (fikaStartRequested && Time.realtimeSinceStartup >= fikaStartRequestedUntil)
+            {
+                fikaStartRequested = false;
+                status = "No active Fika match was detected after the host request. Review Fika's message and retry if needed.";
+            }
             if (Input.GetKeyDown(toggleKey.Value))
             {
                 visible = !visible;
@@ -89,6 +95,7 @@ namespace EFTOperations.Client
                     {
                         string previousGroupState = playerState.group == null ? null : playerState.group.state;
                         string currentGroupState = nextState.group == null ? null : nextState.group.state;
+                        if (currentGroupState == "in_raid") fikaStartRequested = false;
                         if (currentGroupState == "in_raid" && previousGroupState != "in_raid")
                             Notify("OPERATION DEPLOYED  /  " + (nextState.mission == null ? "MISSION ACTIVE" : nextState.mission.title));
                         else if (previousGroupState == "in_raid" && currentGroupState != "in_raid")
@@ -233,6 +240,7 @@ namespace EFTOperations.Client
                     // Fika's Force IP validation, match creation, and normal EFT transition.
                     invoke.Invoke(onClick, null);
                     fikaStartRequested = true;
+                    fikaStartRequestedUntil = Time.realtimeSinceStartup + 30f;
                     status = "Fika host start requested. Waiting for the native Fika match to appear.";
                     return;
                 }
