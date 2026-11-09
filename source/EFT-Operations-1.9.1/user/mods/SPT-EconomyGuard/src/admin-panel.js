@@ -677,6 +677,9 @@ class AdminPanelServer {
                         : (!!group.raidId && String(event.matchId || '') === String(group.raidId)));
                     const raidEnds = fikaEvidence.filter(event => event.type === 'player_raid_end');
                     const victims = raidEnds.flatMap(event => Array.isArray(event.reportedVictims) ? event.reportedVictims : []);
+                    const hostEvidence = (Array.isArray(group.evidenceEvents) ? group.evidenceEvents : [])
+                        .filter(event => event && event.evidenceTrust === 'host_attested')
+                        .slice(-200);
                     const normalizeRole = role => {
                         const value = String(role || '').toLowerCase();
                         if (value.startsWith('pmc')) return 'pmc';
@@ -691,9 +694,15 @@ class AdminPanelServer {
                     const objectiveEvidence = (mission && mission.objectives || []).map(objective => {
                         const target = String(objective.target || '').toLowerCase();
                         let reportedCount = 0;
+                        let hostAttestedCount = 0;
                         if (objective.type === 'kill' || objective.type === 'kill_type') {
-                            reportedCount = victims.filter(victim => !target || normalizeRole(victim.role) === target
+                            const clientReported = victims.filter(victim => !target || normalizeRole(victim.role) === target
                                 || String(victim.role || '').toLowerCase() === target).length;
+                            const hostReported = hostEvidence.filter(event => {
+                                const candidates = [event.target, event.targetCategory].map(value => String(value || '').toLowerCase());
+                                return !target || candidates.includes(target);
+                            }).length;
+                            reportedCount = Math.max(clientReported, hostReported);
                         } else if (objective.type === 'collect') {
                             reportedCount = raidEnds.reduce((sum, event) => {
                                 const loot = event.reportedLootByTpl || {};
@@ -710,16 +719,25 @@ class AdminPanelServer {
                         } else if (objective.type === 'raid_complete') {
                             reportedCount = fikaEvidence.filter(event => event.type === 'fika_match_end').length;
                         }
-                        const verifiedCount = Number((group.progress || {})[objective.id] || 0);
+                        const progressCount = Number((group.progress || {})[objective.id] || 0);
+                        const progressTrust = String((group.progressTrust || {})[objective.id] || 'none');
+                        const verifiedCount = progressTrust === 'server_verified' ? progressCount : 0;
+                        hostAttestedCount = progressTrust === 'host_attested' ? progressCount : 0;
                         return {
                             objectiveId: objective.id,
                             type: objective.type,
                             target: objective.target || '',
                             requiredCount: objective.count,
                             required: objective.required !== false,
+                            progressCount,
+                            progressTrust,
                             verifiedCount,
+                            hostAttestedCount,
                             reportedCount,
-                            evidenceStatus: verifiedCount >= objective.count ? 'server_verified' : reportedCount > 0 && objective.type === 'raid_complete' ? 'fika_lifecycle_observed_unverified' : reportedCount > 0 ? 'client_report_only' : 'no_evidence'
+                            evidenceStatus: verifiedCount >= objective.count ? 'server_verified'
+                                : hostAttestedCount > 0 ? 'host_attested_admin_review'
+                                    : reportedCount > 0 && objective.type === 'raid_complete' ? 'fika_lifecycle_observed_unverified'
+                                        : reportedCount > 0 ? 'client_report_only' : 'no_evidence'
                         };
                     });
                     return {
@@ -742,9 +760,18 @@ class AdminPanelServer {
                             requiredDone: group.reviewData && group.reviewData.requiredDone === true,
                             evidenceTrust: group.reviewData && group.reviewData.evidenceTrust || '',
                             source: group.reviewData && group.reviewData.source || '',
-                            submittedAt: group.reviewData && group.reviewData.submittedAt || ''
+                            submittedAt: group.reviewData && group.reviewData.submittedAt || '',
+                            progressTrust: group.progressTrust || {},
+                            evidenceCount: Array.isArray(group.evidenceEvents) ? group.evidenceEvents.length : 0
                         },
                         fikaEvidence: fikaEvidence.map(sanitizeFikaEvent),
+                        hostEvidence: hostEvidence.map(event => ({
+                            eventId: event.eventId, type: event.type, profileId: event.profileId,
+                            target: event.target, targetCategory: event.targetCategory,
+                            victimProfileId: event.victimProfileId, victimRole: event.victimRole,
+                            victimSide: event.victimSide, reporterProfileId: event.reporterProfileId,
+                            matchId: event.matchId, evidenceTrust: event.evidenceTrust, timestamp: event.timestamp
+                        })),
                         objectiveEvidence
                     };
                 }));
