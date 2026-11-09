@@ -633,10 +633,10 @@ namespace EFTOperations.Client
                 while (reportedHostVisitOrder.Count > 5000)
                     reportedHostVisitKeys.Remove(reportedHostVisitOrder.Dequeue());
 
-                string payload = "{\\"type\\":\\"visit\\",\\"eventId\\":\\"" + Guid.NewGuid().ToString("N")
-                    + "\\",\\"matchId\\":\\"" + Escape(matchId)
-                    + "\\",\\"actorProfileId\\":\\"" + Escape(actorProfileId)
-                    + "\\",\\"triggerId\\":\\"" + Escape(triggerId) + "\\"}";
+                string payload = "{\"type\":\"visit\",\"eventId\":\"" + Guid.NewGuid().ToString("N")
+                    + "\",\"matchId\":\"" + Escape(matchId)
+                    + "\",\"actorProfileId\":\"" + Escape(actorProfileId)
+                    + "\",\"triggerId\":\"" + Escape(triggerId) + "\"}";
                 StartCoroutine(PostFikaHostEvent(payload));
             }
             catch (Exception ex)
