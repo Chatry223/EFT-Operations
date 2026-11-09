@@ -1,66 +1,64 @@
-# EFT Operations — Phase 2 mission authoring
+# EFT Operations — SPT 3.11.1 / Fika 2.4.3
 
-This package adds a persistent mission/campaign domain service to EconomyGuard.
+This is the mission/operations module integrated into the existing SPT-EconomyGuard server mod. It is not a second SPT server installation.
 
-## Included in this phase
+## Included
 
-- Integrated Operations page inside the existing authenticated EconomyGuard admin panel.
-- Graphical mission editor for title, map, squad size, schedule, briefing, objectives and point/rouble rewards.
-- Add/remove objective rows, JSON mission import/export, draft editing, publish and close actions.
-- Mission publishing mirrors the mission to the existing public StatusBoard as an `event`.
-- Rank leaderboard and award ledger views.
-- Server-side validation for schedule windows, duplicate objective IDs and 24-character item template IDs.
-- Duplicate active group membership prevention.
+- Authenticated Operations page inside the existing EconomyGuard admin panel.
+- Graphical mission editor: title, map ID, solo/squad size, schedule, briefing, objectives, points and rouble reward definitions.
+- Draft, publish, close and archive lifecycle; published missions are mirrored to the existing StatusBoard as events.
+- Group acceptance, member ready state and server-side SPT account identity resolution.
+- Client-side in-game mission board source (BepInEx), including new-operation banner, rank/points and reward preview. The DLL is not included in this server package; use the separate client build GUI helper.
+- Exact Fika Server 2.4.3 adapter:
+  - Authenticates Fika create/leave and add-player/death-update profile IDs against the SPT session that made the callback.
+  - Matches PMC and Scav profile IDs to the same SPT account.
+  - Links a ready mission group to a Fika match when all group members have registered in the same exact map/match.
+  - Captures match end before Fika removes its match record and creates a manual review record.
+- Idempotent points/rank award ledger and review audit fields.
+- Regression tests for Fika 2.4.3 lifecycle, account binding, Scav identity mapping, review and reward trust boundaries.
 
-- Mission definition validation and persistent JSON storage.
-- Draft -> published -> closed -> archived lifecycle.
-- Solo/squad size constraints.
-- Group acceptance and ready-check state.
-- Host/raid start registration (the Fika adapter is intentionally not guessed).
-- Server-side event ingestion interface for objective progress.
-- Verified outcome gate requiring all required objectives, survival and extraction.
-- Idempotent award ledger and player points/rank calculation.
-- Authenticated loopback admin API endpoints:
-  - `GET /api/operations`
-  - `GET /api/operations/awards`
-  - `GET /api/operations/leaderboard`
-  - `GET /operations-admin.js` (authenticated API calls; panel asset itself is served on loopback)
-  - `POST /api/operations/save`
-  - `POST /api/operations/publish`
-  - `POST /api/operations/close`
-- Publishing creates a matching `event` announcement on the existing StatusBoard when available.
-- Example squad mission template.
+## Mission flow
 
-## Important integration boundary
+1. Admin creates and publishes a mission.
+2. Players accept; the server resolves their account identity from their authenticated SPT session.
+3. Members set Ready in the in-game Operations panel.
+4. The host starts a Fika raid through the normal Fika flow. The adapter links the operation once every ready member is registered in the same Fika match and map.
+5. At Fika match end, the group moves to the admin review queue.
+6. Admin enters an evidence reference and explicitly confirms objective completion and extraction for all listed members before approving rewards.
 
-`recordRaidEvent`, `startGroup`, and `finishGroup` are domain service methods, not public client endpoints. They must only be called by a verified server-side SPT/Fika adapter. This release does not claim to have that adapter, a BepInEx HUD, automatic item delivery, or Fika lobby/host automation. Those require exact matching SPT/Fika source/API inspection and integration tests. Client-submitted objective progress must never be trusted.
+## Security and evidence limits
 
-## Storage
+- Fika 2.4.3 update callbacks now verify that the requested PMC/Scav profile belongs to the authenticated SPT session. This prevents one account from registering or removing another account's profile through the patched callbacks.
+- A player's own \`/fika/update/playerdied\` flag is still client-originated. The adapter treats cached death flags and \`/raid/end\` result/extraction fields as corroborating, unverified reports—not authoritative proof.
+- No public client endpoint can submit mission objective progress, approve reviews or issue rewards.
+- The adapter does not have authoritative AI-kill attribution or a server-owned objective event stream yet. Objective completion therefore requires explicit admin evidence confirmation; there is no automatic kill/visit/collect proof in this version.
+- Fika does not get started automatically by the plugin. The host uses the normal Fika raid start flow after the squad is ready.
+- Map matching is exact against Fika's \`locationData.Id\`. A mismatched display name/ID fails closed rather than linking the wrong mission.
 
-Data is stored below the existing EconomyGuard data directory:
+## Rewards
 
-`SPT-EconomyGuard-Data/operations/operations.json`
+- Approved points are immediately credited to the Operations points/rank ledger.
+- Rouble and item rewards are recorded as \`pending_delivery\`; this version does not mutate player inventory or automatically send reward mail. Do not advertise rouble/item delivery as active until the SPT inventory/mail delivery adapter is implemented and tested.
+- Award keys are idempotent per mission/group/player, preventing duplicate point awards.
 
-Back up this file before upgrades. The server should be stopped before manually editing it.
+## Storage and upgrade
 
-## Test
+Operations state is stored at:
 
-Run the complete suite with a supported Node.js runtime:
+\`SPT-EconomyGuard-Data/operations/operations.json\`
 
-`npm test`
+The Fika event log is stored beside it under \`operations/fika-events.jsonl\`. These are runtime data files and are not part of the distributable mod ZIP. Back up the entire \`SPT-EconomyGuard-Data\` directory before upgrading. Stop SPT before replacing the mod folder.
 
-Syntax-check the principal runtime and UI files:
+## Client plugin build
 
-`npm run check`
+The client source is at \`client/EFT.Operations.Client\`. Double-click \`BUILD-GUI.bat\`, select the EFT Managed and BepInEx core folders, then choose **Build and Install DLL**. The helper requires Visual Studio MSBuild and the .NET Framework 4.7.2 targeting pack. It installs the DLL into \`BepInEx/plugins/EFTOperations\` and writes a SHA-256 report. The script has passed Windows PowerShell syntax validation, but the DLL has not yet been compiled or runtime-tested on the user's EFT installation.
 
-The suite covers the existing EconomyGuard tests plus mission validation, publishing lifecycle, squad readiness, objective progress, verified extraction, rank awards, persistence, API authorization, event creation and duplicate completion protection.
+## Validation
 
+The latest GitHub Actions server run completed:
+- Static checks: PASS
+- Unit tests: 27 passed, 0 failed
+- Windows PowerShell build-helper syntax validation: PASS
+- Server mod ZIP integrity and expected install path: PASS
 
-## 1.6.0 — Mission authoring UI
-- Added an Operations navigation entry and graphical mission editor to the existing admin panel.
-- Added JSON import/export for mission definitions. Imported definitions are treated as new drafts.
-- Added rank leaderboard and award ledger screens.
-- Added authenticated API integration tests for mission save/publish and StatusBoard event creation.
-- Fixed the board-server test client to avoid stale Keep-Alive sockets across intentional port restarts.
-- Tightened mission schedule, objective ID and item template validation; prevented a profile from joining a second active group for the same mission.
-- Reward points update rank immediately. Rouble/item awards remain `pending_delivery` until the SPT inventory delivery adapter is implemented; no automatic inventory mutation is claimed.
+These checks do not replace a live SPT 3.11.1 + Fika 2.4.3 runtime test. The server package is a CI-tested staging build, not a runtime-certified release.
