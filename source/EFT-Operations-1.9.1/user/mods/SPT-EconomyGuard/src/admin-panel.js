@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const crypto = require('crypto');
-const { SvmArchiveScanner } = require('./svm-archive-scan');
+const { SvmArchiveScanner, readZipJsonEntries } = require('./svm-archive-scan');
 
 const PROFILE_RE = /^[a-f0-9]{24}$/i;
 const TPL_RE = /^[a-f0-9]{24}$/i;
@@ -618,6 +618,18 @@ class AdminPanelServer {
             if (req.method === 'GET' && pathname === '/api/svm/archives') {
                 const serverRoot = path.resolve(this.modDir, '..', '..', '..');
                 return this.send(res, 200, new SvmArchiveScanner(serverRoot).scan());
+            }
+            if (req.method === 'GET' && pathname === '/api/svm/archive-preview') {
+                const serverRoot = fs.realpathSync(path.resolve(this.modDir, '..', '..', '..'));
+                const requested = String(url.searchParams.get('archive') || '');
+                if (!requested || path.isAbsolute(requested) || requested.includes('\\0')) return this.send(res, 400, { error: 'INVALID_ARCHIVE_PATH' });
+                const candidate = path.resolve(serverRoot, requested);
+                const realFile = fs.realpathSync(candidate);
+                if (!realFile.startsWith(serverRoot + path.sep) || !fs.statSync(realFile).isFile() || path.extname(realFile).toLowerCase() !== '.zip') {
+                    return this.send(res, 400, { error: 'ARCHIVE_OUTSIDE_SERVER_ROOT' });
+                }
+                const entries = readZipJsonEntries(realFile);
+                return this.send(res, 200, { archive: path.relative(serverRoot, realFile).split(path.sep).join('/'), entries });
             }
             if (req.method === 'GET' && pathname === '/api/operations') return this.send(res, 200, this.requireOperations().list());
             if (req.method === 'GET' && pathname === '/api/operations/awards') {
