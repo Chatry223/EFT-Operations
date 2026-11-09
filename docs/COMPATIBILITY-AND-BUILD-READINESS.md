@@ -2,65 +2,95 @@
 
 Audit date: 2026-11-09
 
-## Verified local source inputs
+## Exact target
 
-The user's Library folder `/Escape From Tarkov - SPT 3.11.1 - Source` contains these archives:
+| Component | Verified target |
+|---|---|
+| EFT | `0.16.1.3.35392-P2P` |
+| SPT | `3.11.1` |
+| Fika Server | `2.4.3` |
+| Fika client plugin | `1.2.3` / assembly `1.2.3.0` |
+| SPT Common client assembly | `3.11.1.0` |
+| Client plugin | .NET Framework 4.7.2, C# 7.3, BepInEx |
 
-- `EscapeFromTarkov_Data.zip` — 183 entries; ZIP integrity check passed. Includes `Managed/Assembly-CSharp.dll`, `Managed/mscorlib.dll`, `Managed/UnityEngine.dll`, `UnityEngine.CoreModule.dll`, `UnityEngine.IMGUIModule.dll`, `UnityEngine.UnityWebRequestModule.dll`, and `UnityEngine.JSONSerializeModule.dll`.
-- `BepInEx-(no server-is player).zip` — 160 entries; ZIP integrity check passed. Includes `BepInEx/core/BepInEx.dll`, `0Harmony.dll`, and `BepInEx/plugins/Fika.Core.dll`.
-- `Takove Server - SPT 3.11.1.zip` — includes the Fika server source package. Its `user/mods/fika-server/package.json` identifies Fika Server `2.4.3` and SPT `~3.11`.
-- `base file Server - spt 3.11.1.zip` — server distribution archive.
-- `Escape.From.Tarkov.v0.16.1.3.35392-P2P-SPT Luncher.zip` — launcher/game bootstrap files.
+Fika Server and Fika client versions are separate tracks. The official Fika Server 2.4.3 `package.json` identifies `sptVersion: ~3.11`; the installed Fika client config and assembly identify 1.2.3. The upstream Fika Plugin `v1.2.3` source was checked for the native matchmaker UI fields.
 
-The BepInEx archive's `BepInEx/config/com.fika.core.cfg` explicitly identifies Fika client plugin `v1.2.3`. Thus the client and server versions are independently confirmed: Fika client 1.2.3 and Fika Server 2.4.3.
+## Dependency archives: verified
 
-All five ZIP archives passed `ZipFile.testzip()` in the audit environment.
+The user's Library source archives were materialized and inspected:
 
-## Source bundle validation
+- `EscapeFromTarkov_Data.zip`: 183 entries; ZIP CRC test passed.
+- `BepInEx-(no server-is player).zip`: 160 entries; ZIP CRC test passed.
+- The EFT archive contains `Managed/Assembly-CSharp.dll` and all required Unity modules.
+- The BepInEx archive contains `BepInEx/core/BepInEx.dll`, `0Harmony.dll`, `BepInEx/plugins/Fika.Core.dll`, `BepInEx/plugins/spt/spt-common.dll`, and `BepInEx/config/com.fika.core.cfg`.
 
-The `EFT-Operations-1.9.1.zip` source bundle contains 90 entries and passed ZIP integrity validation. It includes the SPT server mod, browser admin UI, operations service, Fika adapter, BepInEx client plugin source and tests.
+The user then added the compact equivalents to the repository:
+- `source/EscapeFromTarkov_Data.zip` (6,212,293 bytes)
+- `source/BepInEx.zip` (1,550,865 bytes)
 
-Executed in the audit environment using Node.js 22.16.0 / npm 10.9.2:
+The new GitHub Actions dependency verifier passed on commit `a3360cc51e67918a0804761b591a91888729338c`. It validates archive CRCs, exact SHA-256 fingerprints for the required game/Unity/BepInEx/Fika/SPT DLLs, and the Fika config header. These are build-time inputs only and are not included in the installable mod artifact.
 
-- `npm run check`: PASS
-- `npm test`: PASS — 26 passed, 0 failed
+Verified fingerprints captured from the inspected Library archives:
 
-These are source-level checks only. They do not prove SPT runtime compatibility, in-game UI behavior, or a successful C# DLL build.
+| File | SHA-256 |
+|---|---|
+| `Assembly-CSharp.dll` | `12d5fd1728c58a9cd71a454fb5eae506b5a0a3c2bb35d543c4022800e10f47d5` |
+| `UnityEngine.CoreModule.dll` | `f7cfb53eb5b6a652d6bef329b33c154d8ccb0de7448ac5bfa1318762e10f7241` |
+| `BepInEx.dll` | `2674d3aecf3097bee817abe7e8bbcc42bf583df51402069d5fcd4fbed55017ce` |
+| `Fika.Core.dll` | `246d45e0f9ef445484802379383cb8bb52901d013a1e244ba2209048c7dce65a` |
+| `spt-common.dll` | `970dab34fa09f8c6930f5011aae4025d1f2dc4874a27ff0b3cd7da06899b964f` |
 
-## Client project references
+**Distribution caution:** EFT game assemblies are copyrighted game binaries. Do not put these archives into the mod release ZIP. Since they are currently in a public GitHub repository, verify your right to publish them; private/local storage is safer.
 
-The client project targets .NET Framework 4.7.2 and C# 7.3. Its project file references:
+## Client project reference audit
 
-- BepInEx: `BepInEx/core/BepInEx.dll`
-- Harmony: `BepInEx/core/0Harmony.dll`
-- Unity: `UnityEngine.dll`, `UnityEngine.CoreModule.dll`, `UnityEngine.IMGUIModule.dll`, `UnityEngine.UnityWebRequestModule.dll`, `UnityEngine.JSONSerializeModule.dll`
+The client source uses BepInEx and Unity types directly. The project references BepInEx, Harmony and the Unity modules needed for IMGUI/JsonUtility. It does **not** directly reference `Assembly-CSharp.dll`, `Fika.Core.dll`, or `spt-common.dll`; the client bridge uses reflection for EFT/Fika/SPT runtime discovery. These assemblies are validated by the builder as exact target inputs, not passed to the compiler as direct project references.
 
-All named reference files were found in the user's supplied archives. Do not commit game or Unity assemblies to this public repository. BepInEx and Fika binaries should also remain outside source control; build against the user's local installation.
+The SPT 3.11.x source was checked:
+- `SPT.Common.Http.RequestHandler` is in assembly **`spt-common.dll`**, whose `AssemblyName` is `spt-common`, not `SPT.Common`.
+- It exposes static `Host`, `SessionId`, and `HttpClient`.
+- Its `HttpClient` is `SPT.Common.Http.Client`; it exposes `GetAsync(string)` and `PostAsync(string, byte[], bool)`.
+- The Operations client bridge was corrected to search loaded assemblies first and then load the exact `spt-common` assembly identity. This avoids relying on the incorrect `SPT.Common` assembly name.
 
-## Important functional gaps found during static audit
+The SPT 3.11.x server source was also checked for `StaticRouterModService.registerStaticRouter` and `HttpResponseUtil.noBody`; the Operations custom router prefix and JSON response shape follow that API.
 
-1. The Fika 2.4.3 adapter observes `LocationLifecycleService.endLocalRaid` and `FikaMatchService.endMatch`, but it does not call `OperationsService.startGroup`, `recordRaidEvent`, or `finishGroup`. Those methods currently have no production call sites outside their own definitions. Consequently the raid-to-mission lifecycle is not wired end-to-end.
-2. The raid-end request contains client-originated result fields. The adapter correctly marks this evidence `untrusted_client_report` and `rewardEligible: false`; these fields must never directly award mission rewards.
-3. The current adapter is a read-only observer, not a Fika raid orchestration controller. Keep that boundary until server-side evidence and actual Fika 2.4.3 lifecycle behavior are validated.
-4. Mission acceptance and squad ready state are wired to authenticated SPT static routes. They do not yet prove objective completion or extraction.
-5. The BepInEx client UI currently uses Unity IMGUI and F8; it is a functional prototype surface, not a final polished in-game interface.
+## Build pipeline and actual result
 
-## Build environment limitation
+The graphical helper now:
+- loads the two repository ZIPs into a hash-keyed local cache;
+- validates the exact target SHA-256 values and Fika/SPT assembly versions;
+- runs MSBuild with NuGet restore;
+- requires the actual installed BepInEx root as a separate install destination, so it cannot silently place the plugin in the temporary dependency cache;
+- backs up any existing plugin DLL and writes a build report.
 
-The audit container has Node.js but no `dotnet`, `msbuild`, `csc`, `mcs`, `mono`, or PowerShell. Therefore it cannot produce or execute `EFTOperations.Client.dll`.
+GitHub Actions now validates the dependency archives and builds on a Windows-hosted runner. The first Windows attempt successfully extracted and validated the dependencies and reached MSBuild, then failed with `NETSDK1004` because project assets had not been restored. The workflow and GUI were updated to invoke MSBuild with `/restore`. The next Windows run is the required compile acceptance check.
 
-The repository workflow uses a Windows self-hosted runner labelled `self-hosted, Windows, X64, eft-build`. The runner must be registered on the machine containing the extracted EFT and BepInEx folders, with Actions variables:
+No compiled DLL is claimed ready until a subsequent Windows job succeeds, verifies the DLL output, and uploads the artifact. Even a successful CI compile is not an in-game runtime test.
 
-- `EFT_MANAGED_DIR` = absolute path to `EscapeFromTarkov_Data/Managed`
-- `BEPINEX_CORE_DIR` = absolute path to `BepInEx/core`
+## Fika 2.4.3 mission lifecycle: current truth
 
-A DLL is not considered built until the Windows job succeeds, verifies the output file, and uploads the artifact.
+The version-gated adapter:
+- validates Fika server `2.4.3` and SPT `~3.11`;
+- binds a mission group only after all accepted, Ready members are present in the same Fika match and map;
+- calls `OperationsService.startGroup` to move that group into `in_raid`;
+- observes Fika `endMatch` before the match roster is deleted;
+- calls `OperationsService.finishGroup` with roster/death flags and any matching raid-end reports, but explicitly sets `verified: false`;
+- moves the group to manual review; it never automatically awards points/items from these events.
 
-## Safe next implementation sequence
+Important limitations:
+1. Production code does not yet call `recordRaidEvent`; objective counters do not advance from real game events. The test suite manually injects a synthetic extract event, which is not proof that the live adapter collects it.
+2. Fika's `handlePlayerDied` callback contains `serverId` and `profileId`, but not a killer identity. The current adapter validates the profile/session relationship; it does not yet use that callback to progress kill objectives.
+3. SPT `IEndLocalRaidRequestData.results` includes `result`, `killerId`, `killerAid`, and `profile`, but these fields originate from the client request. They are useful for review evidence only, not authoritative reward triggers.
+4. A server-authoritative kill/loot/visit objective feed has not yet been implemented. Admin review remains mandatory.
 
-1. Import the 1.9.1 source bundle into this repository (source only; exclude game/BepInEx DLLs, player data, configs with secrets and runtime state).
-2. Run server checks and all tests in CI.
-3. Build the client on the local Windows runner against the verified assemblies.
-4. Add integration tests and a server-side raid evidence adapter for the exact SPT/Fika 2.4.3 code paths.
-5. Only after evidence validation, connect verified objectives and rewards. Keep administrator review as the fallback.
-6. Test in a disposable SPT profile and a private Fika session before deployment.
+## Runtime acceptance still required
+
+On a disposable copy of SPT, validate:
+- BepInEx loads the built DLL without type-load or missing-method errors.
+- F8 panel can authenticate using the native SPT session and configured backend URL.
+- Fika client 1.2.3 host UI is found and the native Start button is invoked only for the ready squad leader on the correct map.
+- Fika Server 2.4.3 links all PMC/Scav members to the correct Operations group.
+- Fika match end creates a review record without issuing automatic rewards.
+- Manual approval and reward delivery are idempotent and auditable.
+
+The audit container has no .NET/MSBuild/Mono toolchain, so actual C# compilation is delegated to the Windows GitHub Actions runner.
