@@ -27,6 +27,7 @@
 ## Fika 2.4.3 native host bridge
 
 - The client checks the loaded BepInEx plugin metadata for `com.fika.core` and requires version `2.4.3`.
+- For the installed Fika client `Fika.Core.dll 1.2.3`, the bridge reads the exact `MatchMakerUIScript` fields `fikaMatchMakerUi` and `raidSettings`; it retains fallbacks for later field names. This was checked against the upstream `v1.2.3` source, not inferred from a newer release.
 - It locates the existing `Fika.Core.UI.Custom.MatchMakerUIScript` and its native `MatchMakerUI.StartButton` using reflection; it does not create a fake Fika match or bypass Fika's Force IP / Force Bind IP checks.
 - The action is available only to the authenticated squad leader when the server reports all required members ready and the selected EFT `RaidSettings.SelectedLocation._Id` matches the mission map.
 - Squad members still use Fika's normal raid browser to join the host; after the match roster is observed, the server adapter links the mission group.
