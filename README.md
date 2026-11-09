@@ -41,7 +41,7 @@ The latest successful Actions run publishes an installable archive named `EFT-Op
 The package is a CI-tested server-mod build, not yet a runtime-certified release. Validate it on a backed-up test server before replacing the live installation.
 
 ## Mission and reward trust model
-- Approved points update the rank ledger immediately. Rouble/item rewards are delivered through SPT system mail after approval; failed or interrupted deliveries enter `delivery_attention_required` and are never retried automatically, to avoid duplicate mail.
+- Approved points update the rank ledger immediately. Rouble/item rewards are delivered through SPT system mail after approval; failed or interrupted deliveries enter `delivery_attention_required` and are never retried automatically. The admin Awards ledger provides an audited manual retry / mark-delivered reconciliation action.
 
 - Player identity is resolved server-side from the authenticated SPT session.
 - Ready mission groups are linked to Fika matches only after every accepted member is present in the same map/match. PMC and Scav character IDs are both matched to the same SPT account.
