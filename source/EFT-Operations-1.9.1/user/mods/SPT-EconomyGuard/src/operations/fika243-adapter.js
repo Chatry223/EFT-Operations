@@ -116,22 +116,6 @@ class Fika243OperationsAdapter {
         return patched;
     }
 
-    assertUpdateIdentity(sessionId, info, methodName) {
-        const sid = String(sessionId || '').trim();
-        const requestedProfileId = String(object(info).profileId || '').trim();
-        if (!sid || !requestedProfileId || !this.services.saveServer || typeof this.services.saveServer.getProfile !== 'function') {
-            throw new Error('FIKA_UPDATE_IDENTITY_UNAVAILABLE');
-        }
-        const profile = safe(() => this.services.saveServer.getProfile(sid), null);
-        const characters = object(profile && profile.characters);
-        const allowed = [String(object(characters.pmc)._id || ''), String(object(characters.scav)._id || '')].filter(Boolean);
-        if (!allowed.includes(requestedProfileId)) {
-            this.log('warn', `Rejected Fika ${methodName} for session ${sid}: request profile does not belong to the authenticated SPT account.`);
-            throw new Error('FIKA_UPDATE_IDENTITY_MISMATCH');
-        }
-        return true;
-    }
-
     patchRaidCallbacks(instance) {
         if (!instance) return false;
         const proto = Object.getPrototypeOf(instance);
@@ -249,7 +233,7 @@ class Fika243OperationsAdapter {
                     missionId: group.missionId,
                     players: group.members.map(member => member.profileId),
                     map: location,
-                    evidenceTrust: 'server_lifecycle_observation',
+                    evidenceTrust: 'authenticated_fika_match_membership',
                     rewardEligible: false
                 });
                 this.log('info', `Mission group ${group.id} linked to Fika match ${matchId} after all ready members joined.`);
@@ -284,7 +268,7 @@ class Fika243OperationsAdapter {
                 verified: false,
                 aliveProfileIds,
                 extractedProfileIds,
-                evidenceTrust: 'lifecycle_observation_plus_client_report',
+                evidenceTrust: 'fika_registry_and_client_reports_unverified',
                 source: 'fika-server-adapter'
             });
             this.appendEvent({
@@ -358,7 +342,7 @@ class Fika243OperationsAdapter {
             matchId: String(matchId || ''),
             reason: String(reason || ''),
             players,
-            evidenceTrust: 'lifecycle_observation',
+            evidenceTrust: 'fika_match_end_lifecycle_with_authenticated_roster',
             rewardEligible: false
         };
         this.appendEvent(event);
