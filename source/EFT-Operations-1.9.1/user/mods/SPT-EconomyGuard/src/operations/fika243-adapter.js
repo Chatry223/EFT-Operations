@@ -230,7 +230,12 @@ class Fika243OperationsAdapter {
         // the resolved service instance. Patch the effective instance methods, not
         // the base prototype (the Fika override calls the base endLocalRaid itself).
         const target = instance;
-        if (!target || typeof target.startLocalRaid !== 'function' || typeof target.endLocalRaid !== 'function') return false;
+        if (!target || typeof target.startLocalRaid !== 'function' || typeof target.endLocalRaid !== 'function'
+            || !Object.prototype.hasOwnProperty.call(target, 'startLocalRaid')
+            || !Object.prototype.hasOwnProperty.call(target, 'endLocalRaid')) {
+            this.status.lifecycleHook = false;
+            return false;
+        }
         const adapter = this;
 
         if (typeof target.startLocalRaid === 'function' && !target.__egFika243StartLifecycleHook) {
