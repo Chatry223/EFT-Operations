@@ -18,7 +18,7 @@ const saveServer = { getProfile(sessionId) {
 const responses = { noBody: value => ({ wrapped: value }) };
 const api = new OperationsClientApi({ operations, saveServer, httpResponseUtil: responses, logger: { info() {}, warn() {} } });
 const mission = operations.save({ title: 'Client API Mission', description: 'Safe player bridge', map: 'woods', mode: 'squad', minPlayers: 2, maxPlayers: 2,
-    objectives: [{ id: 'extract', type: 'extract', count: 1 }], rewards: { points: 50, roubles: 1000, items: [] } });
+    objectives: [{ id: 'scavs', type: 'kill', target: 'scav', count: 2 }, { id: 'boss', type: 'kill_type', target: 'boss', count: 1 }, { id: 'extract', type: 'extract', count: 1 }], rewards: { points: 50, roubles: 1000, items: [] } });
 operations.setStatus(mission.id, 'published');
 
 const list = api.listMissions('', {}, 'session-a').wrapped;
@@ -58,6 +58,44 @@ const left = api.leaveGroup('', { groupId: acceptedA.group.id }, 'session-a').wr
 assert.equal(left.ok, true);
 assert.equal(left.group.members.length, 1);
 assert.equal(api.leaveGroup('', { groupId: acceptedA.group.id }, 'session-a').wrapped.error, 'NOT_GROUP_MEMBER');
+const leftB = api.leaveGroup('', { groupId: acceptedA.group.id }, 'session-b').wrapped;
+assert.equal(leftB.ok, true);
+
+const hostMission = operations.save({ title: 'Fika Host Evidence', map: 'woods', mode: 'squad', minPlayers: 2, maxPlayers: 2,
+    objectives: [{ id: 'scavs', type: 'kill', target: 'scav', count: 2 }, { id: 'boss', type: 'kill_type', target: 'boss', count: 1 }, { id: 'extract', type: 'extract', count: 1 }],
+    rewards: { points: 500, roubles: 0, items: [] } });
+operations.setStatus(hostMission.id, 'published');
+const hostA = api.acceptMission('', { missionId: hostMission.id }, 'session-a').wrapped;
+const hostB = api.acceptMission('', { missionId: hostMission.id }, 'session-b').wrapped;
+api.setReady('', { groupId: hostA.group.id, ready: true }, 'session-a');
+api.setReady('', { groupId: hostA.group.id, ready: true }, 'session-b');
+operations.startGroup(hostA.group.id, 'fika-match-001');
+
+const hostKill = { eventId: 'host-kill-001', groupId: hostA.group.id, matchId: 'fika-match-001',
+    killerProfileId: 'abcdef0123456789abcdef10', victimProfileId: 'abcdef0123456789abcdef11',
+    victimRole: 'assault', victimSide: 'Savage', victimIsAi: true };
+assert.equal(api.hostRaidEvent('', hostKill, 'session-b').wrapped.error, 'HOST_NOT_ACTIVE_SQUAD_LEADER');
+assert.equal(api.hostRaidEvent('', Object.assign({}, hostKill, { killerProfileId: 'abcdef0123456789abcdef99' }), 'session-a').wrapped.error, 'KILLER_NOT_GROUP_MEMBER');
+assert.equal(api.hostRaidEvent('', Object.assign({}, hostKill, { victimIsAi: false }), 'session-a').wrapped.error, 'INVALID_HOST_KILL_EVIDENCE');
+const firstKill = api.hostRaidEvent('', hostKill, 'session-a').wrapped;
+assert.equal(firstKill.ok, true);
+assert.equal(firstKill.evidenceTrust, 'host_attested');
+assert.equal(firstKill.group.objectiveProgress.find(x => x.id === 'scavs').progress, 1);
+assert.equal(firstKill.group.objectiveProgress.find(x => x.id === 'scavs').trust, 'host_attested');
+assert.equal(operations.state.groups.find(x => x.id === hostA.group.id).evidenceEvents.length, 1);
+const duplicateKill = api.hostRaidEvent('', hostKill, 'session-a').wrapped;
+assert.equal(duplicateKill.ok, true);
+assert.equal(duplicateKill.group.objectiveProgress.find(x => x.id === 'scavs').progress, 1, 'duplicate host event IDs cannot advance progress twice');
+const bossKill = api.hostRaidEvent('', Object.assign({}, hostKill, {
+    eventId: 'host-kill-002', victimProfileId: 'abcdef0123456789abcdef12', victimRole: 'bossKilla'
+}), 'session-a').wrapped;
+assert.equal(bossKill.ok, true);
+assert.equal(bossKill.group.objectiveProgress.find(x => x.id === 'boss').progress, 1);
+const hostReview = operations.finishGroup(hostA.group.id, { verified: true, aliveProfileIds: [playerA, playerB], extractedProfileIds: [playerA, playerB] });
+assert.equal(hostReview.state, 'review', 'host-attested kills never trigger automatic completion or rewards');
+assert.equal(operations.state.awards.length, 0);
+assert.equal(hostReview.reviewData.objectiveEvidence.length, 2);
+
 const soloMission = operations.save({ title: 'Empty Squad Cleanup', map: 'customs', mode: 'solo', minPlayers: 1, maxPlayers: 1, objectives: [{ id: 'exit', type: 'extract' }] });
 operations.setStatus(soloMission.id, 'published');
 const soloGroup = operations.accept(soloMission.id, 'abcdef0123456789abcdef03', 'Solo');
@@ -74,7 +112,7 @@ assert.equal(api.register(container), true);
 assert.equal(registered.routerName, 'EFTOperationsClientApi');
 assert.equal(registered.prefix, 'EFTOperations');
 assert.deepEqual(registered.routes.map(x => x.url), [
-    '/client/eft/operations/missions', '/client/eft/operations/state', '/client/eft/operations/accept', '/client/eft/operations/ready', '/client/eft/operations/leave'
+    '/client/eft/operations/missions', '/client/eft/operations/state', '/client/eft/operations/accept', '/client/eft/operations/ready', '/client/eft/operations/leave', '/client/eft/operations/host-event'
 ]);
 const routeList = registered.routes[0].action('', {}, 'session-a').wrapped;
 assert.equal(routeList.ok, true);
