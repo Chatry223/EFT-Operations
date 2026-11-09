@@ -245,12 +245,14 @@ class OperationsService {
         const extracted = new Set(data.extractedProfileIds || []);
         if (decision === 'approve') {
             if (!attestation || attestation.confirmed !== true) throw new Error('REVIEW_ATTESTATION_REQUIRED');
-            if (data.requiredDone !== true || !g.members.every(x => alive.has(x.profileId) && extracted.has(x.profileId))) throw new Error('REVIEW_EVIDENCE_INCOMPLETE');
+            const lifecycleEvidenceComplete = data.requiredDone === true && g.members.every(x => alive.has(x.profileId) && extracted.has(x.profileId));
+            const adminEvidenceComplete = attestation.objectivesConfirmed === true && attestation.allMembersConfirmed === true;
+            if (!lifecycleEvidenceComplete && !adminEvidenceComplete) throw new Error('REVIEW_EVIDENCE_INCOMPLETE');
             for (const member of g.members) { member.result = 'success'; this.award(m, g, member.profileId); }
         } else {
             for (const member of g.members) member.result = 'denied';
         }
-        g.state = 'completed'; g.review = { decision, note: reviewNote, reviewer: reviewedBy, attested: decision === 'approve', attestationMethod: decision === 'approve' ? 'admin_manual_evidence_confirmation' : null, reviewedAt: new Date().toISOString() };
+        g.state = 'completed'; g.review = { decision, note: reviewNote, reviewer: reviewedBy, attested: decision === 'approve', attestationMethod: decision === 'approve' ? (attestation.objectivesConfirmed === true && attestation.allMembersConfirmed === true ? 'admin_manual_evidence_confirmation' : 'server_lifecycle_evidence') : null, objectivesConfirmed: decision === 'approve' && attestation.objectivesConfirmed === true, allMembersConfirmed: decision === 'approve' && attestation.allMembersConfirmed === true, reviewedAt: new Date().toISOString() };
         this.persist(); return clone(g);
     }
 
