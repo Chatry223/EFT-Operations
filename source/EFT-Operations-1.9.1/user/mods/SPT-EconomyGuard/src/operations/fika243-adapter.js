@@ -644,7 +644,7 @@ class Fika243OperationsAdapter {
             corroboratedVictimCount: victims.filter(victim => victim.corroboratedByFikaDeathReport).length,
             reportedSessionCounters: counterItems,
             lootSnapshotAvailable: !!raidSnapshot,
-            serverProcessedProfileAvailable: !!acceptedAccount,
+            serverProfileAvailable: !!acceptedAccount,
             reportedLootItemCount: lootItems.reduce((sum, item) => sum + item.count, 0),
             reportedLootByTpl: lootByTpl,
             reportedLootItems: lootItems.slice(0, 200),
