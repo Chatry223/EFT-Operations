@@ -8,7 +8,8 @@ Mission / campaign operations and EconomyGuard integration for SPT.
 - SPT: `3.11.1`
 - Fika Server: `2.4.3`
 - Fika client plugin target: `1.2.3` (the BepInEx config's hidden `Last Version` value is advisory; loaded plugin metadata is authoritative)
-- Client plugin: .NET Framework 4.7.2 / C# 7.3 / BepInEx
+- Client plugin: .NET Framework 4.7.2 / C# 7.3 / BepInEx 5.4.22.0.
+- The supplied BepInEx `BepInEx.dll` metadata declares `.NETFramework,Version=v4.7.1`; targeting the plugin at 4.7.2 is a higher compatible framework target for that reference. The EFT archive also contains `mscorlib.dll`, `netstandard.dll`, `System.Runtime.dll` and Unity managed modules. This archive inspection plus a successful Windows compile does **not** replace loading the plugin under the actual EFT Mono runtime.
 
 ## Project layout
 
