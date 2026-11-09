@@ -206,10 +206,13 @@ class OperationsService {
         const serverVerified = event.evidenceTrust === 'server_verified' && source === 'fika-server-adapter';
         const sptAccepted = event.evidenceTrust === 'spt_accepted_client_delta' && source === 'spt-server-adapter'
             && event.type === 'collect' && event.acceptedBySpt === true;
-        const hostAttested = event.evidenceTrust === 'host_attested' && source === 'fika-host-client'
+        const hostAttestedIdentity = event.evidenceTrust === 'host_attested' && source === 'fika-host-client'
             && event.reporterProfileId && g.members.some(member => String(member.profileId) === String(event.reporterProfileId) || String(member.scavProfileId || '') === String(event.reporterProfileId))
-            && String(event.reporterProfileId) === String(event.matchId) && event.type === 'kill' && event.victimIsAi === true
+            && String(event.reporterProfileId) === String(event.matchId)
             && String(event.matchId || '') === String(g.raidId || '');
+        const hostAttestedKill = hostAttestedIdentity && event.type === 'kill' && event.victimIsAi === true;
+        const hostAttestedVisit = hostAttestedIdentity && event.type === 'visit' && typeof event.target === 'string' && !!event.target.trim();
+        const hostAttested = !!(hostAttestedKill || hostAttestedVisit);
         if (!serverVerified && !sptAccepted && !hostAttested) throw new Error('UNTRUSTED_RAID_EVENT');
         const eventId = text(event.eventId, 120, 'EVENT_ID', true);
         const eventMap = text(event.map, 40, 'EVENT_MAP', true).toLowerCase();
@@ -234,10 +237,14 @@ class OperationsService {
             if (!g.members.some(member => member.profileId === reporterId || member.scavProfileId === reporterId)) throw new Error('HOST_REPORTER_NOT_MEMBER');
             if (reporterId !== String(event.matchId)) throw new Error('HOST_REPORTER_MATCH_MISMATCH');
             if (event.matchId !== g.raidId) throw new Error('RAID_EVENT_MATCH_MISMATCH');
-            const victimId = requireProfileId(event.victimProfileId);
-            if (g.members.some(member => member.profileId === victimId || member.scavProfileId === victimId)) throw new Error('RAID_EVENT_VICTIM_IS_MEMBER');
-            const category = text(event.targetCategory, 40, 'EVENT_TARGET_CATEGORY', true).toLowerCase();
-            if (!['scav', 'boss', 'boss_guard', 'raider', 'rogue', 'cultist', 'pmc', 'other', 'unknown'].includes(category)) throw new Error('INVALID_EVENT_TARGET_CATEGORY');
+            if (event.type === 'kill') {
+                const victimId = requireProfileId(event.victimProfileId);
+                if (g.members.some(member => member.profileId === victimId || member.scavProfileId === victimId)) throw new Error('RAID_EVENT_VICTIM_IS_MEMBER');
+                const category = text(event.targetCategory, 40, 'EVENT_TARGET_CATEGORY', true).toLowerCase();
+                if (!['scav', 'boss', 'boss_guard', 'raider', 'rogue', 'cultist', 'pmc', 'other', 'unknown'].includes(category)) throw new Error('INVALID_EVENT_TARGET_CATEGORY');
+            } else if (event.type === 'visit') {
+                text(event.target, 100, 'VISIT_TRIGGER_ID', true);
+            }
         }
         if (!g.progress || typeof g.progress !== 'object' || Array.isArray(g.progress)) {
             g.progress = Object.fromEntries(m.objectives.map(objective => [objective.id, 0]));
