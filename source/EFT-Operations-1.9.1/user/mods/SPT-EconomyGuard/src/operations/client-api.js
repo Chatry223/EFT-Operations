@@ -130,8 +130,9 @@ class OperationsClientApi {
 
             const groups = this.operations && this.operations.state && Array.isArray(this.operations.state.groups) ? this.operations.state.groups : [];
             const group = groups.find(item => item.state === 'in_raid' && String(item.raidId || '') === matchId
-                && item.members && item.members.length && String(item.members[0].profileId) === reporter.profileId);
-            if (!group) throw new Error('HOST_NOT_ACTIVE_SQUAD_LEADER');
+                && item.members && item.members.some(member => String(member.profileId) === reporter.profileId));
+            if (!group) throw new Error('HOST_NOT_ACTIVE_MISSION_MEMBER');
+            if (matchId !== reporter.profileId && matchId !== String(reporter.scavProfileId || '')) throw new Error('HOST_PROFILE_MISMATCH');
             if (info.groupId && String(info.groupId) !== String(group.id)) throw new Error('RAID_GROUP_MISMATCH');
 
             const member = group.members.find(item => String(item.profileId) === killerProfileId || String(item.scavProfileId || '') === killerProfileId);
@@ -153,7 +154,7 @@ class OperationsClientApi {
             const role = victimRole.toLowerCase();
             const side = victimSide.toLowerCase();
             let targetCategory = 'other';
-            if (role.indexOf('follower') >= 0) targetCategory = 'follower';
+            if (role.indexOf('follower') >= 0) targetCategory = 'boss_guard';
             else if (role.indexOf('boss') >= 0) targetCategory = 'boss';
             else if (role.indexOf('raider') >= 0) targetCategory = 'raider';
             else if (role.indexOf('rogue') >= 0) targetCategory = 'rogue';
@@ -176,7 +177,7 @@ class OperationsClientApi {
                 victimSide,
                 victimIsAi: true,
                 matchId,
-                reporterProfileId: reporter.profileId,
+                reporterProfileId: matchId,
                 source: 'fika-host-client',
                 evidenceTrust: 'host_attested'
             });
