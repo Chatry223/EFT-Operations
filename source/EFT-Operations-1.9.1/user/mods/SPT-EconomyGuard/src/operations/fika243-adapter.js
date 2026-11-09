@@ -111,7 +111,8 @@ class Fika243OperationsAdapter {
     patchMatchService(instance) {
         if (!instance) return false;
         const proto = Object.getPrototypeOf(instance);
-        const target = proto || instance;
+        const hasHooks = proto && (Object.prototype.hasOwnProperty.call(proto, 'endMatch') || Object.prototype.hasOwnProperty.call(proto, 'addPlayerToMatch'));
+        const target = hasHooks ? proto : instance;
         const adapter = this;
         let patched = false;
 
