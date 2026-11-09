@@ -193,7 +193,7 @@ class OperationsService {
         if (!m || m.status !== 'published' || (m.startAt && Date.parse(m.startAt) > Date.now()) || (m.endAt && Date.parse(m.endAt) <= Date.now()) || g.members.length < m.minPlayers || !g.members.every(x => x.ready)) throw new Error('GROUP_NOT_READY');
         const validatedRaidId = text(raidId, 100, 'RAID_ID', true);
         g.state = 'in_raid'; g.raidId = validatedRaidId; g.startedAt = new Date().toISOString();
-        g.progress = Object.fromEntries(m.objectives.map(o => [o.id, 0])); g.processedEventIds = []; this.persist(); return clone(g);
+        g.progress = Object.fromEntries(m.objectives.map(o => [o.id, 0])); g.progressTrust = {}; g.evidenceEvents = []; g.processedEventIds = []; this.persist(); return clone(g);
     }
 
     // Call only from a server-side SPT/Fika event adapter. Never expose this method as a public client endpoint.
@@ -202,9 +202,13 @@ class OperationsService {
         if (!g) throw new Error('RAID_NOT_ACTIVE');
         const m = this.state.missions.find(x => x.id === g.missionId);
         if (!event || typeof event !== 'object' || !OBJECTIVES.has(event.type)) throw new Error('INVALID_RAID_EVENT');
-        if (event.evidenceTrust !== 'server_verified' || !['fika-server-adapter', 'spt-server-adapter'].includes(String(event.source || ''))) {
-            throw new Error('UNTRUSTED_RAID_EVENT');
-        }
+        const source = String(event.source || '');
+        const serverVerified = event.evidenceTrust === 'server_verified' && ['fika-server-adapter', 'spt-server-adapter'].includes(source);
+        const hostAttested = event.evidenceTrust === 'host_attested' && source === 'fika-host-client'
+            && event.reporterProfileId && g.members.length && String(event.reporterProfileId) === String(g.members[0].profileId)
+            && event.type === 'kill' && event.victimIsAi === true
+            && String(event.matchId || '') === String(g.raidId || '');
+        if (!serverVerified && !hostAttested) throw new Error('UNTRUSTED_RAID_EVENT');
         const eventId = text(event.eventId, 120, 'EVENT_ID', true);
         const eventMap = text(event.map, 40, 'EVENT_MAP', true).toLowerCase();
         if (eventMap !== String(m.map || '').toLowerCase()) throw new Error('RAID_EVENT_MAP_MISMATCH');
@@ -222,12 +226,36 @@ class OperationsService {
         }
         if (!Array.isArray(g.processedEventIds)) g.processedEventIds = [];
         if (g.processedEventIds.includes(eventId)) return clone(g.progress);
+        if (hostAttested) {
+            const reporterId = requireProfileId(event.reporterProfileId);
+            if (reporterId !== String(g.members[0].profileId)) throw new Error('HOST_REPORTER_NOT_LEADER');
+            if (event.matchId !== g.raidId) throw new Error('RAID_EVENT_MATCH_MISMATCH');
+            const victimId = requireProfileId(event.victimProfileId);
+            if (g.members.some(member => member.profileId === victimId || member.scavProfileId === victimId)) throw new Error('RAID_EVENT_VICTIM_IS_MEMBER');
+            const category = text(event.targetCategory, 40, 'EVENT_TARGET_CATEGORY', true).toLowerCase();
+            if (!['scav', 'boss', 'raider', 'rogue', 'cultist', 'pmc', 'follower', 'other', 'unknown'].includes(category)) throw new Error('INVALID_EVENT_TARGET_CATEGORY');
+        }
+        if (!g.progressTrust || typeof g.progressTrust !== 'object') g.progressTrust = {};
+        if (!Array.isArray(g.evidenceEvents)) g.evidenceEvents = [];
+        const targetCandidates = [event.target, event.targetCategory].map(value => String(value || '').trim().toLowerCase()).filter(Boolean);
         for (const objective of m.objectives) {
-            if (objective.type !== event.type) continue;
-            if (objective.target && String(event.target || '').toLowerCase() !== String(objective.target).toLowerCase()) continue;
+            const matchingType = objective.type === event.type || (event.type === 'kill' && objective.type === 'kill_type');
+            if (!matchingType) continue;
+            if (objective.target && !targetCandidates.includes(String(objective.target).toLowerCase())) continue;
             if (objective.params.map && String(objective.params.map).toLowerCase() !== (eventMap || String(m.map || '').toLowerCase())) continue;
             g.progress[objective.id] = Math.min(objective.count, (g.progress[objective.id] || 0) + amount);
+            if (g.progressTrust[objective.id] !== 'server_verified') g.progressTrust[objective.id] = event.evidenceTrust;
         }
+        g.evidenceEvents.push({
+            eventId, type: event.type, profileId: event.profileId ? String(event.profileId) : null,
+            target: String(event.target || ''), targetCategory: String(event.targetCategory || ''),
+            victimProfileId: event.victimProfileId ? String(event.victimProfileId) : null,
+            victimRole: String(event.victimRole || ''), victimSide: String(event.victimSide || ''),
+            reporterProfileId: event.reporterProfileId ? String(event.reporterProfileId) : null,
+            matchId: event.matchId ? String(event.matchId) : null,
+            evidenceTrust: event.evidenceTrust, source, timestamp: new Date().toISOString()
+        });
+        if (g.evidenceEvents.length > 1000) g.evidenceEvents.splice(0, g.evidenceEvents.length - 1000);
         // Bound persisted deduplication state so a long-running server cannot grow
         // the operations store without limit. IDs are scoped to this raid group.
         g.processedEventIds.push(eventId);
@@ -257,7 +285,7 @@ class OperationsService {
         if (raidVerified) g.state = 'completed';
         else {
             g.state = 'review';
-            g.reviewData = { requiredDone, aliveProfileIds: [...alive], extractedProfileIds: [...extracted], evidenceTrust: String(raidOutcome && raidOutcome.evidenceTrust || 'untrusted_client_report'), source: String(raidOutcome && raidOutcome.source || 'unknown'), submittedAt: g.finishedAt };
+            g.reviewData = { requiredDone, aliveProfileIds: [...alive], extractedProfileIds: [...extracted], objectiveEvidence: (g.evidenceEvents || []).slice(-200), progressTrust: clone(g.progressTrust || {}), evidenceTrust: String(raidOutcome && raidOutcome.evidenceTrust || 'untrusted_client_report'), source: String(raidOutcome && raidOutcome.source || 'unknown'), submittedAt: g.finishedAt };
         }
         this.persist(); return clone(g);
     }
