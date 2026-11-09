@@ -476,6 +476,9 @@ namespace EFTOperations.Client
     internal static class SptBackendBridge
     {
         private const string RequestHandlerTypeName = "SPT.Common.Http.RequestHandler";
+        // SPT 3.11.1 ships this assembly as spt-common.dll (AssemblyName: spt-common),
+        // not "SPT.Common". Keep the namespace and assembly identity separate.
+        private const string RequestHandlerAssemblyName = "spt-common";
         private const BindingFlags StaticFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
         private static Type cachedType;
 
@@ -554,17 +557,8 @@ namespace EFTOperations.Client
         {
             if (cachedType != null) return cachedType;
 
-            cachedType = Type.GetType(RequestHandlerTypeName + ", SPT.Common", false);
-            if (cachedType != null) return cachedType;
-
-            try
-            {
-                Assembly common = Assembly.Load("SPT.Common");
-                cachedType = common.GetType(RequestHandlerTypeName, false);
-            }
-            catch { }
-
-            if (cachedType != null) return cachedType;
+            // Prefer the assembly already loaded by SPT/BepInEx. This avoids probing a
+            // duplicate copy and preserves the game's native HttpClient instance.
             foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
             {
                 try
@@ -574,7 +568,19 @@ namespace EFTOperations.Client
                 }
                 catch { }
             }
-            return null;
+
+            // Exact SPT 3.11.1 assembly identity from SPT.Common.csproj.
+            try
+            {
+                cachedType = Type.GetType(RequestHandlerTypeName + ", " + RequestHandlerAssemblyName, false);
+                if (cachedType != null) return cachedType;
+
+                Assembly common = Assembly.Load(RequestHandlerAssemblyName);
+                cachedType = common.GetType(RequestHandlerTypeName, false);
+            }
+            catch { }
+
+            return cachedType;
         }
 
         private static object ReadStaticField(Type type, string name)
