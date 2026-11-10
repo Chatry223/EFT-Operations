@@ -112,6 +112,10 @@ const campaignMission2 = campaignOps.save({ title: 'Blackout 02', map: 'woods', 
 const campaignMission3 = campaignOps.save({ title: 'Blackout 03', map: 'woods', mode: 'solo', minPlayers: 1, maxPlayers: 1, campaignId: 'operation-blackout', campaignOrder: 3, requiredPoints: 600, objectives: [{ id: 'exit', type: 'extract' }], rewards: { points: 0, roubles: 0, items: [] } });
 assert.equal(campaignMission1.campaignId, 'operation-blackout');
 assert.equal(campaignMission1.campaignOrder, 1);
+assert.throws(() => campaignOps.save({ title: 'Duplicate Blackout 02', map: 'woods', mode: 'solo', minPlayers: 1, maxPlayers: 1,
+    campaignId: 'operation-blackout', campaignOrder: 2, objectives: [{ id: 'exit', type: 'extract' }] }), /DUPLICATE_CAMPAIGN_SEQUENCE/);
+assert.throws(() => campaignOps.save({ title: 'Sequence without campaign', map: 'woods', mode: 'solo', minPlayers: 1, maxPlayers: 1,
+    campaignOrder: 1, objectives: [{ id: 'exit', type: 'extract' }] }), /CAMPAIGN_ORDER_REQUIRES_ID/);
 campaignOps.setStatus(campaignMission1.id, 'published');
 campaignOps.setStatus(campaignMission2.id, 'published');
 campaignOps.setStatus(campaignMission3.id, 'published');
