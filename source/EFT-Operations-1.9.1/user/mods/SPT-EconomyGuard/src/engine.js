@@ -311,6 +311,37 @@ class EconomyGuard {
         return { value, confidence, complete: complete && unknown.length === 0, unknown: [...new Set(unknown)], breakdown };
     }
 
+    getTraderSellAssetValue(items, instance) {
+        const itemTable = safeCall(() => instance.databaseService.getItems(), null)
+            || safeCall(() => this.getTables().templates.items, null) || {};
+        let value = 0;
+        let confidence = 'HIGH';
+        const breakdown = [];
+        let complete = true;
+        for (const item of items || []) {
+            const tpl = core.normalizeTpl(item && item._tpl);
+            if (!tpl) { complete = false; confidence = 'LOW'; continue; }
+            const stackInfo = core.readStackCount(item);
+            if (!stackInfo.valid) {
+                complete = false;
+                confidence = 'LOW';
+                breakdown.push({ tpl, count: stackInfo.count, handbookRoubles: null, reason: stackInfo.reason || 'INVALID_STACK_COUNT' });
+                continue;
+            }
+            const handbookRaw = Number(safeCall(() => instance.handbookHelper.getTemplatePrice(tpl), 0)) || 0;
+            const catalogKnown = Boolean(itemTable && itemTable[tpl]);
+            if (handbookRaw <= 1 || !catalogKnown) {
+                complete = false;
+                confidence = 'LOW';
+                breakdown.push({ tpl, count: stackInfo.count, handbookRoubles: handbookRaw, catalogKnown, reason: handbookRaw <= 1 ? 'HANDBOOK_PRICE_UNAVAILABLE' : 'TEMPLATE_NOT_IN_CATALOG' });
+                continue;
+            }
+            value += handbookRaw * stackInfo.count;
+            breakdown.push({ tpl, count: stackInfo.count, handbookRoubles: handbookRaw, catalogKnown });
+        }
+        return { value, confidence, complete, breakdown, source: 'spt-handbook' };
+    }
+
     getPriceQualityMultiplier(instance, items) {
         const q = Number(safeCall(() => instance.itemHelper.getItemQualityModifierForItems(items, true), 1));
         return Number.isFinite(q) && q > 0 ? q : 1;
@@ -829,9 +860,16 @@ class EconomyGuard {
 
     checkTraderSell(instance, profile, request, sessionId) {
         const inventory = profile && profile.Inventory && profile.Inventory.items || [];
-        const selectedIds = (request.items || []).map(i => i && i.id).filter(Boolean);
-        const selected = core.itemTree(selectedIds, inventory);
-        const asset = this.itemValue(selected, instance);
+        const selectedIds = Array.from(new Set((request.items || []).map(i => i && i.id).filter(Boolean)));
+        const inventoryById = new Map(inventory.map(item => [item && item._id, item]));
+        const selected = selectedIds.map(id => inventoryById.get(id)).filter(Boolean);
+        if (!selected.length || selected.length !== selectedIds.length) {
+            return { known: false, valid: true, reason: 'TRADER_SELL_ITEMS_UNAVAILABLE', assetValue: 0, confidence: 'LOW' };
+        }
+        // Trader buyback is based on SPT Handbook value, not LiveFleaPrices/Ragfair
+        // dynamic price. Do not let a volatile flea price inflate the trader payout ceiling.
+        const asset = this.getTraderSellAssetValue(selected, instance);
+        const qualityMultiplier = this.getPriceQualityMultiplier(instance, selected);
         // SPT 3.11.1 TraderHelper.getTrader() returns ITraderBase directly,
         // not a { base } wrapper. The effective buyback coefficient lives on the
         // player's current loyalty-level row, not on ITraderBase itself.
@@ -851,17 +889,18 @@ class EconomyGuard {
         // EFT/SPT defines buy_price_coef as the inverse buyback percentage:
         // actual payout rate = 100 - buy_price_coef. SVM 1.11.1 writes
         // buy_price_coef = 100 - TraderMarkup to every loyalty level.
-        if (!asset.value || !Number.isFinite(buyPriceCoef) || buyPriceCoef < 0 || buyPriceCoef > 100 || !currencyTpl) {
-            return { known: false, valid: true, reason: 'TRADER_SELL_REFERENCE_UNAVAILABLE', assetValue: asset.value, confidence: asset.confidence };
+        if (!asset.value || !asset.complete || asset.confidence !== 'HIGH' || !Number.isFinite(buyPriceCoef)
+            || buyPriceCoef < 0 || buyPriceCoef > 100 || !currencyTpl) {
+            return { known: false, valid: true, reason: 'TRADER_SELL_REFERENCE_UNAVAILABLE', assetValue: asset.value, confidence: asset.confidence, priceSource: asset.source };
         }
         const buybackPercent = 100 - buyPriceCoef;
-        const expectedRub = asset.value * (buybackPercent / 100);
+        const expectedRub = asset.value * qualityMultiplier * (buybackPercent / 100);
         const actualRub = safeCall(() => instance.handbookHelper.inRUB(Number(request.price), currencyTpl), currencyTpl === '5449016a4bdc2d6f028b456f' ? Number(request.price) : NaN);
         if (!Number.isFinite(actualRub) || actualRub < 0) return { known: false, valid: true, reason: 'TRADER_CURRENCY_CONVERSION_UNAVAILABLE' };
         const multiplier = Number(this.config.trader.maxSellPayoutMultiplier) || 3;
         const safety = Number(this.config.trader.sellPayoutSafetyFactor) || 1.35;
         const ceiling = expectedRub * multiplier * safety;
-        return { known: true, valid: actualRub <= ceiling, expectedRub, actualRub, ceiling, assetValue: asset.value, confidence: asset.confidence, traderId: request.tid, buyPriceCoef, buybackPercent, loyaltyLevel: Number(profile && profile.TradersInfo && profile.TradersInfo[request.tid] && profile.TradersInfo[request.tid].loyaltyLevel) || null };
+        return { known: true, valid: actualRub <= ceiling, expectedRub, actualRub, ceiling, assetValue: asset.value, qualityMultiplier, confidence: asset.confidence, priceSource: asset.source, traderId: request.tid, buyPriceCoef, buybackPercent, loyaltyLevel: Number(profile && profile.TradersInfo && profile.TradersInfo[request.tid] && profile.TradersInfo[request.tid].loyaltyLevel) || null };
     }
 
     checkFleaListing(instance, profile, request) {
