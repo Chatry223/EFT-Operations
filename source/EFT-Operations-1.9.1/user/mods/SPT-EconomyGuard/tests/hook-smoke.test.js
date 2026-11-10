@@ -56,9 +56,16 @@ assert.ok(noFundsOutput.warnings.length > 0, 'insufficient funds must return a s
 
 let originalSellCalls = 0;
 const sellInstance = {
-    traderHelper: { getTrader: () => ({ base: { buy_price_coef: 50, currency: '5449016a4bdc2d6f028b456f' } }) },
-    databaseService: { getPrices: () => ({ tplA: 10000 }) },
+    traderHelper: {
+        // SPT 3.11.1 returns ITraderBase directly and exposes the effective buyback
+        // coefficient through the player's current loyalty-level row.
+        getTrader: () => ({ currency: '5449016a4bdc2d6f028b456f', loyaltyLevels: [{ buy_price_coef: 50 }] }),
+        getLoyaltyLevel: () => ({ buy_price_coef: 50 })
+    },
+    databaseService: { getPrices: () => ({ tplA: 10000 }), getItems: () => ({ tplA: {} }) },
     handbookHelper: { getTemplatePrice: () => 10000, inRUB: amount => amount },
+    itemHelper: { getItemQualityModifierForItems: () => 1 },
+    ragfairPriceService: { getDynamicPriceForItem: () => 1000000 },
     httpResponse: { appendErrorToOutput(output, message) { output.warnings.push({ errmsg: message }); return output; } },
     sellItem() { originalSellCalls++; }
 };
