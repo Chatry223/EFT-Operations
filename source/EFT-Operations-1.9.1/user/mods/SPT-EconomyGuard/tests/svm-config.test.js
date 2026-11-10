@@ -41,6 +41,7 @@ function fixture() {
         assert.strictEqual(status.version, '1.11.1');
         assert.strictEqual(status.activePreset, 'v6');
         assert.strictEqual(status.traderMarkup.Skier, 20);
+        assert.strictEqual(status.traderSell.Skier, 5.1, 'TraderSell is read from the selected v6 preset');
         assert.strictEqual(status.itemPriceMultiplier, 1);
         assert.strictEqual(status.tradersEnabled, true);
         assert.strictEqual(status.itemsEnabled, false);
