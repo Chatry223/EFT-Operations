@@ -2,6 +2,16 @@
 
 EconomyGuard reads the active SVM preset through `Loader/loader.json` and the selected `Presets/vN.json`. It does not hardcode a preset name or assume that a stored value is active.
 
+## Verified supplied preset snapshot
+
+The supplied SPT 3.11.1 server archive selects preset `v6` and contains SVM `1.11.1`:
+- `Traders.EnableTraders = true`
+- `Traders.TraderMarkup.Skier = 20` — Skier buyback is 20% of the reference value (SVM writes `buy_price_coef = 80`)
+- `Traders.TraderSell.Skier = 5.1` — currency-based Skier offer requirements are multiplied by 5.1
+- `Items.EnableItems = false` with `Items.ItemPriceMult = 1` — this item multiplier is stored but inactive
+
+These are the values in the supplied archive, not a promise that a later server-side preset has not changed.
+
 ## Field meanings
 
 - `Traders.EnableTraders` gates the SVM trader section.
