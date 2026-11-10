@@ -87,7 +87,7 @@ try {
         scheme_items: [{ id: 'rub-stack', count: 5100 }]
     }, 'session-1');
     assert.equal(adjustedBuy.valid, true, 'SPT payment validation should accept the exact SVM-adjusted currency requirement');
-    assert.equal(adjustedBuy.expected && adjustedBuy.expected[rubTpl], undefined);
+    assert.equal(adjustedBuy.expected && adjustedBuy.expected[rubTpl], 5100);
     assert.equal(adjustedBuy.requirements[0].count, 5100);
     const staleBuy = guard.checkTraderBuy(buyInstance, buyProfile, {
         tid: skierId, item_id: 'skier-offer', scheme_id: 0, count: 1,
