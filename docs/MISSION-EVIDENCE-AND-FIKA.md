@@ -31,6 +31,7 @@ Target stack:
 
 - `server_verified` is reserved for genuinely server-owned evidence. It must not be assigned to a client-originated kill, visit, inventory or raid-end report.
 - `host_attested`, `spt_accepted_client_delta` and `client_report_only` all advance visible mission progress, but they are review evidence, not automatic reward authorization.
+- Fika client 1.2.3 sets `FikaBackendUtils.GroupId = profileId` when creating a host raid; `NetManagerUtils.CreateCoopHandler` copies that value into `CoopHandler.ServerId`, and `CoopHandler.GetServerId()` returns it. Therefore the host telemetry `matchId` for this pinned client is the authenticated host character profile ID (PMC or Scav), not the Fika `ServerGuid` or raid code. The server adapter binds that value to the active Fika match and checks it against the authenticated SPT host account.
 - Fika host events are bound to the active Fika match ID. The reporter must be the host profile (PMC or Scav), and the actor must belong to the accepted mission squad.
 - Kill evidence requires an AI victim and rejects squad-member victims. Visit evidence is tied to the host-observed player profile and the exact place key.
 - Duplicate event IDs are ignored. Host telemetry is rate-limited.
