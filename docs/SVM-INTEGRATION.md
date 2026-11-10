@@ -7,6 +7,7 @@ EconomyGuard reads the active SVM preset through `Loader/loader.json` and the se
 - `Traders.EnableTraders` gates the SVM trader section.
 - `TraderMarkup` is the effective percentage a trader pays when buying an item from the player. SVM writes `buy_price_coef = 100 - TraderMarkup`; SPT 3.11.1 converts that coefficient back to the buyback percentage. It is **not** the multiplier for prices the player pays when buying from the trader.
 - `TraderSell` multiplies currency-based costs in trader offers. Offers that are barter-only are not changed by this field.
+- EconomyGuard validates trader purchases against SPT's resolved trader assort requirements, so it sees the active SVM-adjusted currency offer counts. For player-to-trader sales, SPT 3.11.1 `TraderHelper.getTrader()` returns the trader base directly and the effective `buy_price_coef` is on the player's current `loyaltyLevels` row. EconomyGuard now reads that current row and converts the inverse coefficient back to the actual buyback percentage (`100 - buy_price_coef`) before calculating the payout ceiling.
 - `Items.EnableItems` gates the item section. `Items.ItemPriceMult` is only effective when that section is enabled.
 - `Traders.Fence.EnableFence` gates the Fence-specific values. Stored Fence multipliers must be shown as inactive when this flag is false.
 
