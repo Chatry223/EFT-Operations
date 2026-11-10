@@ -196,7 +196,7 @@ assert.equal(lootRaidEnd.reportedLootItemCount, 4);
 assert.equal(lootRaidEnd.reportedLootByTpl['tpl-stack'], 3);
 assert.equal(lootRaidEnd.reportedLootByTpl['tpl-new'], 1);
 lifecycleAdapter.captureRaidEnd('abcdef0123456789abcdef12', { serverId: 'woods.1', results: { result: 'Survived', exitName: 'Outskirts' } });
-liveMatchService.endMatch('match-live', 'host_left');
+liveMatchService.endMatch(hostProfileId, 'host_left');
 const finishedGroup = ops.state.groups.find(x => x.id === group.id);
 assert.equal(finishedGroup.state, 'review', 'Fika match end must enter manual review, not auto-award');
 assert.equal(finishedGroup.reviewData.evidenceTrust, 'fika_registry_and_client_reports_unverified');
