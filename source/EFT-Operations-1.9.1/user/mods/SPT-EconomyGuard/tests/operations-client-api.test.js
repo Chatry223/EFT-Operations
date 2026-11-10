@@ -128,10 +128,19 @@ assert.equal(lockedSecond.lockReason, 'CAMPAIGN_PREREQUISITES_NOT_MET');
 assert.equal(lockedThird.locked, true);
 assert.equal(lockedThird.lockReason, 'RANK_REQUIREMENT_NOT_MET');
 assert.throws(() => campaignOps.accept(campaignMission2.id, playerA, 'Alpha'), /CAMPAIGN_PREREQUISITES_NOT_MET/);
-campaignOps.award(campaignMission1, { id: 'approved-blackout-01' }, playerA);
+const campaignGroup1 = campaignOps.accept(campaignMission1.id, playerA, 'Alpha');
+campaignOps.setReady(campaignGroup1.id, playerA, true);
+campaignOps.startGroup(campaignGroup1.id, 'raid-blackout-01');
+campaignOps.finishGroup(campaignGroup1.id, { verified: false, source: 'fika-client-report', evidenceTrust: 'client_report_only', aliveProfileIds: [], extractedProfileIds: [] });
+campaignOps.resolveReview(campaignGroup1.id, 'approve', 'Admin verified mission evidence', 'ADMIN',
+    { confirmed: true, objectivesConfirmed: true, allMembersConfirmed: true });
 assert.equal(campaignOps.getMissionEligibility(campaignMission2.id, playerA).available, true);
-campaignOps.accept(campaignMission2.id, playerA, 'Alpha');
-campaignOps.award(campaignMission2, { id: 'approved-blackout-02' }, playerA);
+const campaignGroup2 = campaignOps.accept(campaignMission2.id, playerA, 'Alpha');
+campaignOps.setReady(campaignGroup2.id, playerA, true);
+campaignOps.startGroup(campaignGroup2.id, 'raid-blackout-02');
+campaignOps.finishGroup(campaignGroup2.id, { verified: false, source: 'fika-client-report', evidenceTrust: 'client_report_only', aliveProfileIds: [], extractedProfileIds: [] });
+campaignOps.resolveReview(campaignGroup2.id, 'approve', 'Admin verified mission evidence', 'ADMIN',
+    { confirmed: true, objectivesConfirmed: true, allMembersConfirmed: true });
 assert.equal(campaignOps.getPlayer(playerA).points, 700);
 assert.equal(campaignOps.getPlayer(playerA).rank, 'Recruit');
 assert.equal(campaignOps.getPlayer(playerA).nextRank, 'Private');
