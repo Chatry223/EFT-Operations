@@ -31,7 +31,14 @@ const instance = {
             return traderBase.loyaltyLevels[pmc.TradersInfo[id].loyaltyLevel - 1];
         }
     },
-    handbookHelper: { inRUB(value, currency) { assert.equal(currency, 'RUB'); return value; } }
+    databaseService: { getItems() { return { 'abcdef0123456789abcdef01': {} }; } },
+    handbookHelper: {
+        getTemplatePrice(tpl) { assert.equal(tpl, 'abcdef0123456789abcdef01'); return 100000; },
+        inRUB(value, currency) { assert.equal(currency, 'RUB'); return value; }
+    },
+    // The flea value is intentionally 10x the Handbook value. Trader buyback must ignore it.
+    ragfairPriceService: { getDynamicPriceForItem() { return 1000000; } },
+    itemHelper: { getItemQualityModifierForItems() { return 1; } }
 };
 
 const guard = new EconomyGuard(root, {
@@ -42,7 +49,6 @@ const guard = new EconomyGuard(root, {
     flea: { maxTrackedEventsInMemory: 100 },
     trader: { maxSellPayoutMultiplier: 3, sellPayoutSafetyFactor: 1.35 }
 }, { info() {}, warn() {}, error() {} }, {});
-guard.itemValue = () => ({ value: 100000, confidence: 'HIGH' });
 
 try {
     const within = guard.checkTraderSell(instance, profile, {
@@ -52,6 +58,8 @@ try {
     assert.equal(within.buyPriceCoef, 80);
     assert.equal(within.buybackPercent, 20, 'SVM TraderMarkup 20 must mean a 20% buyback rate, not 80%');
     assert.equal(within.expectedRub, 20000);
+    assert.equal(within.assetValue, 100000, 'trader payout reference must use Handbook value, not the 1,000,000 RUB dynamic flea price');
+    assert.equal(within.priceSource, 'spt-handbook');
     assert.equal(within.ceiling, 81000);
     assert.equal(within.valid, true);
 
@@ -62,10 +70,9 @@ try {
     assert.equal(over.valid, false, 'payout above the SVM-adjusted 20% buyback ceiling must be rejected');
 
     // Fallback path for SPT-compatible wrappers or test doubles that do not expose getLoyaltyLevel.
-    const fallbackInstance = {
-        traderHelper: { getTrader() { return { base: traderBase }; } },
-        handbookHelper: instance.handbookHelper
-    };
+    const fallbackInstance = Object.assign({}, instance, {
+        traderHelper: { getTrader() { return { base: traderBase }; } }
+    });
     const fallback = guard.checkTraderSell(fallbackInstance, profile, {
         tid: traderId, items: [{ id: 'item-1' }], price: 20000
     }, 'session-1');
@@ -97,10 +104,9 @@ try {
 
     // A 0% buyback rate is valid SVM configuration and must not be treated as missing data.
     const zeroMarkup = { currency: 'RUB', loyaltyLevels: [{ buy_price_coef: 100 }] };
-    const zeroInstance = {
-        traderHelper: { getTrader() { return zeroMarkup; }, getLoyaltyLevel() { return zeroMarkup.loyaltyLevels[0]; } },
-        handbookHelper: instance.handbookHelper
-    };
+    const zeroInstance = Object.assign({}, instance, {
+        traderHelper: { getTrader() { return zeroMarkup; }, getLoyaltyLevel() { return zeroMarkup.loyaltyLevels[0]; } }
+    });
     const zero = guard.checkTraderSell(zeroInstance, profile, {
         tid: traderId, items: [{ id: 'item-1' }], price: 0
     }, 'session-1');
