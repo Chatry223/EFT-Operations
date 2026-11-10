@@ -382,9 +382,11 @@ namespace EFTOperations.Client
             GUILayout.EndHorizontal();
             GUILayout.Label(status, SmallStyle());
             if (playerState.player != null)
+            {
                 GUILayout.Label("OPERATOR RANK  /  " + (playerState.player.rank ?? "Recruit").ToUpperInvariant() + "     ·     " + playerState.player.points + " POINTS", SmallStyle());
                 if (!String.IsNullOrEmpty(playerState.player.nextRank))
                     GUILayout.Label("PROMOTION  /  " + playerState.player.nextRank.ToUpperInvariant() + "  ·  " + playerState.player.pointsToNextRank.ToString("N0") + " PTS REMAINING  ·  " + playerState.player.rankProgressPercent + "%", SmallStyle());
+            }
             GUILayout.Space(8f);
 
             if (playerState.group != null)
@@ -483,9 +485,11 @@ namespace EFTOperations.Client
             if (!String.IsNullOrEmpty(mission.campaignId))
                 GUILayout.Label("CAMPAIGN  /  " + mission.campaignId.ToUpperInvariant() + (mission.campaignOrder > 0 ? "  ·  OPERATION " + mission.campaignOrder : ""), SmallStyle());
             if (playerState.player != null)
+            {
                 GUILayout.Label("OPERATOR RANK  /  " + (playerState.player.rank ?? "UNRANKED") + "  ·  " + playerState.player.points + " PTS", SmallStyle());
                 if (!String.IsNullOrEmpty(playerState.player.nextRank))
                     GUILayout.Label("NEXT RANK  /  " + playerState.player.nextRank.ToUpperInvariant() + "  ·  " + playerState.player.pointsToNextRank.ToString("N0") + " PTS  ·  " + playerState.player.rankProgressPercent + "%", SmallStyle());
+            }
 
             string briefing = mission.briefing == null ? String.Empty : mission.briefing.body;
             if (!String.IsNullOrEmpty(briefing))
