@@ -133,11 +133,17 @@ ops.setReady(group.id, 'abcdef0123456789abcdef11', true);
 ops.setReady(group.id, 'abcdef0123456789abcdef12', true);
 const lifecycleAdapter = new Fika243OperationsAdapter({ modDir: lifecycleModDir, operations: ops, logger: { info() {}, warn() {}, debug() {} } });
 class FakeFikaMatchService {
-    constructor() { this.matches = new Map([['match-live', { locationData: { Id: 'woods' }, raidConfig: { location: 'woods' }, players: new Map([['match-live', { isDead: false }]]) }]]); }
+    constructor() { this.matches = new Map(); }
     getMatch(id) { return this.matches.get(id); }
-    getMatchIdByProfile() { return 'match-live'; }
+    getMatchIdByProfile() { return 'abcdef0123456789abcdef11'; }
     addPlayerToMatch(matchId, playerId, data) { this.matches.get(matchId).players.set(playerId, data); }
-    createMatch(data) { this.matches.set(data.serverId, { locationData: { Id: 'woods' }, raidConfig: { location: 'woods' }, players: new Map() }); return true; }
+    // Fika client 1.2.3 sends serverId = host profileId. Fika Server 2.4.3
+    // immediately inserts that same ID as the host player during createMatch.
+    createMatch(data) {
+        this.matches.set(data.serverId, { locationData: { Id: 'woods' }, raidConfig: { location: 'woods' }, players: new Map() });
+        this.addPlayerToMatch(data.serverId, data.serverId, { isDead: false });
+        return true;
+    }
     deleteMatch(matchId) { this.matches.delete(matchId); }
     endMatch(matchId, reason) { const match = this.matches.get(matchId); this.deleteMatch(matchId); return { matchId, reason, match }; }
 }
@@ -159,12 +165,13 @@ raidProfiles.set('abcdef0123456789abcdef12', profileFor('abcdef0123456789abcdef1
 ]));
 lifecycleAdapter.services.saveServer = { getProfile(sessionId) { return raidProfiles.get(sessionId) || null; } };
 assert.equal(lifecycleAdapter.patchMatchService(liveMatchService), true);
-assert.equal(ops.state.groups.find(x => x.id === group.id).state, 'forming', 'Fika 2.4.3 first registers the host under the synthetic serverId; this must not count as the host PMC profile');
-liveMatchService.addPlayerToMatch('match-live', 'abcdef0123456789abcdef11', { isDead: false });
-assert.equal(ops.state.groups.find(x => x.id === group.id).state, 'forming', 'one member is not enough to bind a two-person mission');
-liveMatchService.addPlayerToMatch('match-live', 'abcdef0123456789abcdef13', { isDead: false });
-assert.equal(ops.state.groups.find(x => x.id === group.id).state, 'in_raid', 'all ready members in the same Fika match starts the operation');
-assert.equal(ops.state.groups.find(x => x.id === group.id).raidId, 'match-live');
+assert.equal(ops.state.groups.find(x => x.id === group.id).state, 'forming');
+const hostProfileId = 'abcdef0123456789abcdef11';
+liveMatchService.createMatch({ serverId: hostProfileId, settings: { location: 'woods' } });
+assert.equal(ops.state.groups.find(x => x.id === group.id).state, 'forming', 'Fika registers the host first; a two-person mission waits for its second member');
+liveMatchService.addPlayerToMatch(hostProfileId, 'abcdef0123456789abcdef13', { isDead: false });
+assert.equal(ops.state.groups.find(x => x.id === group.id).state, 'in_raid', 'the host profile plus every ready squad member in the same Fika match starts the operation');
+assert.equal(ops.state.groups.find(x => x.id === group.id).raidId, hostProfileId);
 assert.deepEqual(ops.state.groups.find(x => x.id === group.id).members.map(x => x.scavProfileId), [null, 'abcdef0123456789abcdef13']);
 ops.recordRaidEvent(group.id, { type: 'extract', amount: 1, map: 'woods', source: 'fika-server-adapter', evidenceTrust: 'server_verified' });
 assert.ok(lifecycleAdapter.captureRaidStart('abcdef0123456789abcdef11', { playerSide: 'pmc', location: 'woods' }, { location: 'woods' }));
