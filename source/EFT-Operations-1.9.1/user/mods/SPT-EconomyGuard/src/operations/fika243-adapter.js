@@ -363,8 +363,10 @@ class Fika243OperationsAdapter {
             this.status.matchCreateHook = false;
         }
 
-        // Fika 2.4.3 updates IFikaMatch.players after the in-raid registration path.
-        // Bind a mission only after every accepted, ready member appears in this match.
+        // Fika client 1.2.3 uses the host profile ID as serverId. Fika Server 2.4.3
+        // seeds that host into IFikaMatch.players inside createMatch(), then adds remote
+        // members through addPlayerToMatch(). Observe after each mutation and bind only
+        // when every accepted, ready mission member is present in the same map/match.
         if (typeof target.addPlayerToMatch === 'function') {
             if (!target.__egFika243PlayerJoinHook) {
                 const original = target.addPlayerToMatch;
