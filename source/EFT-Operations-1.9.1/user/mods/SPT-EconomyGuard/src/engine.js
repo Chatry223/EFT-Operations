@@ -845,7 +845,7 @@ class EconomyGuard {
             const levelNumber = Number.isFinite(rawLevel) && rawLevel >= 1 ? Math.floor(rawLevel) : 1;
             effectiveLoyalty = base.loyaltyLevels[Math.min(base.loyaltyLevels.length, levelNumber) - 1] || base.loyaltyLevels[0];
         }
-        const buyPriceCoef = Number(effectiveLoyalty && (effectiveLoyalty.buy_price_coef ?? effectiveLoyalty.buyPriceCoef)
+        const buyPriceCoef = Number((effectiveLoyalty && (effectiveLoyalty.buy_price_coef ?? effectiveLoyalty.buyPriceCoef))
             ?? (base && (base.buy_price_coef ?? base.buyPriceCoef)));
         const currencyTpl = base && base.currency;
         // EFT/SPT defines buy_price_coef as the inverse buyback percentage:
