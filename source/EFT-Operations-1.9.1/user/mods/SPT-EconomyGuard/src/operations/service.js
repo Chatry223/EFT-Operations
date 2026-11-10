@@ -132,6 +132,12 @@ class OperationsService {
         if (input.id && !current) throw new Error('MISSION_NOT_FOUND');
         if (current && current.status !== 'draft') throw new Error('MISSION_NOT_EDITABLE');
         const next = this.normalizeMission(input, current);
+        if (next.campaignId && next.campaignOrder > 0) {
+            const duplicateSequence = this.state.missions.find(item => item.id !== next.id
+                && item.campaignId === next.campaignId
+                && Number(item.campaignOrder || 0) === next.campaignOrder);
+            if (duplicateSequence) throw new Error('DUPLICATE_CAMPAIGN_SEQUENCE');
+        }
         if (current) this.state.missions[this.state.missions.indexOf(current)] = next;
         else this.state.missions.push(next);
         this.persist(); return clone(next);
