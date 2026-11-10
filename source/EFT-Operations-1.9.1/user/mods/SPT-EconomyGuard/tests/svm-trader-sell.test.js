@@ -72,6 +72,29 @@ try {
     assert.equal(fallback.known, true);
     assert.equal(fallback.buybackPercent, 20);
 
+    // SVM TraderSell scales currency counts inside the live trader assort.
+    // EconomyGuard must validate against that modified server assort, not stale preset values.
+    const rubTpl = '5449016a4bdc2d6f028b456f';
+    const skierId = '58330581ace78e27b8b10cee';
+    const buyProfile = { Inventory: { items: [{ _id: 'rub-stack', _tpl: rubTpl, upd: { StackObjectsCount: 5100 } }] } };
+    const svmAdjustedAssort = {
+        items: [{ _id: 'skier-offer', _tpl: 'abcdef0123456789abcdef02', upd: { StackObjectsCount: 10 } }],
+        barter_scheme: { 'skier-offer': [[{ _tpl: rubTpl, count: 5100 }]] }
+    };
+    const buyInstance = { traderAssortHelper: { getAssort() { return svmAdjustedAssort; } } };
+    const adjustedBuy = guard.checkTraderBuy(buyInstance, buyProfile, {
+        tid: skierId, item_id: 'skier-offer', scheme_id: 0, count: 1,
+        scheme_items: [{ id: 'rub-stack', count: 5100 }]
+    }, 'session-1');
+    assert.equal(adjustedBuy.valid, true, 'SPT payment validation should accept the exact SVM-adjusted currency requirement');
+    assert.equal(adjustedBuy.expected && adjustedBuy.expected[rubTpl], undefined);
+    assert.equal(adjustedBuy.requirements[0].count, 5100);
+    const staleBuy = guard.checkTraderBuy(buyInstance, buyProfile, {
+        tid: skierId, item_id: 'skier-offer', scheme_id: 0, count: 1,
+        scheme_items: [{ id: 'rub-stack', count: 1000 }]
+    }, 'session-1');
+    assert.equal(staleBuy.valid, false, 'a pre-SVM/base currency count must not bypass the active SVM TraderSell multiplier');
+
     // A 0% buyback rate is valid SVM configuration and must not be treated as missing data.
     const zeroMarkup = { currency: 'RUB', loyaltyLevels: [{ buy_price_coef: 100 }] };
     const zeroInstance = {
