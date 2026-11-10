@@ -832,21 +832,36 @@ class EconomyGuard {
         const selectedIds = (request.items || []).map(i => i && i.id).filter(Boolean);
         const selected = core.itemTree(selectedIds, inventory);
         const asset = this.itemValue(selected, instance);
-        const trader = safeCall(() => instance.traderHelper.getTrader(request.tid, sessionId), null);
-        const base = trader && trader.base;
-        const coefficient = Number(base && (base.buy_price_coef ?? base.buyPriceCoef));
+        // SPT 3.11.1 TraderHelper.getTrader() returns ITraderBase directly,
+        // not a { base } wrapper. The effective buyback coefficient lives on the
+        // player's current loyalty-level row, not on ITraderBase itself.
+        const traderResult = safeCall(() => instance.traderHelper.getTrader(request.tid, sessionId), null);
+        const base = traderResult && traderResult.base ? traderResult.base : traderResult;
+        const loyaltyLevel = safeCall(() => instance.traderHelper.getLoyaltyLevel(request.tid, profile), null);
+        let effectiveLoyalty = loyaltyLevel;
+        if (!effectiveLoyalty && base && Array.isArray(base.loyaltyLevels) && base.loyaltyLevels.length) {
+            const traderInfo = profile && profile.TradersInfo && profile.TradersInfo[request.tid];
+            const rawLevel = Number(traderInfo && traderInfo.loyaltyLevel);
+            const levelNumber = Number.isFinite(rawLevel) && rawLevel >= 1 ? Math.floor(rawLevel) : 1;
+            effectiveLoyalty = base.loyaltyLevels[Math.min(base.loyaltyLevels.length, levelNumber) - 1] || base.loyaltyLevels[0];
+        }
+        const buyPriceCoef = Number(effectiveLoyalty && (effectiveLoyalty.buy_price_coef ?? effectiveLoyalty.buyPriceCoef)
+            ?? (base && (base.buy_price_coef ?? base.buyPriceCoef)));
         const currencyTpl = base && base.currency;
-        if (!asset.value || !Number.isFinite(coefficient) || coefficient <= 0 || !currencyTpl) {
+        // EFT/SPT defines buy_price_coef as the inverse buyback percentage:
+        // actual payout rate = 100 - buy_price_coef. SVM 1.11.1 writes
+        // buy_price_coef = 100 - TraderMarkup to every loyalty level.
+        if (!asset.value || !Number.isFinite(buyPriceCoef) || buyPriceCoef < 0 || buyPriceCoef > 100 || !currencyTpl) {
             return { known: false, valid: true, reason: 'TRADER_SELL_REFERENCE_UNAVAILABLE', assetValue: asset.value, confidence: asset.confidence };
         }
-        const coefficientPct = coefficient > 1 ? coefficient / 100 : coefficient;
-        const expectedRub = asset.value * coefficientPct;
+        const buybackPercent = 100 - buyPriceCoef;
+        const expectedRub = asset.value * (buybackPercent / 100);
         const actualRub = safeCall(() => instance.handbookHelper.inRUB(Number(request.price), currencyTpl), currencyTpl === '5449016a4bdc2d6f028b456f' ? Number(request.price) : NaN);
         if (!Number.isFinite(actualRub) || actualRub < 0) return { known: false, valid: true, reason: 'TRADER_CURRENCY_CONVERSION_UNAVAILABLE' };
         const multiplier = Number(this.config.trader.maxSellPayoutMultiplier) || 3;
         const safety = Number(this.config.trader.sellPayoutSafetyFactor) || 1.35;
         const ceiling = expectedRub * multiplier * safety;
-        return { known: true, valid: actualRub <= ceiling, expectedRub, actualRub, ceiling, assetValue: asset.value, confidence: asset.confidence, traderId: request.tid };
+        return { known: true, valid: actualRub <= ceiling, expectedRub, actualRub, ceiling, assetValue: asset.value, confidence: asset.confidence, traderId: request.tid, buyPriceCoef, buybackPercent, loyaltyLevel: Number(profile && profile.TradersInfo && profile.TradersInfo[request.tid] && profile.TradersInfo[request.tid].loyaltyLevel) || null };
     }
 
     checkFleaListing(instance, profile, request) {
