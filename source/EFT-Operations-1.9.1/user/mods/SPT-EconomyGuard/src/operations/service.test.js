@@ -4,6 +4,13 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { OperationsService } = require('./service');
+function reviewChecklist(objectiveIds, memberIndexes) {
+    const objectiveEvidenceRefs = {};
+    for (const objectiveId of objectiveIds) objectiveEvidenceRefs[objectiveId] = `Test evidence for objective ${objectiveId}`;
+    const memberEvidenceRefs = {};
+    for (const memberIndex of memberIndexes) memberEvidenceRefs[String(memberIndex)] = `Test evidence for member ${memberIndex}`;
+    return { confirmed: true, confirmedObjectiveIds: objectiveIds, confirmedMemberIndexes: memberIndexes, objectiveEvidenceRefs, memberEvidenceRefs };
+}
 
 const legacyRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'eft-ops-legacy-'));
 fs.mkdirSync(path.join(legacyRoot, 'operations'), { recursive: true });
@@ -89,7 +96,14 @@ assert.ok(reloaded.reviewQueue().some(x => x.id === reviewGroup.id));
 assert.throws(() => reloaded.accept(reviewMission.id, 'abcdef0123456789abcdef05'), /PLAYER_REVIEW_PENDING/);
 assert.throws(() => reloaded.resolveReview(reviewGroup.id, 'approve', ''), /INVALID_REVIEW_NOTE/);
 assert.throws(() => reloaded.resolveReview(reviewGroup.id, 'approve', 'Verified against server raid log: raid-review'), /REVIEW_ATTESTATION_REQUIRED/);
-const reviewed = reloaded.resolveReview(reviewGroup.id, 'approve', 'Verified against server raid log: raid-review', 'ADMIN', { confirmed: true, objectivesConfirmed: true, allMembersConfirmed: true });
+assert.throws(() => reloaded.resolveReview(reviewGroup.id, 'approve', 'Evidence checked', 'ADMIN', { confirmed: true }), /REVIEW_OBJECTIVES_NOT_CONFIRMED/);
+assert.throws(() => reloaded.resolveReview(reviewGroup.id, 'approve', 'Evidence checked', 'ADMIN', { confirmed: true, confirmedObjectiveIds: ['kills', 'extract'], objectiveEvidenceRefs: { kills: 'host log', extract: 'host log' }, confirmedMemberIndexes: [0], memberEvidenceRefs: { '0': 'roster log' } }), /REVIEW_MEMBERS_NOT_CONFIRMED/);
+assert.throws(() => reloaded.resolveReview(reviewGroup.id, 'approve', 'Evidence checked', 'ADMIN', { confirmed: true, confirmedObjectiveIds: ['kills', 'extract'], objectiveEvidenceRefs: { kills: 'host log' }, confirmedMemberIndexes: [0, 1], memberEvidenceRefs: { '0': 'roster log', '1': 'roster log' } }), /REVIEW_OBJECTIVE_EVIDENCE_REQUIRED/);
+assert.throws(() => reloaded.resolveReview(reviewGroup.id, 'approve', 'Evidence checked', 'ADMIN', { confirmed: true, confirmedObjectiveIds: ['kills', 'extract'], objectiveEvidenceRefs: { kills: 'host log', extract: 'raid log' }, confirmedMemberIndexes: [0, 1], memberEvidenceRefs: { '0': 'roster log' } }), /REVIEW_MEMBER_EVIDENCE_REQUIRED/);
+const reviewed = reloaded.resolveReview(reviewGroup.id, 'approve', 'Verified against independently reviewed raid evidence', 'ADMIN', reviewChecklist(['kills', 'extract'], [0, 1]));
+assert.deepEqual(reviewed.review.confirmedObjectiveIds, ['kills', 'extract']);
+assert.deepEqual(reviewed.review.confirmedMemberIndexes, [0, 1]);
+assert.equal(reviewed.review.attestationMethod, 'admin_review_checklist');
 assert.equal(reviewed.state, 'completed');
 assert.equal(reloaded.getPlayer('abcdef0123456789abcdef05').points, 250);
 assert.equal(reloaded.reviewQueue().length, 1, 'the unrelated untrusted outcome remains pending review');
@@ -102,7 +116,7 @@ reloaded.startGroup(manualGroup.id, 'raid-manual-review');
 const manualPending = reloaded.finishGroup(manualGroup.id, { verified: false, aliveProfileIds: [], extractedProfileIds: [], evidenceTrust: 'untrusted_client_report' });
 assert.equal(manualPending.state, 'review');
 assert.throws(() => reloaded.resolveReview(manualGroup.id, 'approve', 'Evidence ref: admin log'), /REVIEW_ATTESTATION_REQUIRED/);
-const manualApproved = reloaded.resolveReview(manualGroup.id, 'approve', 'Evidence ref: independently checked server logs and operator extraction records', 'ADMIN', { confirmed: true, objectivesConfirmed: true, allMembersConfirmed: true });
+const manualApproved = reloaded.resolveReview(manualGroup.id, 'approve', 'Evidence ref: independently checked server logs and operator outcome records', 'ADMIN', reviewChecklist(['kills'], [0]));
 assert.equal(manualApproved.state, 'completed');
 assert.equal(reloaded.getPlayer('abcdef0123456789abcdef14').points, 75, 'explicit admin evidence confirmation can approve when automatic event telemetry is unavailable');
 fs.rmSync(root, { recursive: true, force: true });
