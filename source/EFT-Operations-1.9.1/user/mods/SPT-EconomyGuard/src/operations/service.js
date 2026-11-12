@@ -369,19 +369,72 @@ class OperationsService {
         const data = g.reviewData || {};
         const alive = new Set(data.aliveProfileIds || []);
         const extracted = new Set(data.extractedProfileIds || []);
+        let cleanObjectiveEvidenceRefs = {};
+        let cleanMemberEvidenceRefs = {};
+        let confirmedObjectiveIds = [];
+        let confirmedMemberIndexes = [];
         if (decision === 'approve') {
-            if (!attestation || attestation.confirmed !== true) throw new Error('REVIEW_ATTESTATION_REQUIRED');
-            const lifecycleEvidenceComplete = data.requiredDone === true && g.members.every(x => alive.has(x.profileId) && extracted.has(x.profileId));
-            const adminEvidenceComplete = attestation.objectivesConfirmed === true && attestation.allMembersConfirmed === true;
-            if (!lifecycleEvidenceComplete && !adminEvidenceComplete) throw new Error('REVIEW_EVIDENCE_INCOMPLETE');
+            if (!attestation || typeof attestation !== 'object' || Array.isArray(attestation) || attestation.confirmed !== true) {
+                throw new Error('REVIEW_ATTESTATION_REQUIRED');
+            }
+            const requiredObjectives = (Array.isArray(m.objectives) ? m.objectives : []).filter(objective => objective && objective.required !== false);
+            const expectedObjectiveIds = requiredObjectives.map(objective => String(objective.id));
+            const submittedObjectiveIds = attestation.confirmedObjectiveIds;
+            if (!Array.isArray(submittedObjectiveIds) || submittedObjectiveIds.length !== expectedObjectiveIds.length
+                || new Set(submittedObjectiveIds).size !== submittedObjectiveIds.length
+                || submittedObjectiveIds.some(objectiveId => typeof objectiveId !== 'string' || !expectedObjectiveIds.includes(objectiveId))) {
+                throw new Error('REVIEW_OBJECTIVES_NOT_CONFIRMED');
+            }
+            if (!expectedObjectiveIds.every(objectiveId => submittedObjectiveIds.includes(objectiveId))) {
+                throw new Error('REVIEW_OBJECTIVES_NOT_CONFIRMED');
+            }
+            const objectiveRefs = attestation.objectiveEvidenceRefs;
+            if (!objectiveRefs || typeof objectiveRefs !== 'object' || Array.isArray(objectiveRefs)
+                || Object.keys(objectiveRefs).length !== expectedObjectiveIds.length
+                || Object.keys(objectiveRefs).some(objectiveId => !expectedObjectiveIds.includes(objectiveId))) {
+                throw new Error('REVIEW_OBJECTIVE_EVIDENCE_REQUIRED');
+            }
+            for (const objectiveId of expectedObjectiveIds) {
+                cleanObjectiveEvidenceRefs[objectiveId] = text(objectiveRefs[objectiveId], 500, 'REVIEW_OBJECTIVE_EVIDENCE_REF', true);
+            }
+            const expectedMemberIndexes = (Array.isArray(g.members) ? g.members : []).map((_, index) => index);
+            const submittedMemberIndexes = attestation.confirmedMemberIndexes;
+            if (!expectedMemberIndexes.length || !Array.isArray(submittedMemberIndexes)
+                || submittedMemberIndexes.length !== expectedMemberIndexes.length
+                || new Set(submittedMemberIndexes).size !== submittedMemberIndexes.length
+                || submittedMemberIndexes.some(index => !Number.isSafeInteger(index) || !expectedMemberIndexes.includes(index))) {
+                throw new Error('REVIEW_MEMBERS_NOT_CONFIRMED');
+            }
+            if (!expectedMemberIndexes.every(index => submittedMemberIndexes.includes(index))) {
+                throw new Error('REVIEW_MEMBERS_NOT_CONFIRMED');
+            }
+            const memberRefs = attestation.memberEvidenceRefs;
+            const expectedMemberKeys = expectedMemberIndexes.map(index => String(index));
+            if (!memberRefs || typeof memberRefs !== 'object' || Array.isArray(memberRefs)
+                || Object.keys(memberRefs).length !== expectedMemberKeys.length
+                || Object.keys(memberRefs).some(index => !expectedMemberKeys.includes(index))) {
+                throw new Error('REVIEW_MEMBER_EVIDENCE_REQUIRED');
+            }
+            for (const memberIndex of expectedMemberIndexes) {
+                cleanMemberEvidenceRefs[String(memberIndex)] = text(memberRefs[String(memberIndex)], 500, 'REVIEW_MEMBER_EVIDENCE_REF', true);
+            }
+            confirmedObjectiveIds = expectedObjectiveIds;
+            confirmedMemberIndexes = expectedMemberIndexes;
             for (const member of g.members) { member.result = 'success'; this.award(m, g, member.profileId); }
         } else {
             for (const member of g.members) member.result = 'denied';
         }
-        g.state = 'completed'; g.review = { decision, note: reviewNote, reviewer: reviewedBy, attested: decision === 'approve', attestationMethod: decision === 'approve' ? (attestation.objectivesConfirmed === true && attestation.allMembersConfirmed === true ? 'admin_manual_evidence_confirmation' : 'server_lifecycle_evidence') : null, objectivesConfirmed: decision === 'approve' && attestation.objectivesConfirmed === true, allMembersConfirmed: decision === 'approve' && attestation.allMembersConfirmed === true, reviewedAt: new Date().toISOString() };
+        g.state = 'completed';
+        g.review = {
+            decision, note: reviewNote, reviewer: reviewedBy, attested: decision === 'approve',
+            attestationMethod: decision === 'approve' ? 'admin_review_checklist' : null,
+            confirmedObjectiveIds, objectiveEvidenceRefs: cleanObjectiveEvidenceRefs,
+            confirmedMemberIndexes, memberEvidenceRefs: cleanMemberEvidenceRefs,
+            objectivesConfirmed: decision === 'approve', allMembersConfirmed: decision === 'approve',
+            reviewedAt: new Date().toISOString()
+        };
         this.persist(); return clone(g);
     }
-
     award(mission, group, profileId) {
         const key = `${mission.id}:${group.id}:${profileId}`;
         if (this.state.awards.some(a => a.key === key)) return false;
