@@ -78,17 +78,20 @@ const { OperationsService } = require('../src/operations/service');
   const opsClose=await fetch(`http://127.0.0.1:${port}/api/operations/close`,{method:'POST',headers:opsHeaders,body:JSON.stringify({id:savedMission.id})});
   assert.strictEqual(opsClose.status,200); assert.strictEqual(postedEvents[0].enabled,false,'closing a mission also disables its public Event');
 
-  operations.reviewQueue=()=>[{
+  const reviewGroup={
     id:'group-review-1',missionId:savedMission.id,raidId:'fika-match-secret',leaderProfileId:'LEADERSECRET',
     state:'review',createdAt:'2026-11-09T20:00:00.000Z',finishedAt:'2026-11-09T20:05:00.000Z',
-    members:[{profileId:'PROFILESECRET',scavProfileId:'SCAVSECRET',displayName:'Alpha PMC',ready:true}],
+    members:[{profileId:'PROFILESECRET',scavProfileId:'SCAVSECRET',displayName:'Alpha PMC',ready:true,result:'review'}],
     progress:{kills:1,loot:2,extract:1},progressTrust:{kills:'host_attested',loot:'spt_accepted_client_delta',extract:'client_report_only'},evidenceEvents:[{eventId:'host-event-secret',type:'kill',profileId:'PROFILESECRET',target:'assault',targetCategory:'scav',victimProfileId:'BOTSECRET',victimRole:'assault',victimSide:'Savage',reporterProfileId:'PROFILESECRET',matchId:'fika-match-secret',evidenceTrust:'host_attested',timestamp:'2026-11-09T20:04:00.000Z'},{eventId:'loot-event-secret',type:'collect',profileId:'PROFILESECRET',amount:2,target:'tpl-123',source:'spt-server-adapter',evidenceTrust:'spt_accepted_client_delta',timestamp:'2026-11-09T20:04:30.000Z'}],
     reviewData:{requiredDone:false,aliveProfileIds:['PROFILESECRET'],extractedProfileIds:['PROFILESECRET'],evidenceTrust:'untrusted_client_report',source:'fika-server-adapter',submittedAt:'2026-11-09T20:05:00.000Z'}
-  }];
+  };
+  operations.state.groups.push(reviewGroup);
+  operations.reviewQueue=()=>[reviewGroup];
   const reviewsResponse=await fetch(`http://127.0.0.1:${port}/api/operations/reviews`,{headers:opsHeaders});
   assert.strictEqual(reviewsResponse.status,200);
   const reviewRows=await reviewsResponse.json();
   assert.strictEqual(reviewRows[0].missionTitle,'API Test Mission');
+  assert.strictEqual(reviewRows[0].members[0].reviewIndex,0,'admin review member indexes must be stable without exposing profile IDs');
   assert.strictEqual(reviewRows[0].objectiveEvidence[0].reportedCount,1);
   assert.strictEqual(reviewRows[0].objectiveEvidence[0].hostAttestedCount,1);
   assert.strictEqual(reviewRows[0].objectiveEvidence[0].evidenceStatus,'host_attested_admin_review');
@@ -127,6 +130,21 @@ const { OperationsService } = require('../src/operations/service');
   for(const secret of ['PROFILESECRET','VICTIMSECRET','SCAVSECRET','ITEMSECRET','fika-match-secret'])
     assert.ok(!safeFikaJson.includes(secret),`Fika API must not expose internal identifier ${secret}`);
 
+  const incompleteReview=await fetch(`http://127.0.0.1:${port}/api/operations/review`,{method:'POST',headers:opsHeaders,body:JSON.stringify({groupId:'group-review-1',decision:'approve',note:'Manual check attempted',attestation:{confirmed:true}})});
+  assert.strictEqual(incompleteReview.status,400,'a generic confirmation must not approve a mission');
+  assert.strictEqual((await incompleteReview.json()).error,'REVIEW_OBJECTIVES_NOT_CONFIRMED');
+  const checklistReview=await fetch(`http://127.0.0.1:${port}/api/operations/review`,{method:'POST',headers:opsHeaders,body:JSON.stringify({
+    groupId:'group-review-1',decision:'approve',note:'Reviewed objective evidence and member raid result',
+    attestation:{confirmed:true,confirmedObjectiveIds:['kills','loot','extract'],confirmedMemberIndexes:[0],
+      objectiveEvidenceRefs:{kills:'admin case #K-17',loot:'SPT profile snapshot #L-2',extract:'raid outcome record #E-1'},
+      memberEvidenceRefs:{'0':'operator outcome record #M-1'}}
+  })});
+  assert.strictEqual(checklistReview.status,200,await checklistReview.text());
+  const checklistResult=await checklistReview.json();
+  assert.strictEqual(checklistResult.group.review.attestationMethod,'admin_review_checklist');
+  assert.deepStrictEqual(checklistResult.group.review.confirmedObjectiveIds,['kills','loot','extract']);
+  assert.deepStrictEqual(checklistResult.group.review.confirmedMemberIndexes,[0]);
+  assert.strictEqual(operations.state.awards.filter(x=>x.groupId==='group-review-1').length,1,'approval creates the idempotent member award only after checklist validation');
   const bad=await fetch(`http://127.0.0.1:${port}/api/health`,{headers:{Host:`127.0.0.1:${port}`,Authorization:'Bearer bad'}});
   assert.strictEqual(bad.status,401);
   await new Promise(resolve=>panel.server.close(resolve));
