@@ -6,7 +6,7 @@
     const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const nav = $('#mainNav'), content = $('#appContent');
     if (!nav || !content) return;
-    let missions = [], selected = null, objectives = [], tab = 'missions';
+    let missions = [], selected = null, objectives = [], tab = 'missions', svmStatus = null;
     const button = document.createElement('button');
     button.className = 'nav-item'; button.dataset.view = 'operations';
     button.innerHTML = '<span class="nav-icon">⚔</span>Operations';
@@ -118,6 +118,7 @@
     async function loadSvm() {
       try {
         const s = await api('/api/svm');
+        svmStatus = s;
         const host = $('#opSvmStatus');
         if (!s.available) { host.innerHTML = '<div class="callout"><b>SVM unavailable</b><p>' + esc(s.reason || 'SVM_NOT_AVAILABLE') + '</p></div>'; return; }
         const markup = s.traderMarkup || {}, sell = s.traderSell || {};
@@ -166,7 +167,8 @@
           const data = new FormData(e.target), traderMarkup = {}, traderSell = {};
           e.target.querySelectorAll('[data-svm-markup]').forEach(el=>{ if(!el.disabled) traderMarkup[el.dataset.svmMarkup]=Number(el.value); });
           e.target.querySelectorAll('[data-svm-sell]').forEach(el=>{ if(!el.disabled) traderSell[el.dataset.svmSell]=Number(el.value); });
-          const payload = { expectedPresetRevision:s.presetRevision, tradersEnabled:data.get('tradersEnabled') === 'on', itemsEnabled:data.get('itemsEnabled') === 'on', traderMarkup, traderSell, itemPriceMultiplier:Number(data.get('itemPriceMultiplier')) };
+          if (!svmStatus || !/^[a-f0-9]{64}$/i.test(String(svmStatus.presetRevision || ''))) throw new Error('SVM status changed; refresh the settings before saving.');
+          const payload = { expectedPresetRevision:svmStatus.presetRevision, tradersEnabled:data.get('tradersEnabled') === 'on', itemsEnabled:data.get('itemsEnabled') === 'on', traderMarkup, traderSell, itemPriceMultiplier:Number(data.get('itemPriceMultiplier')) };
           const fence = {};
           [['fencePriceMultiplier','priceMultiplier'],['fencePresetMultiplier','presetMultiplier'],['fenceStockTimeMin','stockTimeMin'],['fenceStockTimeMax','stockTimeMax']].forEach(pair=>{ if(data.get(pair[0])!=='') fence[pair[1]]=Number(data.get(pair[0])); });
           if(Object.keys(fence).length) payload.fence=fence;
