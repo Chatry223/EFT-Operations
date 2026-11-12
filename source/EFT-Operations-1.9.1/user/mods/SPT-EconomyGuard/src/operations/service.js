@@ -366,11 +366,8 @@ class OperationsService {
         const reviewedBy = text(reviewer, 80, 'REVIEWER', true);
         const m = this.state.missions.find(x => x.id === g.missionId);
         if (!m) throw new Error('MISSION_NOT_FOUND');
-        const data = g.reviewData || {};
-        const alive = new Set(data.aliveProfileIds || []);
-        const extracted = new Set(data.extractedProfileIds || []);
-        let cleanObjectiveEvidenceRefs = {};
-        let cleanMemberEvidenceRefs = {};
+        let cleanObjectiveEvidenceRefs = Object.create(null);
+        let cleanMemberEvidenceRefs = Object.create(null);
         let confirmedObjectiveIds = [];
         let confirmedMemberIndexes = [];
         if (decision === 'approve') {
