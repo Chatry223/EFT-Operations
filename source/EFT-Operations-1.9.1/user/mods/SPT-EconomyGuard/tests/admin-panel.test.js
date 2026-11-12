@@ -133,14 +133,23 @@ const { OperationsService } = require('../src/operations/service');
   const incompleteReview=await fetch(`http://127.0.0.1:${port}/api/operations/review`,{method:'POST',headers:opsHeaders,body:JSON.stringify({groupId:'group-review-1',decision:'approve',note:'Manual check attempted',attestation:{confirmed:true}})});
   assert.strictEqual(incompleteReview.status,400,'a generic confirmation must not approve a mission');
   assert.strictEqual((await incompleteReview.json()).error,'REVIEW_OBJECTIVES_NOT_CONFIRMED');
+  const emptyEvidenceReview=await fetch(`http://127.0.0.1:${port}/api/operations/review`,{method:'POST',headers:opsHeaders,body:JSON.stringify({
+    groupId:'group-review-1',decision:'approve',note:'Reference validation negative test',
+    attestation:{confirmed:true,confirmedObjectiveIds:['kills','loot','extract'],confirmedMemberIndexes:[0],
+      objectiveEvidenceRefs:{kills:'   ',loot:'SPT profile snapshot #L-2',extract:'raid outcome record #E-1'},
+      memberEvidenceRefs:{'0':'operator outcome record #M-1'}}
+  })});
+  assert.strictEqual(emptyEvidenceReview.status,400,'blank per-objective evidence references must be rejected');
+  assert.strictEqual((await emptyEvidenceReview.json()).error,'INVALID_REVIEW_OBJECTIVE_EVIDENCE_REF');
   const checklistReview=await fetch(`http://127.0.0.1:${port}/api/operations/review`,{method:'POST',headers:opsHeaders,body:JSON.stringify({
     groupId:'group-review-1',decision:'approve',note:'Reviewed objective evidence and member raid result',
     attestation:{confirmed:true,confirmedObjectiveIds:['kills','loot','extract'],confirmedMemberIndexes:[0],
       objectiveEvidenceRefs:{kills:'admin case #K-17',loot:'SPT profile snapshot #L-2',extract:'raid outcome record #E-1'},
       memberEvidenceRefs:{'0':'operator outcome record #M-1'}}
   })});
-  assert.strictEqual(checklistReview.status,200,await checklistReview.text());
-  const checklistResult=await checklistReview.json();
+  const checklistReviewText=await checklistReview.text();
+  assert.strictEqual(checklistReview.status,200,checklistReviewText);
+  const checklistResult=JSON.parse(checklistReviewText);
   assert.strictEqual(checklistResult.group.review.attestationMethod,'admin_review_checklist');
   assert.deepStrictEqual(checklistResult.group.review.confirmedObjectiveIds,['kills','loot','extract']);
   assert.deepStrictEqual(checklistResult.group.review.confirmedMemberIndexes,[0]);
