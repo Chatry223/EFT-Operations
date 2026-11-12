@@ -40,3 +40,10 @@ This integration does not replace Greed.exe, does not change SVM code, and does 
 ## ZIP archive inspection
 
 The panel can scan ZIP files under the SPT server root for SVM loader/preset JSON. It never extracts or modifies archives. Preview requires the admin token, rejects paths outside the server root, validates local ZIP headers, methods, size and CRC, and caps a single preview at 50 JSON entries / 4 MiB. The recursive scan is bounded to 200 archives / 512 MiB total and rejects oversized central directories; a truncated result means the configured scan limit was reached, not that no other archives exist.
+
+
+## Revision safety and exact trader keys
+
+- `TraderMarkup` applies to nine traders, including Fence; `TraderSell` applies only to the eight traders with currency-based assortments. SVM 1.11.1 explicitly skips Fence in its TraderSell loop, so a legacy `TraderSell.Fence` entry is reported as unsupported and cannot be edited from the panel.
+- The panel submits a SHA-256 revision bound to the selected preset name and its exact file contents. If the active preset changes or an external edit occurs after the form was loaded, saving is rejected with `SVM_PRESET_CHANGED_RELOAD`; reload the page before applying changes.
+- Every accepted edit creates a backup of the active preset and still requires an SPT restart.
