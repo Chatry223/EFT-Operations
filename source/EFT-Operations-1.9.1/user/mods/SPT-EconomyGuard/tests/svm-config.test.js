@@ -10,6 +10,10 @@ function writeJson(file, value) {
     fs.writeFileSync(file, JSON.stringify(value, null, 2));
 }
 
+function update(service, patch) {
+    return service.update({ ...patch, expectedPresetRevision: service.getStatus().presetRevision });
+}
+
 function fixture() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'eftops-svm-'));
     const mods = path.join(root, 'user', 'mods');
@@ -24,7 +28,7 @@ function fixture() {
         Traders: {
             EnableTraders: true,
             TraderMarkup: { Prapor: 25, Skier: 20, Fence: 17 },
-            TraderSell: { Prapor: 6.45, Skier: 5.1 },
+            TraderSell: { Prapor: 6.45, Skier: 5.1, Fence: 9 },
             Fence: { EnableFence: false, PriceMult: 1.2, PresetMult: 2, StockTime_Min: 50, StockTime_Max: 150 }
         }
     });
@@ -42,6 +46,8 @@ function fixture() {
         assert.strictEqual(status.activePreset, 'v6');
         assert.strictEqual(status.traderMarkup.Skier, 20);
         assert.strictEqual(status.traderSell.Skier, 5.1, 'TraderSell is read from the selected v6 preset');
+        assert.deepStrictEqual(status.unsupportedTraderSellKeys, ['Fence'], 'SVM TraderSell does not apply to Fence');
+        assert.strictEqual(Object.prototype.hasOwnProperty.call(status.traderSell, 'Fence'), false);
         assert.strictEqual(status.itemPriceMultiplier, 1);
         assert.strictEqual(status.tradersEnabled, true);
         assert.strictEqual(status.itemsEnabled, false);
@@ -54,7 +60,7 @@ function fixture() {
 (function testWritesOnlyActivePresetAndCreatesBackup() {
     const f = fixture();
     try {
-        const result = f.service.update({
+        const result = update(f.service, {
             traderMarkup: { Skier: 22, Prapor: 30 },
             traderSell: { Prapor: 7.25 },
             itemPriceMultiplier: 1.5,
@@ -80,7 +86,7 @@ function fixture() {
 (function testExplicitlyTogglesTraderAndItemSections() {
     const f = fixture();
     try {
-        const result = f.service.update({ tradersEnabled: false, itemsEnabled: true });
+        const result = update(f.service, { tradersEnabled: false, itemsEnabled: true });
         assert.strictEqual(result.changed, true);
         assert.ok(result.changes.includes('Traders.EnableTraders'));
         assert.ok(result.changes.includes('Items.EnableItems'));
@@ -114,7 +120,7 @@ function fixture() {
         const status = f.service.getStatus();
         assert.strictEqual(status.available, false);
         assert.strictEqual(status.reason, 'SVM_PRESET_OUTSIDE_DIRECTORY');
-        assert.throws(() => f.service.update({ traderMarkup: { Skier: 20 } }), /SVM_PRESET_OUTSIDE_DIRECTORY/);
+        assert.throws(() => update(f.service, { traderMarkup: { Skier: 20 } }), /SVM_PRESET_OUTSIDE_DIRECTORY/);
         assert.strictEqual(JSON.parse(fs.readFileSync(external, 'utf8')).Traders.TraderMarkup.Skier, 99);
     } finally { fs.rmSync(f.root, { recursive: true, force: true }); }
 })();
@@ -126,19 +132,49 @@ function fixture() {
         const status = f.service.getStatus();
         assert.strictEqual(status.available, true);
         assert.strictEqual(status.compatible, false);
-        assert.throws(() => f.service.update({ traderMarkup: { Skier: 21 } }), /SVM_VERSION_NOT_VERIFIED/);
+        assert.throws(() => update(f.service, { traderMarkup: { Skier: 21 } }), /SVM_VERSION_NOT_VERIFIED/);
     } finally { fs.rmSync(f.root, { recursive: true, force: true }); }
 })();
 
 (function testRejectsUnknownTraderAndInvalidFenceRangeWithoutWriting() {
     const f = fixture();
     try {
-        assert.throws(() => f.service.update({ traderMarkup: { UnknownTrader: 20 } }), /UNKNOWN_SVM_TRADER/);
-        assert.throws(() => f.service.update({ traderMarkup: { Skier: 100.1 } }), /INVALID_SVM_TRADER_MARKUP/);
-        assert.throws(() => f.service.update({ fence: { stockTimeMin: 200, stockTimeMax: 100 } }), /INVALID_SVM_FENCE_STOCK_RANGE/);
+        assert.throws(() => update(f.service, { traderMarkup: { UnknownTrader: 20 } }), /UNKNOWN_SVM_TRADER/);
+        assert.throws(() => update(f.service, { traderMarkup: { Skier: 100.1 } }), /INVALID_SVM_TRADER_MARKUP/);
+        assert.throws(() => update(f.service, { fence: { stockTimeMin: 200, stockTimeMax: 100 } }), /INVALID_SVM_FENCE_STOCK_RANGE/);
         const preset = JSON.parse(fs.readFileSync(path.join(f.svmDir, 'Presets', 'v6.json'), 'utf8'));
         assert.strictEqual(preset.Traders.TraderMarkup.Skier, 20);
         assert.strictEqual(fs.existsSync(path.join(f.dataDir, 'backups', 'svm')), false);
+    } finally { fs.rmSync(f.root, { recursive: true, force: true }); }
+})();
+
+(function testRequiresRevisionAndRejectsStalePresetEdits() {
+    const f = fixture();
+    try {
+        const originalRevision = f.service.getStatus().presetRevision;
+        assert.throws(() => f.service.update({ traderMarkup: { Skier: 21 } }), /SVM_PRESET_REVISION_REQUIRED/);
+
+        const presetFile = path.join(f.svmDir, 'Presets', 'v6.json');
+        const externallyEdited = JSON.parse(fs.readFileSync(presetFile, 'utf8'));
+        externallyEdited.Traders.TraderMarkup.Skier = 23;
+        writeJson(presetFile, externallyEdited);
+
+        assert.throws(() => f.service.update({
+            expectedPresetRevision: originalRevision,
+            traderMarkup: { Skier: 21 }
+        }), /SVM_PRESET_CHANGED_RELOAD/);
+        const current = JSON.parse(fs.readFileSync(presetFile, 'utf8'));
+        assert.strictEqual(current.Traders.TraderMarkup.Skier, 23, 'stale admin forms must not overwrite an external SVM edit');
+        assert.strictEqual(fs.existsSync(path.join(f.dataDir, 'backups', 'svm')), false);
+    } finally { fs.rmSync(f.root, { recursive: true, force: true }); }
+})();
+
+(function testRejectsFenceInTraderSellBecauseSvmDoesNotApplyIt() {
+    const f = fixture();
+    try {
+        assert.throws(() => update(f.service, { traderSell: { Fence: 12 } }), /UNSUPPORTED_SVM_TRADER_SELL_KEY/);
+        const current = JSON.parse(fs.readFileSync(path.join(f.svmDir, 'Presets', 'v6.json'), 'utf8'));
+        assert.strictEqual(current.Traders.TraderSell.Fence, 9);
     } finally { fs.rmSync(f.root, { recursive: true, force: true }); }
 })();
 
