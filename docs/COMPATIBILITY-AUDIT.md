@@ -1,63 +1,80 @@
 # EFT Operations compatibility audit
 
-Audit basis: the user's supplied Takove Server - SPT 3.11.1.zip, EscapeFromTarkov_Data.zip, and BepInEx-(no server-is player).zip, plus the repository source at the time of this audit.
+Audit snapshot: 2026-11-13  
+Repository HEAD: 37f591e49fc7d2d13ef789d9387484bee5570dc3
 
 ## Locked runtime and framework
 
-| Component | Observed version / property | Evidence |
+| Component | Observed version / property |
+|---|---|
+| EFT | 0.16.1.3.35392-P2P |
+| Unity | 2022.3.43f1 (from supplied UnityPlayer.dll) |
+| SPT Server | 3.11.1 |
+| Fika Server | 2.4.3, package target ~3.11 |
+| Fika Client | 1.2.3 / assembly 1.2.3.0 |
+| SPT Common | 3.11.1.0 |
+| BepInEx | 5.4.22.0 |
+| BepInEx / Fika / SPT Common assembly TFM | .NET Framework 4.7.1 |
+| Client project | .NET Framework 4.7.2 / C# 7.3 |
+
+The client bridge uses reflection for EFT, Fika and SPT runtime types. BepInEx, Harmony and Unity references are compile-time dependencies. The builder validates the bundled target archives and fingerprints. A successful compile still does not prove the plugin loads correctly in the game's Mono runtime.
+
+## Supplied server mod manifests
+
+| Mod | Version | Declared SPT target |
+|---|---:|---|
+| Fika Server | 2.4.3 | ~3.11 |
+| [SVM] Server Value Modifier | 1.11.1 | 3.11.x |
+| Skwizzy LootingBots ServerMod | 1.5.2 | ~3.11 |
+| WTT-PackNStrap | 1.1.13 | ~3.11 |
+| zSolarint SAIN ServerMod | 2.3.0 | ~3.11.0 |
+| zzDrakiaXYZ LiveFleaPrices | 1.5.2 | ~3.11 |
+| SPT-EconomyGuard | 1.9.1 | ~3.11.0 |
+
+Manifest target matching is not a no-conflict guarantee. Whole-stack runtime tests remain required.
+
+## Mission event producers — current source truth
+
+The current code DOES contain production event producers. The previous wording that said recordRaidEvent had no production callers and that kill/visit/collect were not wired was stale and has been corrected.
+
+| Objective | Producer | Trust boundary |
 |---|---|---|
-| EFT | 0.16.1.3.35392-P2P | User's supplied install/archive name |
-| Unity | 2022.3.43f1 | Version string in the supplied UnityPlayer.dll |
-| SPT | 3.11.1 | User's server package and mod manifests |
-| Fika Server | 2.4.3, sptVersion: ~3.11 | Supplied user/mods/fika-server/package.json |
-| Fika Client | 1.2.3 config marker; Fika.Core.dll assembly version 1.2.3.0 | Supplied BepInEx archive |
-| SPT Common | 3.11.1.0 | Supplied spt-common.dll assembly version |
-| BepInEx | 5.4.22.0 | Supplied BepInEx.dll assembly version |
-| BepInEx / Fika / SPT Common TFM | .NETFramework v4.7.1 | Assembly metadata in supplied DLLs |
-| EFT Managed | Contains mscorlib.dll, netstandard.dll, System.Runtime.dll | Supplied EFT Data archive |
+| kill / kill_type | Client plugin host hook on EFT.Player.OnBeenKilledByAggressor; authenticated SPT host API validates account, match, actor roster and AI victim | host_attested; review only |
+| visit | Client plugin host hook on EFT.Player.SpecialPlaceVisited(string,int) for mission-required place keys | host_attested; review only |
+| collect | Raid-start inventory snapshot compared with SPT-accepted SaveServer profile after raid end | spt_accepted_client_delta; stronger than raw report, not proof of item origin |
+| extract / survive / raid_complete | Authenticated SPT endLocalRaid report fields | client_report_only; review only |
 
-The client plugin deliberately targets .NET Framework 4.7.2 / C# 7.3. This is a higher compatible target for the pinned .NETFramework v4.7.1 BepInEx, Fika and SPT Common references. The EFT Unity version and presence of netstandard.dll were checked; blindly changing the project to netstandard2.1 would be unsafe while the pinned references remain .NET Framework assemblies. The project file now documents this choice, and the client logs the actual Unity, CLR and BepInEx versions at startup. Runtime loading still needs an in-game test.
+The Fika adapter links a forming mission group only when all Ready members are present in the same Fika match and map. It calls startGroup with the observed match ID. On match end, finishMissionGroup intentionally supplies verified:false, so the group enters manual review. There is no production server_verified Objective event producer in the currently inspected path.
 
-## Server-side mod manifest audit
+recordRaidEvent requires unique event IDs, checks the accepted member identity for kill/visit/collect, checks map/match association, restricts trust/source combinations and bounds the processed-event list. These guards protect the ingestion layer; they do not make host-originated telemetry unforgeable.
 
-The supplied server archive contains these manifests:
+## Fika client and UI integration
 
-| Mod | Version | Declared SPT target | Assessment |
-|---|---:|---|---|
-| Fika Server | 2.4.3 | ~3.11 | Exact pinned target |
-| [SVM] Server Value Modifier | 1.11.1 | 3.11.x | Declared target matches |
-| Skwizzy LootingBots ServerMod | 1.5.2 | ~3.11 | Declared target matches |
-| WTT-PackNStrap | 1.1.13 | ~3.11 | Declared target matches |
-| zSolarint SAIN ServerMod | 2.3.0 | ~3.11.0 | Declared target matches |
-| zzDrakiaXYZ LiveFleaPrices | 1.5.2 | ~3.11 | Declared target matches |
-| SPT-EconomyGuard | 1.9.1 | ~3.11.0 | Declared target matches |
+The client plugin uses SPT's native RequestHandler session, host and HttpClient through reflection. It renders an F8 mission interface, rank/campaign lock state, squad readiness, notifications and an in-raid mission HUD.
 
-Manifest compatibility is not the same as a tested no-conflict guarantee. These mods affect different areas (AI, loot, prices and inventory), and the final check must still be made on the actual server with the whole mod set enabled.
+Only the squad leader can request the native Fika 1.2.3 Start button, and only from the active host UI with the required map selected. Other squad members still join through Fika's normal raid list. Automatic member auto-join is not implemented.
 
-## Verified integration paths and boundaries
+Mission briefing data currently contains kind, media and body, but the HUD renders text only. Video/audio playback, media cache and a 3D briefing room are not implemented.
 
-- **Fika lifecycle:** the adapter is version-gated to Fika Server 2.4.3 / SPT 3.11.x. It observes match membership, raid lifecycle and authenticated SPT profile ownership. It does not intentionally replace Fika's native raid flow.
-- **Mission progress trust:** internal raid-event intake now requires a unique eventId, a server-adapter trust label, the mission map, and an accepted member identity for kill / kill-type / collect / visit events. Duplicate IDs are idempotent. This hardens the intake contract; it does not mean those objective event producers are already wired into live Fika callbacks.
-- **Kill evidence:** Fika player-death callbacks identify a dead player, not a proven killer. Client victim/kill summaries remain review evidence and must not auto-award.
-- **Extraction / survival:** match roster and death flags are useful corroboration. The current finish path deliberately sets verified: false and sends outcomes to manual review rather than auto-awarding based on client extraction reports.
-- **Loot and LiveFleaPrices:** LiveFleaPrices 1.5.2 updates SPT's templates.prices table and calls RagfairPriceService.refreshDynamicPrices(). The supplied config is pvePrices=false, maxIncreaseMult=10, maxLimiter=false, and disablePriceFetching=false; it therefore uses regular flea prices and allows fetched prices without the optional 10x limiter. EconomyGuard reads the active RagfairPriceService.getDynamicPriceForItem() value first and the current database price table as fallback, so its valuation path can observe the effective SPT price table after price mods have applied. Its handbook-vs-market disagreement threshold still marks strongly divergent references ambiguous rather than treating the live price as unquestionable. Mod load order and final runtime values still need a live test.
-- **SVM:** SVM 1.11.1 declares SPT 3.11.x and the supplied `Loader/loader.json` selects `v6`. In that exact preset, `Traders.TraderMarkup` is a per-trader map (for example Skier=20, Prapor=25, Therapist=15, Fence=17, Mechanic=34, Ragman=27, Jaeger=33, Peacekeeper=0 and Ref=56); `Traders.TraderSell` is a separate set of sell multipliers. `Items.ItemPriceMult=1` is a different, global item-price option and must not be confused with trader markup. The supplied preset has `Traders.EnableTraders=true` but `Items.EnableItems=false`, so the item-price multiplier is currently stored but inactive. SVM's source maps each `TraderMarkup` value to the trader's `buy_price_coef` as `100 - value`; the admin UI therefore displays the raw SVM value, not a direct price multiplier. EFT Operations now reads the selected preset and exposes trader markup, sell multipliers, item-price multiplier and selected Fence multipliers in the authenticated admin panel. It edits only the active preset, accepts only the audited SVM 1.11.1 / SPT 3.11.x package, creates a timestamped backup before writes, validates numeric ranges, and requires an SPT restart to apply. The reader/editor has unit tests; GitHub Actions still needs a successful run before this addition can be called CI-verified. Runtime SVM/Greed.exe and full mod-load-order tests remain outstanding.
-- **Fika item sending:** the supplied fika.jsonc has server.allowItemSending: false. EconomyGuard now reads this setting and reports whether the separate transfer route is closed, enabled-but-unmonitored, or could not be verified. It does not hook Fika's item-sending route itself.
-- **SAIN / LootingBots / PackNStrap:** their manifests declare the SPT 3.11 line. EFT Operations does not patch their AI logic. Loot/visit objectives are not yet supported by authoritative live event producers.
+## Economy and SVM integration
 
-## Validation status
+- Supplied SVM package: 1.11.1; active preset selector in the supplied snapshot: v6.
+- Traders.TraderMarkup and Traders.TraderSell are separate values.
+- SVM maps TraderMarkup to buy_price_coef = 100 - value; a value of 20 is approximately a 20% trader buyback rate against the relevant Handbook baseline, not a 20x price multiplier.
+- TraderSell changes currency-based trader offer costs; barter-only offers are not adjusted by that field.
+- Items.ItemPriceMult is independent and applies only when Items.EnableItems is true. In the supplied preset, Items.EnableItems=false, so the stored value 1 is inactive.
+- The SVM admin service resolves the active preset dynamically, validates SVM 1.11.1/SPT 3.11.x, checks a raw-file revision token, backs up the preset and writes only approved fields. SPT restart is required.
+- Supplied LiveFleaPrices 1.5.2 updates SPT dynamic price data; EconomyGuard reads the active dynamic price and DB fallback. Its reference-disagreement guard still marks large divergences ambiguous. Actual load order and live runtime values remain to be tested.
 
-1. Dependency ZIP integrity and exact reference fingerprints were checked by the repository's build workflow in the earlier green run.
-2. Earlier CI commit c22445de000ca803c37fab1031347557105e3f88 passed 28 server tests and compiled the Windows client DLL.
-3. Later event-intake and Fika config-detection commits triggered GitHub Actions runs that failed before usable step details were exposed by the connected GitHub interface. These later changes must not be described as CI-verified yet.
-4. No actual EFT game session, real Fika raid, multi-mod soak test, or in-game reward-mail test has been run in this environment.
+## Fika item sending
 
-## Required final runtime matrix
+The supplied Fika server config has server.allowItemSending=false. EconomyGuard reads and surfaces this value. If the operator enables the setting, this build does not intercept the Fika item transfer route; keep it disabled until a version-specific route hook is implemented and tested.
 
-- Clean SPT 3.11.1 + Fika 2.4.3 startup with EconomyGuard only.
-- Add SVM and LiveFleaPrices; compare handbook, database and dynamic prices before / after each mod load.
-- Add SAIN, LootingBots and PackNStrap in batches; inspect server logs and run a Fika raid after each batch.
-- Verify BepInEx plugin startup fingerprint and absence of TypeLoadException, MissingMethodException, ReflectionTypeLoadException and Harmony patch errors.
-- Test squad ready / Fika host / member join / map mismatch / raid end / review.
-- Verify no automatic reward from client kill or extraction reports; verify manual review and actual SPT mail delivery.
-- Confirm allowItemSending=false remains in the live Fika config, and verify the admin status reflects it.
+## CI and runtime validation
+
+- An earlier server test run at commit c22445de000ca803c37fab1031347557105e3f88 passed 28 tests. It does not validate later commits.
+- The last documented successful Windows client build was at commit 248e5924bc331167a908f050f8eee7a6574dde12. Client source changed after that; the latest Client run for commit 6db724310824221d41411da0afdb72a4c5444985 failed in source/dependency preparation and the Windows build job was skipped.
+- Latest Server Checks for current HEAD 37f591e49fc7d2d13ef789d9387484bee5570dc3 failed with no readable steps/logs exposed by GitHub. Root cause is not established.
+- No real EFT/Fika raid, actual SPT system mail delivery, or complete mod-stack soak test has been completed.
+
+See IMPLEMENTATION-AUDIT-FA.md for the Persian implementation map and prioritized development plan.
