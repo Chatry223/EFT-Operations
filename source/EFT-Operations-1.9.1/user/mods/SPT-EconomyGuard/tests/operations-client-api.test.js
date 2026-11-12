@@ -5,6 +5,13 @@ const os = require('os');
 const path = require('path');
 const { OperationsService } = require('../src/operations/service');
 const { OperationsClientApi } = require('../src/operations/client-api');
+function reviewChecklist(objectiveIds, memberIndexes) {
+    const objectiveEvidenceRefs = {};
+    for (const objectiveId of objectiveIds) objectiveEvidenceRefs[objectiveId] = `Test evidence for objective ${objectiveId}`;
+    const memberEvidenceRefs = {};
+    for (const memberIndex of memberIndexes) memberEvidenceRefs[String(memberIndex)] = `Test evidence for member ${memberIndex}`;
+    return { confirmed: true, confirmedObjectiveIds: objectiveIds, confirmedMemberIndexes: memberIndexes, objectiveEvidenceRefs, memberEvidenceRefs };
+}
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'eft-ops-api-'));
 const operations = new OperationsService(root, { info() {}, warn() {} });
@@ -134,15 +141,13 @@ const campaignGroup1 = campaignOps.accept(campaignMission1.id, playerA, 'Alpha')
 campaignOps.setReady(campaignGroup1.id, playerA, true);
 campaignOps.startGroup(campaignGroup1.id, 'raid-blackout-01');
 campaignOps.finishGroup(campaignGroup1.id, { verified: false, source: 'fika-client-report', evidenceTrust: 'client_report_only', aliveProfileIds: [], extractedProfileIds: [] });
-campaignOps.resolveReview(campaignGroup1.id, 'approve', 'Admin verified mission evidence', 'ADMIN',
-    { confirmed: true, objectivesConfirmed: true, allMembersConfirmed: true });
+campaignOps.resolveReview(campaignGroup1.id, 'approve', 'Admin verified mission evidence', 'ADMIN', reviewChecklist(['exit'], [0]));
 assert.equal(campaignOps.getMissionEligibility(campaignMission2.id, playerA).available, true);
 const campaignGroup2 = campaignOps.accept(campaignMission2.id, playerA, 'Alpha');
 campaignOps.setReady(campaignGroup2.id, playerA, true);
 campaignOps.startGroup(campaignGroup2.id, 'raid-blackout-02');
 campaignOps.finishGroup(campaignGroup2.id, { verified: false, source: 'fika-client-report', evidenceTrust: 'client_report_only', aliveProfileIds: [], extractedProfileIds: [] });
-campaignOps.resolveReview(campaignGroup2.id, 'approve', 'Admin verified mission evidence', 'ADMIN',
-    { confirmed: true, objectivesConfirmed: true, allMembersConfirmed: true });
+campaignOps.resolveReview(campaignGroup2.id, 'approve', 'Admin verified mission evidence', 'ADMIN', reviewChecklist(['exit'], [0]));
 assert.equal(campaignOps.getPlayer(playerA).points, 700);
 assert.equal(campaignOps.getPlayer(playerA).rank, 'Recruit');
 assert.equal(campaignOps.getPlayer(playerA).nextRank, 'Private');
