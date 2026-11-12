@@ -4,7 +4,8 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const TRADER_KEYS = new Set(['Prapor', 'Therapist', 'Fence', 'Skier', 'Peacekeeper', 'Mechanic', 'Ragman', 'Jaeger', 'Ref']);
+const TRADER_MARKUP_KEYS = new Set(['Prapor', 'Therapist', 'Fence', 'Skier', 'Peacekeeper', 'Mechanic', 'Ragman', 'Jaeger', 'Ref']);
+const TRADER_SELL_KEYS = new Set(['Prapor', 'Therapist', 'Skier', 'Peacekeeper', 'Mechanic', 'Ragman', 'Jaeger', 'Ref']);
 
 function isObject(value) { return !!value && typeof value === 'object' && !Array.isArray(value); }
 
@@ -48,9 +49,15 @@ class SvmConfigService {
         if (!fs.existsSync(presetCandidate)) throw new Error('SVM_ACTIVE_PRESET_MISSING');
         const presetFile = fs.realpathSync(presetCandidate);
         if (!isPathInside(svmRoot, presetFile)) throw new Error('SVM_PRESET_OUTSIDE_DIRECTORY');
-        const preset = this.readJson(presetFile);
+        const presetRaw = fs.readFileSync(presetFile, 'utf8');
+        const preset = JSON.parse(presetRaw.replace(/^\uFEFF/, ''));
         if (!isObject(preset.Traders)) throw new Error('SVM_TRADER_SECTION_MISSING');
-        return { loaderFile, presetFile, selected, preset };
+        // Bind the revision to both the selected preset name and its exact raw bytes.
+        // Switching Loader/loader.json therefore invalidates a form opened on another preset.
+        const presetRevision = crypto.createHash('sha256')
+            .update(Buffer.concat([Buffer.from(selected, 'utf8'), Buffer.from([0]), Buffer.from(presetRaw, 'utf8')]))
+            .digest('hex');
+        return { loaderFile, presetFile, selected, preset, presetRevision };
     }
 
     getStatus() {
@@ -72,11 +79,13 @@ class SvmConfigService {
                 sptVersion: String(pkg.sptVersion || 'unknown'),
                 compatible,
                 activePreset: active.selected,
+                presetRevision: active.presetRevision,
                 presetNotes: String(active.preset.PresetNotes || ''),
                 tradersEnabled: traders.EnableTraders === true,
                 traderMarkupActive: traders.EnableTraders === true,
-                traderMarkup: Object.fromEntries(Object.entries(markup).filter(([key, value]) => TRADER_KEYS.has(key) && Number.isFinite(Number(value))).map(([key, value]) => [key, numeric(value)])),
-                traderSell: Object.fromEntries(Object.entries(sell).filter(([key, value]) => TRADER_KEYS.has(key) && Number.isFinite(Number(value))).map(([key, value]) => [key, numeric(value)])),
+                traderMarkup: Object.fromEntries(Object.entries(markup).filter(([key, value]) => TRADER_MARKUP_KEYS.has(key) && Number.isFinite(Number(value))).map(([key, value]) => [key, numeric(value)])),
+                traderSell: Object.fromEntries(Object.entries(sell).filter(([key, value]) => TRADER_SELL_KEYS.has(key) && Number.isFinite(Number(value))).map(([key, value]) => [key, numeric(value)])),
+                unsupportedTraderSellKeys: Object.keys(sell).filter(key => !TRADER_SELL_KEYS.has(key)).sort(),
                 itemsEnabled: !!(active.preset.Items && active.preset.Items.EnableItems === true),
                 itemPriceMultiplierActive: !!(active.preset.Items && active.preset.Items.EnableItems === true),
                 itemPriceMultiplier: active.preset.Items && numeric(active.preset.Items.ItemPriceMult),
@@ -97,7 +106,11 @@ class SvmConfigService {
 
     update(input) {
         if (!isObject(input)) throw new Error('INVALID_SVM_UPDATE');
+        if (typeof input.expectedPresetRevision !== 'string' || !/^[a-f0-9]{64}$/i.test(input.expectedPresetRevision)) {
+            throw new Error('SVM_PRESET_REVISION_REQUIRED');
+        }
         const active = this.resolveActivePreset();
+        if (active.presetRevision !== input.expectedPresetRevision) throw new Error('SVM_PRESET_CHANGED_RELOAD');
         const pkg = this.readJson(path.join(this.svmDir, 'package.json'));
         if (String(pkg.version || '') !== '1.11.1' || !/^3\.11(?:\.x)?$/.test(String(pkg.sptVersion || ''))) throw new Error('SVM_VERSION_NOT_VERIFIED');
         const preset = active.preset;
@@ -129,7 +142,7 @@ class SvmConfigService {
         if (input.traderMarkup !== undefined) {
             if (!isObject(input.traderMarkup) || !isObject(preset.Traders.TraderMarkup)) throw new Error('INVALID_SVM_TRADER_MARKUP');
             for (const [trader, value] of Object.entries(input.traderMarkup)) {
-                if (!TRADER_KEYS.has(trader) || !Object.prototype.hasOwnProperty.call(preset.Traders.TraderMarkup, trader)) throw new Error('UNKNOWN_SVM_TRADER');
+                if (!TRADER_MARKUP_KEYS.has(trader) || !Object.prototype.hasOwnProperty.call(preset.Traders.TraderMarkup, trader)) throw new Error('UNKNOWN_SVM_TRADER');
                 // SPT 3.11.1 treats buy_price_coef as the inverse buyback percentage (TraderHelper uses 100 - buy_price_coef). Therefore TraderMarkup is the percent paid when a player sells an item to the trader, not the trader's price multiplier when the player buys.
                 const next = number(value, 0, 100, 'trader_markup');
                 if (Number(preset.Traders.TraderMarkup[trader]) !== next) {
@@ -142,7 +155,8 @@ class SvmConfigService {
         if (input.traderSell !== undefined) {
             if (!isObject(input.traderSell) || !isObject(preset.Traders.TraderSell)) throw new Error('INVALID_SVM_TRADER_SELL');
             for (const [trader, value] of Object.entries(input.traderSell)) {
-                if (!TRADER_KEYS.has(trader) || !Object.prototype.hasOwnProperty.call(preset.Traders.TraderSell, trader)) throw new Error('UNKNOWN_SVM_TRADER');
+                if (!TRADER_SELL_KEYS.has(trader)) throw new Error('UNSUPPORTED_SVM_TRADER_SELL_KEY');
+                if (!Object.prototype.hasOwnProperty.call(preset.Traders.TraderSell, trader)) throw new Error('UNKNOWN_SVM_TRADER');
                 const next = number(value, 0, 1000, 'trader_sell');
                 if (Number(preset.Traders.TraderSell[trader]) !== next) {
                     preset.Traders.TraderSell[trader] = next;
@@ -175,6 +189,12 @@ class SvmConfigService {
         }
 
         if (!changes.length) return { ok: true, changed: false, changes: [], status: this.getStatus(), restartRequired: true };
+        // Re-read immediately before writing so an external SVM edit or preset switch
+        // during request validation cannot be silently overwritten.
+        const latest = this.resolveActivePreset();
+        if (latest.selected !== active.selected || latest.presetRevision !== input.expectedPresetRevision) {
+            throw new Error('SVM_PRESET_CHANGED_RELOAD');
+        }
         const backupDir = path.join(this.dataDir, 'backups', 'svm');
         fs.mkdirSync(backupDir, { recursive: true });
         const stamp = new Date().toISOString().replace(/[:.]/g, '-');
