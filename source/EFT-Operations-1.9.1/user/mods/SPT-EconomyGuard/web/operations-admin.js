@@ -110,9 +110,21 @@
           const evidence = events.length || hostEvidence.length
             ? '<details><summary>' + esc(summary + ' · ' + hostEvidence.length + ' host-attested events') + '</summary><pre>' + esc(JSON.stringify({ raidEvents: safeEvidence, hostEvidence, objectiveEvidence: objectiveRows }, null, 2)) + '</pre></details>'
             : 'No linked Fika evidence';
-          return `<tr><td class="mono">${esc(String(g.id).slice(0, 12))}</td><td>${esc(g.missionTitle || g.missionId)}</td><td>${(g.members || []).map(m => esc(m.displayName || 'Unknown operator')).join(', ')}</td><td>${objectiveHtml}</td><td>${evidence}</td><td>${dateValue(g.finishedAt)}</td><td><button class="action-btn" data-op-review="approve" data-group="${esc(g.id)}">Approve</button> <button class="action-btn danger" data-op-review="deny" data-group="${esc(g.id)}">Deny</button></td></tr>`;
+          const requiredObjectives = objectiveRows.filter(item => item.required !== false);
+          const objectiveChecklist = requiredObjectives.map(item => {
+            const objectiveName = String(item.type || 'objective') + (item.target ? ' · ' + String(item.target) : '') + ' · required ' + Number(item.requiredCount || 1);
+            return '<div class="review-check-item"><label><input type="checkbox" data-review-objective="' + esc(item.objectiveId) + '"><span>Confirm objective: ' + esc(objectiveName) + '</span></label><input type="text" maxlength="500" autocomplete="off" data-review-objective-ref="' + esc(item.objectiveId) + '" placeholder="Evidence reference for this objective"></div>';
+          }).join('');
+          const memberChecklist = (g.members || []).map((member, index) => {
+            const reviewIndex = Number.isSafeInteger(member.reviewIndex) ? member.reviewIndex : index;
+            return '<div class="review-check-item"><label><input type="checkbox" data-review-member="' + reviewIndex + '"><span>Confirm raid outcome for ' + esc(member.displayName || 'Unknown operator') + '</span></label><input type="text" maxlength="500" autocomplete="off" data-review-member-ref="' + reviewIndex + '" placeholder="Evidence reference for this member"></div>';
+          }).join('');
+          const checklistHtml = '<details class="review-checklist"><summary>Approval checklist · ' + requiredObjectives.length + ' required objectives · ' + (g.members || []).length + ' members</summary><div class="review-checklist-body"><p>Approval requires an individual confirmation and evidence reference for every required objective and every member. This records the administrator\'s review; it does not convert host/client telemetry into server-authoritative proof.</p>' +
+            (objectiveChecklist || '<p class="muted">No required objectives are configured.</p>') +
+            '<h4>Member outcomes</h4>' + (memberChecklist || '<p class="muted">No group members were returned; approval will be rejected.</p>') + '</div></details>';
+          return `<tr><td class="mono">${esc(String(g.id).slice(0, 12))}</td><td>${esc(g.missionTitle || g.missionId)}</td><td>${(g.members || []).map(m => esc(m.displayName || 'Unknown operator')).join(', ')}</td><td>${objectiveHtml}</td><td>${checklistHtml}</td><td>${evidence}</td><td>${dateValue(g.finishedAt)}</td><td><button class="action-btn" data-op-review="approve" data-group="${esc(g.id)}">Approve</button> <button class="action-btn danger" data-op-review="deny" data-group="${esc(g.id)}">Deny</button></td></tr>`;
         }).join('');
-        $('#opReviews').innerHTML = `<div class="table-wrap"><table><thead><tr><th>GROUP</th><th>MISSION</th><th>MEMBERS</th><th>OBJECTIVES</th><th>FIKA EVIDENCE</th><th>SUBMITTED</th><th>ACTION</th></tr></thead><tbody>${rowHtml || '<tr><td colspan="7" class="empty">No raids waiting for review.</td></tr>'}</tbody></table></div>`;
+        $('#opReviews').innerHTML = `<div class="table-wrap"><table><thead><tr><th>GROUP</th><th>MISSION</th><th>MEMBERS</th><th>OBJECTIVES</th><th>ADMIN CHECKLIST</th><th>FIKA EVIDENCE</th><th>SUBMITTED</th><th>ACTION</th></tr></thead><tbody>${rowHtml || '<tr><td colspan="8" class="empty">No raids waiting for review.</td></tr>'}</tbody></table></div>`;
       } catch (e) { toast(e.message, true); }
     }
     async function loadSvm() {
@@ -191,11 +203,44 @@
       const pub=t.closest('[data-op-publish]'); if(pub&&confirm('Publish this mission and create an Event in the existing public status site?')) { try { await api('/api/operations/publish',{id:pub.dataset.opPublish}); await refresh(); toast('Mission published and Event created'); } catch(err) { toast(err.message,true); } return; }
       const close=t.closest('[data-op-close]'); if(close&&confirm('Close this published mission?')) { try { await api('/api/operations/close',{id:close.dataset.opClose}); await refresh(); toast('Mission closed'); } catch(err) { toast(err.message,true); } return; }
       const delivery=t.closest('[data-op-delivery]'); if(delivery) { const choice=prompt('Delivery status is uncertain. Type RETRY only after verifying no mail was sent, or DELIVERED if you verified the mail was received:'); if(!choice) return; const decision=choice.trim().toUpperCase()==='RETRY'?'retry':choice.trim().toUpperCase()==='DELIVERED'?'mark_delivered':null; if(!decision) { toast('Enter RETRY or DELIVERED',true); return; } const note=prompt('Required reconciliation note / evidence reference:'); if(!note?.trim()) return; const warning=decision==='retry'?'Retry can send duplicate items if a previous mail was already delivered. Have you verified no reward mail was sent?':'Only mark delivered after verifying the player received the reward mail.'; if(!confirm(warning+' Continue?')) return; try { await api('/api/operations/delivery/reconcile',{awardId:delivery.dataset.opDelivery,decision,note}); await loadAwards(); toast('Delivery reconciliation saved'); } catch(err) { toast(err.message,true); } return; }
-      const review=t.closest('[data-op-review]'); if(review) { const decision=review.dataset.opReview; const note=prompt('Enter the evidence reference / review reason (required):'); if(!note?.trim()) return; const confirmed=decision==='approve' ? confirm('Approve rewards only if you independently verified objective completion and every listed member extraction using server-side evidence. Client raid reports alone are not proof. Continue?') : true; if(!confirmed) return; try { await api('/api/operations/review',{groupId:review.dataset.group,decision,note,attestation:{confirmed:decision==='approve',objectivesConfirmed:decision==='approve',allMembersConfirmed:decision==='approve'}}); await loadReviews(); toast('Raid review saved'); } catch(err) { toast(err.message,true); } return; }
+      const review=t.closest('[data-op-review]'); if(review) {
+        const decision=review.dataset.opReview;
+        const note=prompt('Enter the overall review summary / case reference (required):');
+        if(!note?.trim()) return;
+        const body={groupId:review.dataset.group,decision,note};
+        if(decision==='approve') {
+          const row=review.closest('tr');
+          if(!row) { toast('Review row is unavailable. Refresh the queue.',true); return; }
+          const objectiveChecks=Array.from(row.querySelectorAll('[data-review-objective]'));
+          const memberChecks=Array.from(row.querySelectorAll('[data-review-member]'));
+          const confirmedObjectiveIds=[];
+          const objectiveEvidenceRefs={};
+          for(const checkbox of objectiveChecks) {
+            if(!checkbox.checked) { toast('Confirm every required objective before approval.',true); return; }
+            const key=checkbox.dataset.reviewObjective;
+            const input=Array.from(row.querySelectorAll('[data-review-objective-ref]')).find(el=>el.dataset.reviewObjectiveRef===key);
+            if(!input || !input.value.trim()) { toast('Add an evidence reference for every required objective.',true); if(input) input.focus(); return; }
+            confirmedObjectiveIds.push(key); objectiveEvidenceRefs[key]=input.value.trim();
+          }
+          const confirmedMemberIndexes=[];
+          const memberEvidenceRefs={};
+          for(const checkbox of memberChecks) {
+            if(!checkbox.checked) { toast('Confirm the raid outcome for every group member before approval.',true); return; }
+            const key=checkbox.dataset.reviewMember;
+            const input=Array.from(row.querySelectorAll('[data-review-member-ref]')).find(el=>el.dataset.reviewMemberRef===key);
+            if(!input || !input.value.trim()) { toast('Add an evidence reference for every group member.',true); if(input) input.focus(); return; }
+            confirmedMemberIndexes.push(Number(key)); memberEvidenceRefs[key]=input.value.trim();
+          }
+          if(!confirm('You are recording a manual administrator decision. Verify every objective and each member outcome against the cited evidence. Host/client telemetry alone is not server-authoritative proof. Approve rewards?')) return;
+          body.attestation={confirmed:true,confirmedObjectiveIds,confirmedMemberIndexes,objectiveEvidenceRefs,memberEvidenceRefs};
+        }
+        try { await api('/api/operations/review',body); await loadReviews(); toast('Raid review saved'); } catch(err) { toast(err.message,true); }
+        return;
+      }
       if(t.id==='opExport'&&selected) { const blob=new Blob([JSON.stringify(collectForm($('#opMissionForm')),null,2)],{type:'application/json'}); const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='eft-operation.json';a.click();URL.revokeObjectURL(a.href); }
     });
     view.addEventListener('change', async e=>{ if(e.target.name==='mode') { const f=$('#opMissionForm'); if(f) { if(e.target.value==='solo') { f.elements.minPlayers.value=1; f.elements.maxPlayers.value=1; } else if(e.target.value==='squad') { f.elements.minPlayers.value=Math.max(2,Number(f.elements.minPlayers.value)||2); f.elements.maxPlayers.value=Math.max(2,Number(f.elements.maxPlayers.value)||4); if(Number(f.elements.maxPlayers.value)<Number(f.elements.minPlayers.value)) f.elements.maxPlayers.value=f.elements.minPlayers.value; } else { f.elements.minPlayers.value=1; f.elements.maxPlayers.value=Math.max(2,Number(f.elements.maxPlayers.value)||4); } } return; } if(e.target.id!=='opImport'||!e.target.files?.[0]) return; try { const data=JSON.parse(await e.target.files[0].text()); for(const key of ['id','revision','status','createdAt','updatedAt','createdBy']) delete data[key]; selected={...newMission(),...data}; objectives=Array.isArray(data.objectives)?data.objectives.map(x=>({...x})):[]; render(); toast('Mission JSON loaded. Review and save the draft.'); } catch(err) { toast(`Invalid mission JSON: ${err.message}`,true); } });
     nav.addEventListener('click',e=>{ if(!e.target.closest('[data-view="operations"]')) return; const title=$('#pageTitle');if(title)title.textContent='EFT Operations';refresh(); });
-    const css=document.createElement('style'); css.textContent=`.op-objective{display:grid;grid-template-columns:145px minmax(120px,1fr) 75px auto auto;gap:7px;align-items:center;padding:8px;background:#0c1621;border:1px solid #24374b;border-radius:7px;margin:7px 0}.op-objective input:not([type=checkbox]),.op-objective select{min-width:0;width:100%;background:#0e1722;border:1px solid #2a3a4d;border-radius:6px;color:#d8e4f1;padding:8px;font:inherit;font-size:10px}.op-required{display:flex;gap:4px;align-items:center;font-size:9px;color:#9aadc2}.op-required input{accent-color:#62a7e7}@media(max-width:800px){.op-objective{grid-template-columns:1fr 1fr}.op-objective>*{min-width:0}}`; document.head.append(css);
+    const css=document.createElement('style'); css.textContent=`.op-objective{display:grid;grid-template-columns:145px minmax(120px,1fr) 75px auto auto;gap:7px;align-items:center;padding:8px;background:#0c1621;border:1px solid #24374b;border-radius:7px;margin:7px 0}.op-objective input:not([type=checkbox]),.op-objective select{min-width:0;width:100%;background:#0e1722;border:1px solid #2a3a4d;border-radius:6px;color:#d8e4f1;padding:8px;font:inherit;font-size:10px}.op-required{display:flex;gap:4px;align-items:center;font-size:9px;color:#9aadc2}.op-required input{accent-color:#62a7e7}@media(max-width:800px){.op-objective{grid-template-columns:1fr 1fr}.op-objective>*{min-width:0}}`; css.textContent += `.review-checklist{min-width:260px}.review-checklist-body{display:grid;gap:8px;padding:10px;background:#0b1420;border:1px solid #27384a;border-radius:6px}.review-checklist-body h4{margin:8px 0 0;color:#d9e5f2;font-size:11px}.review-checklist-body>p{margin:0;color:#91a5ba;font-size:10px;line-height:1.5}.review-check-item{display:grid;grid-template-columns:minmax(190px,1fr) minmax(180px,1fr);gap:8px;align-items:center;padding:7px;background:#111d2a;border:1px solid #27384a;border-radius:5px}.review-check-item label{display:flex;gap:7px;align-items:flex-start;color:#cad7e5;font-size:10px}.review-check-item input[type=checkbox]{margin-top:1px;accent-color:#8ba86d}.review-check-item input[type=text]{width:100%;min-width:0;background:#0a121c;border:1px solid #34465a;border-radius:4px;padding:7px;color:#d8e4f1;font:inherit;font-size:10px}@media(max-width:1000px){.review-check-item{grid-template-columns:1fr}}`; document.head.append(css);
   } catch(err) { console.warn('EFT Operations admin add-on not loaded:',err); }
 })();
