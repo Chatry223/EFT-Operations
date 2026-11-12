@@ -102,7 +102,7 @@ function fixture() {
 (function testRejectsNonBooleanSectionSwitches() {
     const f = fixture();
     try {
-        assert.throws(() => f.service.update({ itemsEnabled: 'true' }), /INVALID_SVM_ITEMS_ENABLED/);
+        assert.throws(() => update(f.service, { itemsEnabled: 'true' }), /INVALID_SVM_ITEMS_ENABLED/);
         assert.strictEqual(JSON.parse(fs.readFileSync(path.join(f.svmDir, 'Presets', 'v6.json'), 'utf8')).Items.EnableItems, false);
         assert.strictEqual(fs.existsSync(path.join(f.dataDir, 'backups', 'svm')), false);
     } finally { fs.rmSync(f.root, { recursive: true, force: true }); }
@@ -120,7 +120,7 @@ function fixture() {
         const status = f.service.getStatus();
         assert.strictEqual(status.available, false);
         assert.strictEqual(status.reason, 'SVM_PRESET_OUTSIDE_DIRECTORY');
-        assert.throws(() => update(f.service, { traderMarkup: { Skier: 20 } }), /SVM_PRESET_OUTSIDE_DIRECTORY/);
+        assert.throws(() => f.service.update({ expectedPresetRevision: '0'.repeat(64), traderMarkup: { Skier: 20 } }), /SVM_PRESET_OUTSIDE_DIRECTORY/);
         assert.strictEqual(JSON.parse(fs.readFileSync(external, 'utf8')).Traders.TraderMarkup.Skier, 99);
     } finally { fs.rmSync(f.root, { recursive: true, force: true }); }
 })();
