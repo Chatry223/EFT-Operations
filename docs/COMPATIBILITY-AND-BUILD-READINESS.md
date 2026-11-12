@@ -1,102 +1,80 @@
 # Compatibility and build readiness
 
-Audit date: 2026-11-09
+Audit snapshot: 2026-11-13  
+Repository HEAD: 37f591e49fc7d2d13ef789d9387484bee5570dc3
 
-## Exact target
+## Target matrix
 
-| Component | Verified target |
+| Component | Target |
 |---|---|
-| EFT | `0.16.1.3.35392-P2P` |
-| SPT | `3.11.1` |
-| Fika Server | `2.4.3` |
-| Fika client plugin | `1.2.3` / assembly `1.2.3.0` |
-| SPT Common client assembly | `3.11.1.0` |
-| Client plugin | .NET Framework 4.7.2, C# 7.3, BepInEx |
+| EFT | 0.16.1.3.35392-P2P |
+| Unity | 2022.3.43f1 |
+| SPT Server | 3.11.1 |
+| Fika Server | 2.4.3 |
+| Fika client | 1.2.3.0 |
+| SPT Common | 3.11.1.0 |
+| BepInEx | 5.4.22.0 |
+| Client plugin | .NET Framework 4.7.2 / C# 7.3 |
 
-Fika Server and Fika client versions are separate tracks. The official Fika Server 2.4.3 `package.json` identifies `sptVersion: ~3.11`; the installed Fika client config and assembly identify 1.2.3. The upstream Fika Plugin `v1.2.3` source was checked for the native matchmaker UI fields.
+The pinned BepInEx, Fika and SPT Common assemblies declare .NET Framework 4.7.1. The client project targets net472. EFT/Fika/SPT implementation types are discovered reflectively; the compile-time references are BepInEx, Harmony and Unity modules. The dependency verifier checks the exact target inputs but compile success is not a runtime load test.
 
-## Dependency archives: verified
+## Client source and build status
 
-The user's Library source archives were materialized and inspected:
+The Client Plugin source currently includes:
+- Native SPT session bridge (RequestHandler SessionId/Host/HttpClient).
+- F8 mission panel and in-raid HUD.
+- Mission list, campaign/rank locks, rewards and objective status.
+- Ready/Leave flow and leader-only invocation of Fika's native Start button from the Host UI.
+- Harmony hook bootstrap for Fika 1.2.3 host-observed AI kills and EFT place-visit callbacks.
+- Startup runtime fingerprint logging for Unity, CLR and BepInEx.
 
-- `EscapeFromTarkov_Data.zip`: 183 entries; ZIP CRC test passed.
-- `BepInEx-(no server-is player).zip`: 160 entries; ZIP CRC test passed.
-- The EFT archive contains `Managed/Assembly-CSharp.dll` and all required Unity modules.
-- The BepInEx archive contains `BepInEx/core/BepInEx.dll`, `0Harmony.dll`, `BepInEx/plugins/Fika.Core.dll`, `BepInEx/plugins/spt/spt-common.dll`, and `BepInEx/config/com.fika.core.cfg`.
+The last documented successful Windows build was at commit 248e5924bc331167a908f050f8eee7a6574dde12. Client code changed after that, including commit 6db724310824221d41411da0afdb72a4c5444985. The Actions run for that latest client source commit (42919678967) failed during Source/Dependency preparation; the Windows compile job was skipped. The present Client source must not be called CI-verified.
 
-The user then added the compact equivalents to the repository:
-- `source/EscapeFromTarkov_Data.zip` (6,212,293 bytes)
-- `source/BepInEx.zip` (1,550,865 bytes)
+## Server mission implementation truth
 
-The new GitHub Actions dependency verifier passed on commit `a3360cc51e67918a0804761b591a91888729338c`. It validates archive CRCs, exact SHA-256 fingerprints for the required game/Unity/BepInEx/Fika/SPT DLLs, and the Fika config header. These are build-time inputs only and are not included in the installable mod artifact.
+Production code does call OperationsService.recordRaidEvent:
+- host client kill/kill_type evidence uses host_attested;
+- host client place visits use host_attested;
+- SPT-accepted inventory delta uses spt_accepted_client_delta;
+- extract/survive/raid-complete data uses client_report_only.
 
-Verified fingerprints captured from the inspected Library archives:
+The former statement that no production caller exists was stale. The Fika adapter still ends a mission group with verified:false, and no current production Objective producer issues server_verified. The normal flow is manual review before awards.
 
-| File | SHA-256 |
-|---|---|
-| `Assembly-CSharp.dll` | `12d5fd1728c58a9cd71a454fb5eae506b5a0a3c2bb35d543c4022800e10f47d5` |
-| `UnityEngine.CoreModule.dll` | `f7cfb53eb5b6a652d6bef329b33c154d8ccb0de7448ac5bfa1318762e10f7241` |
-| `BepInEx.dll` | `2674d3aecf3097bee817abe7e8bbcc42bf583df51402069d5fcd4fbed55017ce` |
-| `Fika.Core.dll` | `246d45e0f9ef445484802379383cb8bb52901d013a1e244ba2209048c7dce65a` |
-| `spt-common.dll` | `970dab34fa09f8c6930f5011aae4025d1f2dc4874a27ff0b3cd7da06899b964f` |
+## Lifecycle and security boundaries
 
-**Distribution caution:** EFT game assemblies are copyrighted game binaries. Do not put these archives into the mod release ZIP. Since they are currently in a public GitHub repository, verify your right to publish them; private/local storage is safer.
+- SPT session is mapped server-side to the PMC/Scav profiles; client responses omit private profile IDs.
+- Mission groups link to a Fika match only after member readiness, roster and map checks pass.
+- The leader starts through the native Fika host UI. Other group members join through the normal Fika raid list.
+- Host telemetry is not unforgeable server proof. It is constrained by authenticated host identity, match ID, actor roster, event type and rate limits.
+- Duplicate event IDs do not increase progress twice.
+- Admin review requires a note and explicit confirmation. Award delivery uses SPT mail; uncertain delivery is held for manual reconciliation instead of blind retry.
 
-## Client project reference audit
+## Economy integration
 
-The client source uses BepInEx and Unity types directly. The project references BepInEx, Harmony and the Unity modules needed for IMGUI/JsonUtility. It does **not** directly reference `Assembly-CSharp.dll`, `Fika.Core.dll`, or `spt-common.dll`; the client bridge uses reflection for EFT/Fika/SPT runtime discovery. These assemblies are validated by the builder as exact target inputs, not passed to the compiler as direct project references.
+SVM editor resolves the active preset from the installed SVM Loader. It displays the active TraderMarkup, TraderSell, Items and Fence values; checks the active file revision before write; writes a backup; validates known keys/ranges; and requires SPT restart.
 
-The SPT 3.11.x source was checked:
-- `SPT.Common.Http.RequestHandler` is in assembly **`spt-common.dll`**, whose `AssemblyName` is `spt-common`, not `SPT.Common`.
-- It exposes static `Host`, `SessionId`, and `HttpClient`.
-- Its `HttpClient` is `SPT.Common.Http.Client`; it exposes `GetAsync(string)` and `PostAsync(string, byte[], bool)`.
-- The Operations client bridge was corrected to search loaded assemblies first and then load the exact `spt-common` assembly identity. This avoids relying on the incorrect `SPT.Common` assembly name.
+TraderMarkup is the trader buyback percentage (buy_price_coef = 100 - value), TraderSell is a distinct currency-offer cost multiplier, and ItemPriceMult is an independent item section setting. In the supplied preset, Items is disabled, so ItemPriceMult is stored but inactive. These settings must not be treated as one global multiplier.
 
-The SPT 3.11.x server source was also checked for `StaticRouterModService.registerStaticRouter` and `HttpResponseUtil.noBody`; the Operations custom router prefix and JSON response shape follow that API.
+LiveFleaPrices and SVM interaction still requires a test on the running server with actual load order and final Handbook/database/dynamic price observations.
 
-## Build pipeline and actual result
+## CI status
 
-The graphical helper now:
-- loads the two repository ZIPs into a hash-keyed local cache;
-- validates the exact target SHA-256 values and Fika/SPT assembly versions;
-- runs MSBuild with NuGet restore;
-- requires the actual installed BepInEx root as a separate install destination, so it cannot silently place the plugin in the temporary dependency cache;
-- backs up any existing plugin DLL and writes a build report.
+- The earlier Server Checks at commit c22445de000ca803c37fab1031347557105e3f88 passed 28 tests. Later source changes are not covered by that green run.
+- Current HEAD server workflow 43318263778 failed, but GitHub returned no usable step list or job logs. The cause is unknown.
+- Latest Client workflow 42919678967 failed in its Source/Dependency preparation job; Windows compile was skipped, and no readable logs were exposed.
+- No current-main artifact should be described as a fresh verified release.
 
-GitHub Actions validates the dependency archives and builds on a Windows-hosted runner. The first Windows attempt failed with `NETSDK1004` because project assets had not been restored; MSBuild `/restore` was added. A subsequent build on commit `248e5924bc331167a908f050f8eee7a6574dde12` succeeded, verified the DLL output, and uploaded artifact `13705463291`.
+## Required acceptance matrix
 
-Build output:
-- `EFTOperations.Client.dll`: 27,136 bytes
-- SHA-256: `443602390928327e748d6e8d7cc6e810b7d04bf8e0abed9b9d8fe325b0e0d4ef`
-- Artifact: [GitHub Actions build](https://github.com/Chatry223/EFT-Operations/actions/runs/42687894189/artifacts/13705463291)
+1. Restore actionable CI logs and pass Node static checks plus all server unit tests on current HEAD.
+2. Build the current Client DLL on Windows using the bundled archives and verify its SHA/report.
+3. Start an isolated SPT 3.11.1 server with EconomyGuard only; confirm no startup/runtime exceptions.
+4. Add Fika 2.4.3 and validate host/match/member linking, map mismatch rejection, death/visit hooks and match-end review.
+5. Test the SPT accepted inventory delta against actual SaveServer profile updates; no automatic rewards from client-originated outcomes.
+6. Validate manual approval/denial, rank/campaign unlock and duplicate prevention.
+7. Validate real SPT Mail delivery for RUB/items, online/offline users, server interruption and manual reconciliation.
+8. Add SVM and LiveFleaPrices; capture active preset before/after restart and verify actual Handbook/dynamic price effects.
+9. Add SAIN, LootingBots and PackNStrap incrementally and soak-test Fika raids.
+10. Verify plugin load in EFT Mono and check for TypeLoadException, MissingMethodException, ReflectionTypeLoadException and Harmony patch errors.
 
-The DLL is compile-verified, not yet runtime-verified in the user's SPT/Fika installation.
-
-## Fika 2.4.3 mission lifecycle: current truth
-
-The version-gated adapter:
-- validates Fika server `2.4.3` and SPT `~3.11`;
-- binds a mission group only after all accepted, Ready members are present in the same Fika match and map;
-- calls `OperationsService.startGroup` to move that group into `in_raid`;
-- observes Fika `endMatch` and direct `deleteMatch` paths before the roster is deleted; `createMatch` clears the dedupe marker if a server ID is reused;
-- calls `OperationsService.finishGroup` with roster/death flags and any matching raid-end reports, but explicitly sets `verified: false`;
-- moves the group to manual review; it never automatically awards points/items from these events.
-
-Important limitations:
-1. Production code does not yet call `recordRaidEvent`; objective counters do not advance from real game events. The test suite manually injects a synthetic extract event, which is not proof that the live adapter collects it.
-2. Fika's `handlePlayerDied` callback contains `serverId` and `profileId`, but not a killer identity. The adapter validates the profile/session relationship and stores an `authenticated_client_report` death event for admin review; it does not progress kill objectives.
-3. SPT `IEndLocalRaidRequestData.results.profile.Stats.Eft` includes client-reported `Victims`, `SessionCounters`, `FoundInRaidItems`, and `DroppedItems`. The adapter stores these as untrusted evidence and cross-checks victim profile IDs against Fika death reports when possible.
-4. For loot evidence, the adapter snapshots inventory at raid start and counts only new `SpawnedInSession` items that remain in the SaveServer profile after SPT processes the raid-end request. This is stronger than a raw client list, but it is still not server-authoritative proof of where an item was obtained.
-5. Visit-zone position telemetry is not yet implemented in the client plugin; `visit` objectives currently require manual evidence. A fully server-authoritative kill/loot/visit objective feed has not yet been implemented. `recordRaidEvent` accepts only explicitly marked server-verified events and is not called by the production adapter. Admin review remains mandatory.
-
-## Runtime acceptance still required
-
-On a disposable copy of SPT, validate:
-- BepInEx loads the built DLL without type-load or missing-method errors.
-- F8 panel can authenticate using the native SPT session and configured backend URL.
-- Fika client 1.2.3 host UI is found and the native Start button is invoked only for the ready squad leader on the correct map.
-- Fika Server 2.4.3 links all PMC/Scav members to the correct Operations group.
-- Fika match end creates a review record without issuing automatic rewards.
-- Manual approval and reward delivery are idempotent and auditable.
-
-The audit container has no .NET/MSBuild/Mono toolchain, so actual C# compilation is delegated to the Windows GitHub Actions runner.
+A detailed Persian implementation audit and ordered roadmap is available at IMPLEMENTATION-AUDIT-FA.md.
