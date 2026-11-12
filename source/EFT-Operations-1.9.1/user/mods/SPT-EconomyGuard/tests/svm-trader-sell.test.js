@@ -51,6 +51,8 @@ const guard = new EconomyGuard(root, {
 }, { info() {}, warn() {}, error() {} }, {});
 
 try {
+    assert.strictEqual(guard.health.mod, 'SPT-EconomyGuard');
+    assert.strictEqual(guard.health.version, require('../package.json').version, 'health output must report the installed package version');
     const within = guard.checkTraderSell(instance, profile, {
         tid: traderId, items: [{ id: 'item-1' }], price: 81000
     }, 'session-1');
