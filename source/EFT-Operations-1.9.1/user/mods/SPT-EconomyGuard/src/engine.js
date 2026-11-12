@@ -5,6 +5,7 @@ const path = require('path');
 const core = require('./core');
 const { Storage } = require('./storage');
 const { AccessControl } = require('./access-control');
+const MOD_VERSION = require('../package.json').version;
 
 const FENCE_ID = '579dc571d53a0658a154fbec';
 const PROFILE_ID_RE = /^[a-f0-9]{24}$/i;
@@ -52,7 +53,7 @@ class EconomyGuard {
         this.restrictions = this.storage.loadRestrictions();
         this.policyUsage = this.storage.loadRecentPolicyUsage(50000);
         this.health = {
-            mod: 'SPT-EconomyGuard', version: '1.4.0', startedAt: new Date().toISOString(),
+            mod: 'SPT-EconomyGuard', version: MOD_VERSION, startedAt: new Date().toISOString(),
             mode: config.mode, sptTarget: '~3.11.0', hooks: {},
             coverage: { traderBuy: 'PENDING', traderSell: 'PENDING', fleaListing: 'PENDING', fleaPurchaseViaTradeHelper: 'PENDING', fleaPurchaseViaCallback: 'PENDING', fleaPurchaseController: 'PENDING', fleaPurchase: 'PENDING', paymentAffordability: 'PENDING', fenceSellAll: 'PENDING', fikaItemSending: 'NOT_HOOKED' },
             warnings: [],
