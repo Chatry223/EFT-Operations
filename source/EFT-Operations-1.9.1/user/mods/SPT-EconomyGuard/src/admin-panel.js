@@ -722,12 +722,23 @@ class AdminPanelServer {
                         } else if (objective.type === 'raid_complete') {
                             reportedCount = new Set(raidEnds.filter(event => !!String(event.exitStatus || '').trim()).map(event => String(event.profileId || event.displayName || 'unknown'))).size;
                         }
-                        const progressCount = Number((group.progress || {})[objective.id] || 0);
-                        const progressTrust = String((group.progressTrust || {})[objective.id] || 'none');
-                        const verifiedCount = progressTrust === 'server_verified' ? progressCount : 0;
-                        hostAttestedCount = progressTrust === 'host_attested' ? progressCount : 0;
-                        const sptAcceptedCount = progressTrust === 'spt_accepted_client_delta' ? progressCount : 0;
-                        const clientReportedCount = progressTrust === 'client_report_only' ? progressCount : 0;
+                        const progressCount = Math.min(objective.count, Math.max(0, Math.floor(Number((group.progress || {})[objective.id] || 0))));
+                        const rawCounts = group.progressByTrust && group.progressByTrust[objective.id]
+                            && typeof group.progressByTrust[objective.id] === 'object' && !Array.isArray(group.progressByTrust[objective.id])
+                            ? group.progressByTrust[objective.id] : {};
+                        const trustKeys = ['server_verified', 'host_attested', 'spt_accepted_client_delta', 'client_report_only', 'legacy_unattributed'];
+                        const parsedCounts = Object.fromEntries(trustKeys.map(key => [key, Math.max(0, Math.floor(Number(rawCounts[key]) || 0))]));
+                        const rawTotal = Object.values(parsedCounts).reduce((sum, count) => sum + count, 0);
+                        const evidenceCounts = rawTotal > progressCount
+                            ? { server_verified: 0, host_attested: 0, spt_accepted_client_delta: 0, client_report_only: 0, legacy_unattributed: progressCount }
+                            : { ...parsedCounts, legacy_unattributed: parsedCounts.legacy_unattributed + progressCount - rawTotal };
+                        const verifiedCount = evidenceCounts.server_verified;
+                        hostAttestedCount = evidenceCounts.host_attested;
+                        const sptAcceptedCount = evidenceCounts.spt_accepted_client_delta;
+                        const clientReportedCount = evidenceCounts.client_report_only;
+                        const unattributedCount = evidenceCounts.legacy_unattributed;
+                        const activeTrusts = Object.entries(evidenceCounts).filter(([, count]) => count > 0).map(([trust]) => trust);
+                        const progressTrust = activeTrusts.length > 1 ? 'mixed' : (activeTrusts[0] || 'none');
                         return {
                             objectiveId: objective.id,
                             type: objective.type,
@@ -740,13 +751,17 @@ class AdminPanelServer {
                             hostAttestedCount,
                             sptAcceptedCount,
                             clientReportedCount,
+                            unattributedCount,
+                            evidenceCounts,
                             reportedCount,
                             evidenceStatus: verifiedCount >= objective.count ? 'server_verified'
-                                : hostAttestedCount > 0 ? 'host_attested_admin_review'
-                                    : sptAcceptedCount > 0 ? 'spt_accepted_client_delta_review'
-                                        : clientReportedCount > 0 ? 'client_report_only'
-                                            : reportedCount > 0 && objective.type === 'raid_complete' ? 'fika_lifecycle_observed_unverified'
-                                        : reportedCount > 0 ? 'client_report_only' : 'no_evidence'
+                                : activeTrusts.length > 1 ? 'mixed_evidence_admin_review'
+                                    : hostAttestedCount > 0 ? 'host_attested_admin_review'
+                                        : sptAcceptedCount > 0 ? 'spt_accepted_client_delta_review'
+                                            : clientReportedCount > 0 ? 'client_report_only'
+                                                : unattributedCount > 0 ? 'legacy_unattributed_admin_review'
+                                                    : reportedCount > 0 && objective.type === 'raid_complete' ? 'fika_lifecycle_observed_unverified'
+                                                        : reportedCount > 0 ? 'client_report_only' : 'no_evidence'
                         };
                     });
                     return {
@@ -772,6 +787,7 @@ class AdminPanelServer {
                             source: group.reviewData && group.reviewData.source || '',
                             submittedAt: group.reviewData && group.reviewData.submittedAt || '',
                             progressTrust: group.progressTrust || {},
+                            progressByTrust: group.progressByTrust || {},
                             evidenceCount: Array.isArray(group.evidenceEvents) ? group.evidenceEvents.length : 0
                         },
                         fikaEvidence: fikaEvidence.map(sanitizeFikaEvent),

@@ -119,5 +119,34 @@ assert.throws(() => reloaded.resolveReview(manualGroup.id, 'approve', 'Evidence 
 const manualApproved = reloaded.resolveReview(manualGroup.id, 'approve', 'Evidence ref: independently checked server logs and operator outcome records', 'ADMIN', reviewChecklist(['kills'], [0]));
 assert.equal(manualApproved.state, 'completed');
 assert.equal(reloaded.getPlayer('abcdef0123456789abcdef14').points, 75, 'explicit admin evidence confirmation can approve when automatic event telemetry is unavailable');
+
+const trustMission = reloaded.save({ title: 'Mixed evidence trust accounting', map: 'woods', mode: 'solo', minPlayers: 1, maxPlayers: 1,
+  objectives: [{ id: 'kills', type: 'kill', target: 'scav', count: 3, required: true }], rewards: { points: 0, roubles: 0, items: [] } });
+reloaded.setStatus(trustMission.id, 'published');
+const trustGroup = reloaded.accept(trustMission.id, 'abcdef0123456789abcdef01', 'Trust ledger');
+reloaded.setReady(trustGroup.id, 'abcdef0123456789abcdef01', true);
+reloaded.startGroup(trustGroup.id, 'abcdef0123456789abcdef01');
+reloaded.recordRaidEvent(trustGroup.id, {
+  eventId: 'trust-host-1', type: 'kill', profileId: 'abcdef0123456789abcdef01', target: 'assault', targetCategory: 'scav',
+  amount: 1, map: 'woods', matchId: 'abcdef0123456789abcdef01', reporterProfileId: 'abcdef0123456789abcdef01',
+  victimProfileId: 'abcdef0123456789abcdef21', victimRole: 'assault', victimSide: 'Savage', victimIsAi: true,
+  source: 'fika-host-client', evidenceTrust: 'host_attested'
+});
+assert.deepEqual(reloaded.state.groups.find(x => x.id === trustGroup.id).progressByTrust.kills, { host_attested: 1 });
+reloaded.recordRaidEvent(trustGroup.id, {
+  eventId: 'trust-server-2', type: 'kill', profileId: 'abcdef0123456789abcdef01', target: 'scav',
+  amount: 1, map: 'woods', source: 'fika-server-adapter', evidenceTrust: 'server_verified'
+});
+const mixedTrustGroup = reloaded.state.groups.find(x => x.id === trustGroup.id);
+assert.deepEqual(mixedTrustGroup.progressByTrust.kills, { host_attested: 1, server_verified: 1 });
+assert.equal(mixedTrustGroup.progressTrust.kills, 'mixed');
+delete mixedTrustGroup.progressByTrust;
+reloaded.recordRaidEvent(trustGroup.id, {
+  eventId: 'trust-server-3', type: 'kill', profileId: 'abcdef0123456789abcdef01', target: 'scav',
+  amount: 1, map: 'woods', source: 'fika-server-adapter', evidenceTrust: 'server_verified'
+});
+assert.deepEqual(mixedTrustGroup.progressByTrust.kills, { legacy_unattributed: 2, server_verified: 1 });
+assert.equal(mixedTrustGroup.progressTrust.kills, 'mixed');
+
 fs.rmSync(root, { recursive: true, force: true });
 console.log('OperationsService: all tests passed');

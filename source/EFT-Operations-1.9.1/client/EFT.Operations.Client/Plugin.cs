@@ -514,8 +514,14 @@ namespace EFTOperations.Client
                             if (item != null && item.id == objective.id) { progress = item; break; }
                     int current = progress == null ? 0 : progress.progress;
                     string trust = progress == null ? "none" : progress.trust;
-                    string trustLabel = trust == "server_verified" ? "VERIFIED" : (trust == "host_attested" ? "HOST REPORTED / REVIEW" : (trust == "spt_accepted_client_delta" ? "SPT ACCEPTED / REVIEW" : (trust == "client_report_only" ? "CLIENT REPORT / REVIEW" : "AWAITING EVENT")));
-                    if (trust == "host_attested" || trust == "spt_accepted_client_delta" || trust == "client_report_only") hasReviewEvidence = true;
+                    string trustLabel = "AWAITING EVENT";
+                    if (trust == "server_verified") trustLabel = "VERIFIED";
+                    else if (trust == "host_attested") trustLabel = "HOST REPORTED / REVIEW";
+                    else if (trust == "spt_accepted_client_delta") trustLabel = "SPT ACCEPTED / REVIEW";
+                    else if (trust == "client_report_only") trustLabel = "CLIENT REPORT / REVIEW";
+                    else if (trust == "mixed") trustLabel = "MIXED SOURCES / REVIEW";
+                    else if (trust == "legacy_unattributed") trustLabel = "LEGACY SOURCE UNKNOWN / REVIEW";
+                    if (trust != "none" && trust != "server_verified") hasReviewEvidence = true;
                     string objectiveName = !String.IsNullOrEmpty(objective.target) ? objective.target : (objective.type ?? "OBJECTIVE");
                     GUILayout.Label((objective.required ? "[REQUIRED] " : "[OPTIONAL] ") + objectiveName + "  " + current + "/" + objective.count + "  ·  " + trustLabel, SmallStyle());
                 }
@@ -968,6 +974,7 @@ namespace EFTOperations.Client
     [Serializable] internal class RewardDto { public int points; public int roubles; }
     [Serializable] internal class ObjectiveDto { public string id; public string type; public string target; public int count; public bool required; }
     [Serializable] internal class GroupDto { public string id; public string missionId; public string state; public bool isLeader; public string leaderName; public int minPlayers; public int maxPlayers; public int readyCount; public MemberDto[] members; public ObjectiveProgressDto[] objectiveProgress; }
-    [Serializable] internal class ObjectiveProgressDto { public string id; public int progress; public int count; public bool required; public string trust; }
+    [Serializable] internal class ObjectiveProgressDto { public string id; public int progress; public int count; public bool required; public string trust; public EvidenceCountDto[] evidenceCounts; }
+    [Serializable] internal class EvidenceCountDto { public string trust; public int count; }
     [Serializable] internal class MemberDto { public string displayName; public bool ready; }
 }

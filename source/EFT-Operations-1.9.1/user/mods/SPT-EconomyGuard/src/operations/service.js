@@ -236,7 +236,7 @@ class OperationsService {
         if (!m || m.status !== 'published' || (m.startAt && Date.parse(m.startAt) > Date.now()) || (m.endAt && Date.parse(m.endAt) <= Date.now()) || g.members.length < m.minPlayers || !g.members.every(x => x.ready)) throw new Error('GROUP_NOT_READY');
         const validatedRaidId = text(raidId, 100, 'RAID_ID', true);
         g.state = 'in_raid'; g.raidId = validatedRaidId; g.startedAt = new Date().toISOString();
-        g.progress = Object.fromEntries(m.objectives.map(o => [o.id, 0])); g.progressTrust = {}; g.evidenceEvents = []; g.processedEventIds = []; this.persist(); return clone(g);
+        g.progress = Object.fromEntries(m.objectives.map(o => [o.id, 0])); g.progressTrust = Object.create(null); g.progressByTrust = Object.create(null); g.evidenceEvents = []; g.processedEventIds = []; this.persist(); return clone(g);
     }
 
     // Call only from a server-side SPT/Fika event adapter. Never expose this method as a public client endpoint.
@@ -294,7 +294,10 @@ class OperationsService {
         if (!g.progress || typeof g.progress !== 'object' || Array.isArray(g.progress)) {
             g.progress = Object.fromEntries(m.objectives.map(objective => [objective.id, 0]));
         }
-        if (!g.progressTrust || typeof g.progressTrust !== 'object' || Array.isArray(g.progressTrust)) g.progressTrust = {};
+        if (!g.progressTrust || typeof g.progressTrust !== 'object' || Array.isArray(g.progressTrust)) g.progressTrust = Object.create(null);
+        else g.progressTrust = Object.assign(Object.create(null), g.progressTrust);
+        if (!g.progressByTrust || typeof g.progressByTrust !== 'object' || Array.isArray(g.progressByTrust)) g.progressByTrust = Object.create(null);
+        else g.progressByTrust = Object.assign(Object.create(null), g.progressByTrust);
         if (!Array.isArray(g.evidenceEvents)) g.evidenceEvents = [];
         const targetCandidates = [event.target, event.targetCategory].map(value => String(value || '').trim().toLowerCase()).filter(Boolean);
         for (const objective of m.objectives) {
@@ -302,8 +305,37 @@ class OperationsService {
             if (!matchingType) continue;
             if (objective.target && !targetCandidates.includes(String(objective.target).toLowerCase())) continue;
             if (objective.params.map && String(objective.params.map).toLowerCase() !== (eventMap || String(m.map || '').toLowerCase())) continue;
-            g.progress[objective.id] = Math.min(objective.count, (g.progress[objective.id] || 0) + amount);
-            if (g.progressTrust[objective.id] !== 'server_verified') g.progressTrust[objective.id] = event.evidenceTrust;
+            const currentProgress = Math.min(objective.count, Math.max(0, Number(g.progress[objective.id]) || 0));
+            const nextProgress = Math.min(objective.count, currentProgress + amount);
+            const creditedAmount = nextProgress - currentProgress;
+            g.progress[objective.id] = nextProgress;
+
+            // Legacy stores only had one trust label per objective, which could be
+            // overwritten by later events. Unaccounted historical progress stays unknown.
+            let trustCounts = Object.prototype.hasOwnProperty.call(g.progressByTrust, objective.id)
+                ? g.progressByTrust[objective.id] : Object.create(null);
+            if (!trustCounts || typeof trustCounts !== 'object' || Array.isArray(trustCounts)) trustCounts = Object.create(null);
+            else trustCounts = Object.assign(Object.create(null), trustCounts);
+            const normalizedTrustCounts = Object.create(null);
+            const allowedTrust = new Set(['server_verified', 'host_attested', 'spt_accepted_client_delta', 'client_report_only', 'legacy_unattributed']);
+            let accountedProgress = 0;
+            for (const [trust, rawCount] of Object.entries(trustCounts)) {
+                const count = Number(rawCount);
+                if (!allowedTrust.has(trust) || !Number.isSafeInteger(count) || count <= 0) continue;
+                normalizedTrustCounts[trust] = count;
+                accountedProgress += count;
+            }
+            if (accountedProgress > currentProgress) {
+                for (const key of Object.keys(normalizedTrustCounts)) delete normalizedTrustCounts[key];
+                accountedProgress = 0;
+            }
+            if (accountedProgress < currentProgress) {
+                normalizedTrustCounts.legacy_unattributed = (normalizedTrustCounts.legacy_unattributed || 0) + currentProgress - accountedProgress;
+            }
+            if (creditedAmount > 0) normalizedTrustCounts[event.evidenceTrust] = (normalizedTrustCounts[event.evidenceTrust] || 0) + creditedAmount;
+            g.progressByTrust[objective.id] = normalizedTrustCounts;
+            const activeTrusts = Object.entries(normalizedTrustCounts).filter(([, count]) => count > 0).map(([trust]) => trust);
+            g.progressTrust[objective.id] = activeTrusts.length > 1 ? 'mixed' : (activeTrusts[0] || 'none');
         }
         g.evidenceEvents.push({
             eventId, type: event.type, profileId: event.profileId ? String(event.profileId) : null,
@@ -344,7 +376,7 @@ class OperationsService {
         if (raidVerified) g.state = 'completed';
         else {
             g.state = 'review';
-            g.reviewData = { requiredDone, aliveProfileIds: [...alive], extractedProfileIds: [...extracted], objectiveEvidence: (g.evidenceEvents || []).slice(-200), progressTrust: clone(g.progressTrust || {}), evidenceTrust: String(raidOutcome && raidOutcome.evidenceTrust || 'untrusted_client_report'), source: String(raidOutcome && raidOutcome.source || 'unknown'), submittedAt: g.finishedAt };
+            g.reviewData = { requiredDone, aliveProfileIds: [...alive], extractedProfileIds: [...extracted], objectiveEvidence: (g.evidenceEvents || []).slice(-200), progressTrust: clone(g.progressTrust || {}), progressByTrust: clone(g.progressByTrust || {}), evidenceTrust: String(raidOutcome && raidOutcome.evidenceTrust || 'untrusted_client_report'), source: String(raidOutcome && raidOutcome.source || 'unknown'), submittedAt: g.finishedAt };
         }
         this.persist(); return clone(g);
     }

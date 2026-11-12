@@ -237,13 +237,29 @@ class OperationsClientApi {
                 acceptedAt: member.acceptedAt,
                 result: member.result
             })),
-            objectiveProgress: mission ? mission.objectives.map(objective => ({
-                id: objective.id,
-                progress: Math.min(objective.count, Math.max(0, Number(group.progress && group.progress[objective.id]) || 0)),
-                count: objective.count,
-                required: objective.required === true,
-                trust: String(group.progressTrust && group.progressTrust[objective.id] || 'none')
-            })) : [],
+            objectiveProgress: mission ? mission.objectives.map(objective => {
+                const progress = Math.min(objective.count, Math.max(0, Number(group.progress && group.progress[objective.id]) || 0));
+                const rawCounts = group.progressByTrust && group.progressByTrust[objective.id]
+                    && typeof group.progressByTrust[objective.id] === 'object' && !Array.isArray(group.progressByTrust[objective.id])
+                    ? group.progressByTrust[objective.id] : {};
+                const trustKeys = ['server_verified', 'host_attested', 'spt_accepted_client_delta', 'client_report_only', 'legacy_unattributed'];
+                const parsedCounts = Object.fromEntries(trustKeys.map(key => [key, Math.max(0, Math.floor(Number(rawCounts[key]) || 0))]));
+                const total = Object.values(parsedCounts).reduce((sum, count) => sum + count, 0);
+                const evidenceCounts = total > progress
+                    ? [{ trust: 'legacy_unattributed', count: progress }]
+                    : trustKeys.map(trust => ({ trust, count: parsedCounts[trust] + (trust === 'legacy_unattributed' ? progress - total : 0) }))
+                        .filter(item => item.count > 0);
+                const activeTrusts = evidenceCounts.map(item => item.trust);
+                const trust = activeTrusts.length > 1 ? 'mixed' : (activeTrusts[0] || 'none');
+                return {
+                    id: objective.id,
+                    progress,
+                    count: objective.count,
+                    required: objective.required === true,
+                    trust,
+                    evidenceCounts
+                };
+            }) : [],
             createdAt: group.createdAt,
             startedAt: group.startedAt || null,
             finishedAt: group.finishedAt || null

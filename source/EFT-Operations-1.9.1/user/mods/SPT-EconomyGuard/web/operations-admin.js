@@ -100,10 +100,14 @@
           const hasHostAttested = objectiveRows.some(item => Number(item.hostAttestedCount || 0) > 0);
           const hasSptAccepted = objectiveRows.some(item => Number(item.sptAcceptedCount || 0) > 0);
           const hasClientReported = objectiveRows.some(item => Number(item.clientReportedCount || 0) > 0);
-          const objectiveLabel = hasHostAttested ? 'Host-attested progress · admin review required'
-            : hasSptAccepted ? 'SPT-accepted client inventory delta · admin review required'
-              : hasClientReported ? 'Client-reported raid outcome · admin review required'
-                : (g.reviewData?.requiredDone ? 'Objective counts met · outcome review required' : 'Objectives incomplete');
+          const hasUnattributed = objectiveRows.some(item => Number(item.unattributedCount || 0) > 0);
+          const hasMixedEvidence = objectiveRows.some(item => Object.values(item.evidenceCounts || {}).filter(count => Number(count) > 0).length > 1);
+          const objectiveLabel = hasMixedEvidence ? 'Mixed evidence sources · admin review required'
+            : hasUnattributed ? 'Legacy progress has unattributed source · admin review required'
+              : hasHostAttested ? 'Host-attested progress · admin review required'
+                : hasSptAccepted ? 'SPT-accepted client inventory delta · admin review required'
+                  : hasClientReported ? 'Client-reported raid outcome · admin review required'
+                    : (g.reviewData?.requiredDone ? 'Objective counts met · outcome review required' : 'Objectives incomplete');
           const objectiveHtml = objectiveRows.length
             ? '<details><summary>' + esc(objectiveLabel + ' · ' + objectiveRows.length + ' objectives') + '</summary><pre>' + esc(JSON.stringify(objectiveRows, null, 2)) + '</pre></details>'
             : objectiveLabel;

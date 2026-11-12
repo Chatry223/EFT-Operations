@@ -82,7 +82,7 @@ const { OperationsService } = require('../src/operations/service');
     id:'group-review-1',missionId:savedMission.id,raidId:'fika-match-secret',leaderProfileId:'LEADERSECRET',
     state:'review',createdAt:'2026-11-09T20:00:00.000Z',finishedAt:'2026-11-09T20:05:00.000Z',
     members:[{profileId:'PROFILESECRET',scavProfileId:'SCAVSECRET',displayName:'Alpha PMC',ready:true,result:'review'}],
-    progress:{kills:1,loot:2,extract:1},progressTrust:{kills:'host_attested',loot:'spt_accepted_client_delta',extract:'client_report_only'},evidenceEvents:[{eventId:'host-event-secret',type:'kill',profileId:'PROFILESECRET',target:'assault',targetCategory:'scav',victimProfileId:'BOTSECRET',victimRole:'assault',victimSide:'Savage',reporterProfileId:'PROFILESECRET',matchId:'fika-match-secret',evidenceTrust:'host_attested',timestamp:'2026-11-09T20:04:00.000Z'},{eventId:'loot-event-secret',type:'collect',profileId:'PROFILESECRET',amount:2,target:'tpl-123',source:'spt-server-adapter',evidenceTrust:'spt_accepted_client_delta',timestamp:'2026-11-09T20:04:30.000Z'}],
+    progress:{kills:1,loot:2,extract:1},progressTrust:{kills:'host_attested',loot:'spt_accepted_client_delta',extract:'client_report_only'},progressByTrust:{kills:{host_attested:1},loot:{spt_accepted_client_delta:2},extract:{client_report_only:1}},evidenceEvents:[{eventId:'host-event-secret',type:'kill',profileId:'PROFILESECRET',target:'assault',targetCategory:'scav',victimProfileId:'BOTSECRET',victimRole:'assault',victimSide:'Savage',reporterProfileId:'PROFILESECRET',matchId:'fika-match-secret',evidenceTrust:'host_attested',timestamp:'2026-11-09T20:04:00.000Z'},{eventId:'loot-event-secret',type:'collect',profileId:'PROFILESECRET',amount:2,target:'tpl-123',source:'spt-server-adapter',evidenceTrust:'spt_accepted_client_delta',timestamp:'2026-11-09T20:04:30.000Z'}],
     reviewData:{requiredDone:false,aliveProfileIds:['PROFILESECRET'],extractedProfileIds:['PROFILESECRET'],evidenceTrust:'untrusted_client_report',source:'fika-server-adapter',submittedAt:'2026-11-09T20:05:00.000Z'}
   };
   operations.state.groups.push(reviewGroup);
@@ -94,6 +94,7 @@ const { OperationsService } = require('../src/operations/service');
   assert.strictEqual(reviewRows[0].members[0].reviewIndex,0,'admin review member indexes must be stable without exposing profile IDs');
   assert.strictEqual(reviewRows[0].objectiveEvidence[0].reportedCount,1);
   assert.strictEqual(reviewRows[0].objectiveEvidence[0].hostAttestedCount,1);
+  assert.strictEqual(reviewRows[0].objectiveEvidence[0].evidenceCounts.host_attested,1);
   assert.strictEqual(reviewRows[0].objectiveEvidence[0].evidenceStatus,'host_attested_admin_review');
   assert.strictEqual(reviewRows[0].hostEvidence[0].killerName,'Alpha PMC');
   assert.strictEqual(reviewRows[0].objectiveEvidence[1].sptAcceptedCount,2);

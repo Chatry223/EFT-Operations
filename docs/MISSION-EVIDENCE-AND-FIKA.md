@@ -37,6 +37,12 @@ Target stack:
 - Duplicate event IDs are ignored. Host telemetry is rate-limited.
 - Fika raid completion currently moves the operation to the admin review queue. Rewards are not issued from client-only or host-attested reports.
 
+## Per-objective evidence accounting
+
+The operation store maintains a separate credited count for each evidence source in `group.progressByTrust[objectiveId]`. The aggregate `progress` value remains the visible objective count; the trust ledger explains which share came from `server_verified`, `host_attested`, `spt_accepted_client_delta` or `client_report_only`.
+
+A single legacy `progressTrust` label cannot safely reconstruct historical source attribution. If an older group has progress but no per-source ledger, its missing count is classified as `legacy_unattributed` and remains review-only. If stored trust counts exceed objective progress, the API and admin review projection fail closed and classify the count as unattributed. Mixed-source progress is displayed as mixed; one trusted event cannot cause the whole objective count to appear server-verified.
+
 ## Mission target formats
 
 - Mission map: use an SPT location ID, not a display name (for example, `bigmap` = Customs and `woods` = Woods).
