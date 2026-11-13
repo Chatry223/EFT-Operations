@@ -207,13 +207,15 @@ class Fika243OperationsAdapter {
             const original = target[methodName];
             target[methodName] = function (url, info, sessionId, ...rest) {
                 if (methodName === 'handleRaidCreate') {
-                    adapter.assertRaidHostBelongsToSession(sessionId, object(info).hostUsername);
+                    // Fika's host serverId is the host's PMC or Scav character ID.
+                    // Do not trust the display nickname (which may collide or be overridden for headless).
+                    adapter.assertRaidHostBelongsToSession(sessionId, object(info).serverId);
                 } else if (String(object(info).serverId || '') === String(object(info).profileId || '')) {
-                    const match = adapter.services.fikaMatchService && adapter.services.fikaMatchService.getMatch(object(info).serverId);
-                    if (!match) throw new Error('FIKA_HOST_MATCH_NOT_FOUND');
-                    adapter.assertRaidHostBelongsToSession(sessionId, match.hostUsername);
+                    // Host shutdown ends the whole match, so require the authenticated active host.
+                    adapter.assertFikaMatchHostBelongsToSession(sessionId, object(info).serverId, methodName);
                 } else {
-                    adapter.assertProfileBelongsToSession(sessionId, object(info).profileId, methodName);
+                    // A normal leave is allowed only for this session's character currently in that match.
+                    adapter.assertFikaProfileBelongsToMatch(sessionId, object(info).profileId, object(info).serverId, methodName);
                 }
                 return original.call(this, url, info, sessionId, ...rest);
             };
@@ -223,19 +225,20 @@ class Fika243OperationsAdapter {
         return complete;
     }
 
-    assertRaidHostBelongsToSession(sessionId, hostUsername) {
+    assertRaidHostBelongsToSession(sessionId, requestedHostProfileId) {
         const sid = String(sessionId || '').trim();
-        const requestedName = String(hostUsername || '').trim().toLowerCase();
-        if (!sid || !requestedName || !this.services.saveServer || typeof this.services.saveServer.getProfile !== 'function') {
+        const hostId = String(requestedHostProfileId || '').trim();
+        if (!sid || !hostId || !this.services.saveServer || typeof this.services.saveServer.getProfile !== 'function') {
             throw new Error('FIKA_HOST_SESSION_IDENTITY_UNAVAILABLE');
         }
         const profile = safe(() => this.services.saveServer.getProfile(sid), null);
         const characters = object(profile && profile.characters);
-        const names = [object(characters.pmc).Info, object(characters.scav).Info]
-            .map(info => String(object(info).Nickname || '').trim().toLowerCase())
-            .filter(Boolean);
-        if (!names.includes(requestedName)) {
-            this.log('warn', `Rejected Fika raid create for session ${sid}: host username does not match its authenticated PMC/Scav profile.`);
+        const allowedHostIds = [
+            String(object(characters.pmc)._id || ''),
+            String(object(characters.scav)._id || '')
+        ].filter(Boolean);
+        if (!allowedHostIds.includes(hostId)) {
+            this.log('warn', `Rejected Fika raid create for session ${sid}: serverId is not the authenticated account's PMC/Scav character ID.`);
             throw new Error('FIKA_HOST_SESSION_IDENTITY_MISMATCH');
         }
         return true;

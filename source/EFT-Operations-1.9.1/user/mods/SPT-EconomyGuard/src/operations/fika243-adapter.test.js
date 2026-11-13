@@ -45,7 +45,16 @@ assert.equal(matchEvents[0].evidenceTrust, 'fika_match_end_lifecycle_with_authen
 assert.equal(matchEvents[0].rewardEligible, false, 'a match-end hook alone must never authorize rewards');
 
 // A raid-end request is client-originated. Preserve it for review, but mark it untrusted.
-adapter.services.saveServer = { getProfile() { return { characters: { pmc: { _id: 'abcdef0123456789abcdef01', Info: { Nickname: 'pmc-name' } }, scav: { _id: 'abcdef0123456789abcdef02', Info: { Nickname: 'scav-name' } } } }; } };
+adapter.services.saveServer = { getProfile(sessionId) {
+    if (sessionId === 'session-unrelated') return { characters: {
+        pmc: { _id: 'abcdef0123456789abcdef99', Info: { Nickname: 'other-pmc' } },
+        scav: { _id: 'abcdef0123456789abcdef98', Info: { Nickname: 'other-scav' } }
+    } };
+    return { characters: {
+        pmc: { _id: 'abcdef0123456789abcdef01', Info: { Nickname: 'pmc-name' } },
+        scav: { _id: 'abcdef0123456789abcdef02', Info: { Nickname: 'scav-name' } }
+    } };
+} };
 const hostMatchId = 'abcdef0123456789abcdef01';
 const hostMatchMap = new Map([[hostMatchId, { isDead: false }]]);
 adapter.services.fikaMatchService = {
@@ -129,12 +138,13 @@ const fakeRaidCallbacks = {
     handleRaidLeave(url, info, sessionId) { acceptedRaidCalls++; return 'left'; }
 };
 assert.equal(adapter.patchRaidCallbacks(fakeRaidCallbacks), true);
-assert.equal(fakeRaidCallbacks.handleRaidCreate('', { serverId: 'match-1', hostUsername: 'pmc-name' }, 'session-1'), 'created');
+assert.equal(fakeRaidCallbacks.handleRaidCreate('', { serverId: hostMatchId, hostUsername: 'pmc-name' }, 'session-1'), 'created');
 assert.equal(fakeRaidCallbacks.handleRaidLeave('', { serverId: 'match-1', profileId: 'abcdef0123456789abcdef02' }, 'session-1'), 'left');
-assert.equal(fakeRaidCallbacks.handleRaidLeave('', { serverId: 'match-1', profileId: 'match-1' }, 'session-1'), 'left', 'host sentinel must be authenticated using Fika match host identity');
+assert.equal(fakeRaidCallbacks.handleRaidLeave('', { serverId: hostMatchId, profileId: hostMatchId }, 'session-1'), 'left', 'host sentinel must be authenticated as the active host character');
 assert.equal(acceptedRaidCalls, 3);
-assert.throws(() => fakeRaidCallbacks.handleRaidCreate('', { serverId: 'match-2', hostUsername: 'someone-else' }, 'session-1'), /FIKA_HOST_SESSION_IDENTITY_MISMATCH/);
+assert.throws(() => fakeRaidCallbacks.handleRaidCreate('', { serverId: 'foreign-host-match', hostUsername: 'pmc-name' }, 'session-1'), /FIKA_HOST_SESSION_IDENTITY_MISMATCH/);
 assert.throws(() => fakeRaidCallbacks.handleRaidLeave('', { serverId: 'match-1', profileId: 'abcdef0123456789abcdef99' }, 'session-1'), /FIKA_SESSION_PROFILE_MISMATCH/);
+assert.throws(() => fakeRaidCallbacks.handleRaidLeave('', { serverId: hostMatchId, profileId: hostMatchId }, 'session-unrelated'), /FIKA_MATCH_HOST_SESSION_MISMATCH/);
 assert.equal(acceptedRaidCalls, 3, 'spoofed create/leave requests must be rejected before Fika mutates matches');
 
 // Exact Fika 2.4.3 lifecycle simulation: bind a ready operation group only
