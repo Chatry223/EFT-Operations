@@ -877,7 +877,11 @@ class AdminPanelServer {
             return this.send(res, 404, { error: 'NOT_FOUND' });
         } catch (err) {
             const known = ['INVALID_PROFILE_ID', 'INVALID_TPL', 'INVALID_CHANNEL', 'INVALID_EXPIRY', 'INVALID_MODE', 'INVALID_NOTIFICATIONS', 'INVALID_MESSAGES', 'INVALID_MESSAGE_ENTRY', 'INVALID_PRICE_SETTINGS', 'INVALID_CASE_STATUS', 'CASE_NOT_FOUND', 'BODY_TOO_LARGE', 'INVALID_JSON', 'INVALID_USERNAME', 'INVALID_PASSWORD', 'INVALID_EDITION', 'USERNAME_ALREADY_EXISTS', 'ACCOUNT_CREATION_FAILED', 'ACCOUNT_CREATION_NOT_FOUND', 'ACCOUNT_PROVISIONING_UNAVAILABLE', 'PROFILE_NOT_FOUND', 'INVALID_IP_LIST', 'INVALID_IP_ENTRY', 'IP_ALLOWLIST_EMPTY', 'SAVE_FAILED', 'MISSION_NOT_FOUND', 'MISSION_NOT_EDITABLE', 'MISSION_UNAVAILABLE', 'GROUP_FULL', 'GROUP_NOT_FOUND', 'NOT_GROUP_MEMBER', 'GROUP_NOT_READY', 'RAID_NOT_ACTIVE', 'OPERATIONS_UNAVAILABLE', 'INVALID_MISSION', 'INVALID_TITLE', 'INVALID_DESCRIPTION', 'INVALID_MAP', 'INVALID_MODE', 'INVALID_MIN_PLAYERS', 'INVALID_MAX_PLAYERS', 'INVALID_OBJECTIVES', 'INVALID_REWARD_POINTS', 'INVALID_REWARD_ROUBLES', 'INVALID_REWARD_TPL', 'INVALID_REWARD_ITEM_COUNT', 'INVALID_START_AT', 'INVALID_END_AT', 'MISSION_NOT_READY', 'REVIEW_NOT_FOUND', 'INVALID_REVIEW_DECISION', 'INVALID_REVIEW_NOTE', 'REVIEW_ATTESTATION_REQUIRED', 'REVIEW_OBJECTIVES_NOT_CONFIRMED', 'REVIEW_OBJECTIVE_EVIDENCE_REQUIRED', 'INVALID_REVIEW_OBJECTIVE_EVIDENCE_REF', 'REVIEW_MEMBERS_NOT_CONFIRMED', 'REVIEW_MEMBER_EVIDENCE_REQUIRED', 'INVALID_REVIEW_MEMBER_EVIDENCE_REF', 'REVIEW_MEMBER_OUTCOMES_REQUIRED', 'INVALID_REVIEW_MEMBER_OUTCOME'];
-            const status = known.includes(err.message) || String(err.message).startsWith('INVALID_') || String(err.message).startsWith('BOARD_') || String(err.message).startsWith('NEWS_') || String(err.message).startsWith('SVM_') || String(err.message).startsWith('UNKNOWN_SVM_') ? 400 : 500;
+            const errorCode = String(err.message || '');
+            const status = known.includes(errorCode) || errorCode.startsWith('INVALID_')
+                || errorCode.startsWith('REVIEW_') || errorCode.startsWith('BOARD_')
+                || errorCode.startsWith('NEWS_') || errorCode.startsWith('SVM_')
+                || errorCode.startsWith('UNKNOWN_SVM_') ? 400 : 500;
             this.log(status === 500 ? 'error' : 'warn', `Admin API ${pathname}: ${err.message}`);
             return this.send(res, status, { error: err.message || 'INTERNAL_ERROR' });
         }
