@@ -594,7 +594,7 @@ namespace EFTOperations.Client
             try
             {
                 if (fikaHarmony == null) fikaHarmony = new Harmony("com.eft.operations.client.fika-host-evidence");
-                fikaHarmony.Patch(target, null, new HarmonyMethod(postfix), null, null);
+                fikaHarmony.Patch(target, null, new HarmonyMethod(postfix), null, null, null);
                 fikaKillHookInstalled = true;
                 Logger.LogInfo("Fika 1.2.3 host kill telemetry hook installed on EFT Player.OnBeenKilledByAggressor.");
                 return true;
@@ -629,7 +629,7 @@ namespace EFTOperations.Client
             try
             {
                 if (fikaHarmony == null) fikaHarmony = new Harmony("com.eft.operations.client.fika-host-evidence");
-                fikaHarmony.Patch(target, null, new HarmonyMethod(postfix), null, null);
+                fikaHarmony.Patch(target, null, new HarmonyMethod(postfix), null, null, null);
                 fikaVisitHookInstalled = true;
                 Logger.LogInfo("Fika 1.2.3 visit telemetry hook installed on EFT.Player.SpecialPlaceVisited(string, int).");
                 return true;
