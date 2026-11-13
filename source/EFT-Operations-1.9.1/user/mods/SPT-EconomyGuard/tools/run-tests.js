@@ -9,9 +9,10 @@ files.push(path.join(root, 'src', 'operations', 'service.test.js'));
 files.push(path.join(root, 'src', 'operations', 'fika243-adapter.test.js'));
 files.push(path.join(root, 'src', 'operations', 'reward-delivery.test.js'));
 let passed = 0, failed = 0;
-const TEST_TIMEOUT_MS = 45000;
+const TEST_TIMEOUT_MS = 15000;
 for (const file of files) {
   const relative = path.relative(root, file);
+  process.stdout.write(`RUN  ${relative}\n`);
   const result = spawnSync(process.execPath, [file], {
     cwd: root,
     encoding: 'utf8',
