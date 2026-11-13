@@ -88,10 +88,14 @@ const hostB = api.acceptMission('', { missionId: hostMission.id }, 'session-b').
 api.setReady('', { groupId: hostA.group.id, ready: true }, 'session-a');
 api.setReady('', { groupId: hostA.group.id, ready: true }, 'session-b');
 operations.startGroup(hostA.group.id, 'abcdef0123456789abcdef10');
-const activeFikaProfiles = new Set(['abcdef0123456789abcdef10', playerA]);
+const activeFikaProfiles = new Map([
+    ['abcdef0123456789abcdef10', new Set(['abcdef0123456789abcdef10', playerA])],
+    ['abcdef0123456789abcdef90', new Set(['abcdef0123456789abcdef90', playerA, playerB])]
+]);
 api.fikaOperationsAdapter = {
     isProfileInFikaMatch(matchId, profileId) {
-        return matchId === 'abcdef0123456789abcdef10' && activeFikaProfiles.has(profileId);
+        const currentRoster = activeFikaProfiles.get(matchId);
+        return !!currentRoster && currentRoster.has(profileId);
     }
 };
 
