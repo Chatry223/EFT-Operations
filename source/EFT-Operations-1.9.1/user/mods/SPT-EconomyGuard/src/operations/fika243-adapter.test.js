@@ -46,7 +46,17 @@ assert.equal(matchEvents[0].rewardEligible, false, 'a match-end hook alone must 
 
 // A raid-end request is client-originated. Preserve it for review, but mark it untrusted.
 adapter.services.saveServer = { getProfile() { return { characters: { pmc: { _id: 'abcdef0123456789abcdef01', Info: { Nickname: 'pmc-name' } }, scav: { _id: 'abcdef0123456789abcdef02', Info: { Nickname: 'scav-name' } } } }; } };
-adapter.services.fikaMatchService = { getMatchIdByProfile() { return 'match-1'; }, getMatch(id) { return id === 'match-1' ? { hostUsername: 'pmc-name' } : null; } };
+const hostMatchId = 'abcdef0123456789abcdef01';
+const hostMatchMap = new Map([[hostMatchId, { isDead: false }]]);
+adapter.services.fikaMatchService = {
+    getMatchIdByProfile() { return 'match-1'; },
+    getMatch(id) {
+        if (id === 'match-1') return { hostUsername: 'pmc-name' };
+        if (id === hostMatchId) return { players: hostMatchMap };
+        if (id === 'foreign-host-match') return { players: new Map([['abcdef0123456789abcdef99', { isDead: false }]]) };
+        return null;
+    }
+};
 const raidEnd = adapter.captureRaidEnd('session-1', { serverId: 'woods.123', results: { result: 'Survived', exitName: 'Outskirts', playTime: 1200 } });
 assert.equal(raidEnd.matchId, 'match-1');
 assert.equal(raidEnd.profileId, 'abcdef0123456789abcdef01');
@@ -58,12 +68,16 @@ assert.equal(raidEnd.rewardEligible, false, 'client raid-result payloads must ne
 let acceptedUpdateCalls = 0;
 const fakeUpdateCallbacks = {
     handleRaidAddPlayer(url, info, sessionId) { acceptedUpdateCalls++; return 'added'; },
-    handlePlayerDied(url, info, sessionId) { acceptedUpdateCalls++; return 'dead'; }
+    handlePlayerDied(url, info, sessionId) { acceptedUpdateCalls++; return 'dead'; },
+    handleSetStatus(url, info, sessionId) { acceptedUpdateCalls++; return 'status:' + info.status; }
 };
 assert.equal(adapter.patchUpdateCallbacks(fakeUpdateCallbacks), true);
 assert.equal(fakeUpdateCallbacks.handleRaidAddPlayer('', { profileId: 'abcdef0123456789abcdef01' }, 'session-1'), 'added');
 assert.equal(fakeUpdateCallbacks.handlePlayerDied('', { profileId: 'abcdef0123456789abcdef02' }, 'session-1'), 'dead');
-assert.equal(acceptedUpdateCalls, 2);
+assert.equal(fakeUpdateCallbacks.handleSetStatus('', { serverId: hostMatchId, status: 'complete' }, 'session-1'), 'status:complete');
+assert.throws(() => fakeUpdateCallbacks.handleSetStatus('', { serverId: 'foreign-host-match', status: 'complete' }, 'session-1'), /FIKA_MATCH_HOST_SESSION_MISMATCH/);
+assert.throws(() => fakeUpdateCallbacks.handleSetStatus('', { serverId: 'unknown-match', status: 'complete' }, 'session-1'), /FIKA_MATCH_HOST_SESSION_MISMATCH/);
+assert.equal(acceptedUpdateCalls, 3, 'a non-host session cannot change another match status');
 const deathEvidence = adapter.getRecentEvents(20).find(event => event.type === 'fika_player_died');
 assert.ok(deathEvidence, 'authenticated Fika player-death reports should be retained for review');
 assert.equal(deathEvidence.profileId, 'abcdef0123456789abcdef01');
@@ -97,7 +111,7 @@ assert.equal(raidEvidenceWithVictim.evidenceTrust, 'untrusted_client_report');
 assert.equal(raidEvidenceWithVictim.rewardEligible, false);
 assert.throws(() => fakeUpdateCallbacks.handleRaidAddPlayer('', { profileId: 'abcdef0123456789abcdef99' }, 'session-1'), /FIKA_SESSION_PROFILE_MISMATCH/);
 assert.throws(() => fakeUpdateCallbacks.handlePlayerDied('', { profileId: 'abcdef0123456789abcdef99' }, 'session-1'), /FIKA_SESSION_PROFILE_MISMATCH/);
-assert.equal(acceptedUpdateCalls, 2, 'mismatched account IDs must be rejected before Fika mutates its match registry');
+assert.equal(acceptedUpdateCalls, 3, 'mismatched account IDs and non-host status updates must be rejected before Fika mutates its match registry');
 
 // Raid creation and host/member leave requests must also match the authenticated account.
 let acceptedRaidCalls = 0;
@@ -218,7 +232,7 @@ const statusMatchService = {
 };
 const statusInstances = {
     SaveServer: { getProfile() { return null; } },
-    FikaUpdateCallbacks: { handleRaidAddPlayer() {}, handlePlayerDied() {} },
+    FikaUpdateCallbacks: { handleRaidAddPlayer() {}, handlePlayerDied() {}, handleSetStatus() {} },
     FikaRaidCallbacks: { handleRaidCreate() {}, handleRaidLeave() {} },
     FikaMatchService: statusMatchService,
     LocationLifecycleService: { startLocalRaid() { return { location: 'woods' }; }, endLocalRaid() {} }
