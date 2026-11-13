@@ -251,10 +251,15 @@ class OperationsService {
             && event.type === 'collect' && event.acceptedBySpt === true;
         const clientReported = event.evidenceTrust === 'client_report_only' && source === 'fika-client-report'
             && ['extract', 'survive', 'raid_complete'].includes(event.type);
-        const hostAttestedIdentity = event.evidenceTrust === 'host_attested' && source === 'fika-host-client'
+        const memberHostAttestedIdentity = event.evidenceTrust === 'host_attested' && source === 'fika-host-client'
             && event.reporterProfileId && g.members.some(member => String(member.profileId) === String(event.reporterProfileId) || String(member.scavProfileId || '') === String(event.reporterProfileId))
             && String(event.reporterProfileId) === String(event.matchId)
             && String(event.matchId || '') === String(g.raidId || '');
+        const headlessHostAttestedIdentity = event.evidenceTrust === 'host_attested'
+            && source === 'fika-headless-host-client' && event.headlessHost === true
+            && event.reporterProfileId && String(event.reporterProfileId) === String(event.matchId)
+            && String(event.matchId || '') === String(g.raidId || '');
+        const hostAttestedIdentity = !!(memberHostAttestedIdentity || headlessHostAttestedIdentity);
         const hostAttestedKill = hostAttestedIdentity && event.type === 'kill' && event.victimIsAi === true;
         const hostAttestedVisit = hostAttestedIdentity && event.type === 'visit' && typeof event.target === 'string' && !!event.target.trim();
         const hostAttested = !!(hostAttestedKill || hostAttestedVisit);
@@ -279,7 +284,9 @@ class OperationsService {
         if (g.processedEventIds.includes(eventId)) return clone(g.progress);
         if (hostAttested) {
             const reporterId = requireProfileId(event.reporterProfileId);
-            if (!g.members.some(member => member.profileId === reporterId || member.scavProfileId === reporterId)) throw new Error('HOST_REPORTER_NOT_MEMBER');
+            const reporterIsMissionMember = g.members.some(member => member.profileId === reporterId || member.scavProfileId === reporterId);
+            const reporterIsAuthenticatedHeadless = event.headlessHost === true && source === 'fika-headless-host-client';
+            if (!reporterIsMissionMember && !reporterIsAuthenticatedHeadless) throw new Error('HOST_REPORTER_NOT_MEMBER');
             if (reporterId !== String(event.matchId)) throw new Error('HOST_REPORTER_MATCH_MISMATCH');
             if (event.matchId !== g.raidId) throw new Error('RAID_EVENT_MATCH_MISMATCH');
             if (event.type === 'kill') {
@@ -355,6 +362,7 @@ class OperationsService {
             victimProfileId: event.victimProfileId ? String(event.victimProfileId) : null,
             victimRole: String(event.victimRole || ''), victimSide: String(event.victimSide || ''),
             reporterProfileId: event.reporterProfileId ? String(event.reporterProfileId) : null,
+            reporterKind: event.headlessHost === true ? 'fika_headless_host' : 'fika_player_host',
             matchId: event.matchId ? String(event.matchId) : null,
             evidenceTrust: event.evidenceTrust, source, timestamp: new Date().toISOString()
         });

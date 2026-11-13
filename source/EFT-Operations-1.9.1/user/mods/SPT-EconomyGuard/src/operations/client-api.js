@@ -39,7 +39,15 @@ class OperationsClientApi {
         const scavId = String(scav && scav._id || '');
         const info = profile && profile.info || {};
         const displayName = pmc && pmc.Info && pmc.Info.Nickname || scav && scav.Info && scav.Info.Nickname || info.Nickname || info.username || 'Operator';
-        return { profileId, scavProfileId: PROFILE_ID_RE.test(scavId) && scavId !== profileId ? scavId : null, displayName: String(displayName).slice(0, 40) };
+        return {
+            sessionId: sid,
+            profileId,
+            scavProfileId: PROFILE_ID_RE.test(scavId) && scavId !== profileId ? scavId : null,
+            displayName: String(displayName).slice(0, 40),
+            // Fika 2.4.3 marks its dedicated host account in SaveServer profile info.
+            // This flag is used only inside the authenticated server API.
+            isFikaHeadless: String(info.password || '') === 'fika-headless'
+        };
     }
 
     publicMission(mission, profileId = null) {
@@ -150,10 +158,13 @@ class OperationsClientApi {
             }
 
             const groups = this.operations && this.operations.state && Array.isArray(this.operations.state.groups) ? this.operations.state.groups : [];
+            if (reporter.isFikaHeadless && matchId !== reporter.sessionId) throw new Error('HEADLESS_HOST_PROFILE_MISMATCH');
             const group = groups.find(item => item.state === 'in_raid' && String(item.raidId || '') === matchId
-                && item.members && item.members.some(member => String(member.profileId) === reporter.profileId));
+                && (reporter.isFikaHeadless || (item.members && item.members.some(member => String(member.profileId) === reporter.profileId))));
             if (!group) throw new Error('HOST_NOT_ACTIVE_MISSION_MEMBER');
-            if (matchId !== reporter.profileId && matchId !== String(reporter.scavProfileId || '')) throw new Error('HOST_PROFILE_MISMATCH');
+            if (!reporter.isFikaHeadless && matchId !== reporter.profileId && matchId !== String(reporter.scavProfileId || '')) {
+                throw new Error('HOST_PROFILE_MISMATCH');
+            }
             if (info.groupId && String(info.groupId) !== String(group.id)) throw new Error('RAID_GROUP_MISMATCH');
 
             const member = group.members.find(item => String(item.profileId) === actorProfileId || String(item.scavProfileId || '') === actorProfileId);
@@ -172,10 +183,11 @@ class OperationsClientApi {
             }
 
             const now = Date.now();
-            const window = this.hostEventWindows.get(reporter.profileId) || { startedAt: now, count: 0 };
+            const reporterKey = reporter.isFikaHeadless ? reporter.sessionId : reporter.profileId;
+            const window = this.hostEventWindows.get(reporterKey) || { startedAt: now, count: 0 };
             if (now - window.startedAt >= 60000) { window.startedAt = now; window.count = 0; }
             window.count++;
-            this.hostEventWindows.set(reporter.profileId, window);
+            this.hostEventWindows.set(reporterKey, window);
             if (window.count > 180) throw new Error('HOST_EVENT_RATE_LIMIT');
             if (this.hostEventWindows.size > 1000) {
                 for (const [key, value] of this.hostEventWindows) if (now - value.startedAt > 120000) this.hostEventWindows.delete(key);
@@ -190,9 +202,10 @@ class OperationsClientApi {
                 amount: 1,
                 map: mission.map,
                 matchId,
-                reporterProfileId: matchId,
-                source: 'fika-host-client',
-                evidenceTrust: 'host_attested'
+                reporterProfileId: reporter.isFikaHeadless ? reporter.sessionId : matchId,
+                source: reporter.isFikaHeadless ? 'fika-headless-host-client' : 'fika-host-client',
+                evidenceTrust: 'host_attested',
+                ...(reporter.isFikaHeadless ? { headlessHost: true } : {})
             };
             if (type === 'visit') {
                 event.target = triggerId;

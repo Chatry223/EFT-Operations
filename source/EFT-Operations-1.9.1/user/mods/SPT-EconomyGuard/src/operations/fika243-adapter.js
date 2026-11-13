@@ -179,9 +179,9 @@ class Fika243OperationsAdapter {
                 } else if (methodName === 'handlePlayerspawn' || methodName === 'handlePlayerDied') {
                     adapter.assertFikaProfileBelongsToMatch(sessionId, request.profileId, matchId, methodName);
                 } else {
-                    // Enrollment: authenticate the joining account and require a live destination match.
-                    adapter.assertProfileBelongsToSession(sessionId, request.profileId, methodName);
-                    adapter.assertFikaMatchExists(matchId, methodName);
+                    // Enrollment: authenticate the exact joining PMC/Scav and ensure
+                    // neither character is already committed to a different Fika match.
+                    adapter.assertFikaAccountCanJoinMatch(sessionId, request.profileId, matchId, methodName);
                 }
                 const result = original.call(this, url, info, sessionId, ...rest);
                 if (methodName === 'handlePlayerDied') safe(() => adapter.capturePlayerDeath(sessionId, info));
@@ -196,26 +196,30 @@ class Fika243OperationsAdapter {
     patchRaidCallbacks(instance) {
         if (!instance) return false;
         const proto = Object.getPrototypeOf(instance);
-        const hasHooks = proto && (Object.prototype.hasOwnProperty.call(proto, 'handleRaidCreate') || Object.prototype.hasOwnProperty.call(proto, 'handleRaidLeave'));
+        const raidMethods = ['handleRaidCreate', 'handleRaidJoin', 'handleRaidLeave'];
+        const hasHooks = proto && raidMethods.some(name => Object.prototype.hasOwnProperty.call(proto, name));
         const target = hasHooks ? proto : instance;
         const adapter = this;
         let complete = true;
-        for (const methodName of ['handleRaidCreate', 'handleRaidLeave']) {
+        for (const methodName of raidMethods) {
             if (typeof target[methodName] !== 'function') { complete = false; continue; }
             const flag = '__egFika243Identity_' + methodName;
             if (target[flag]) continue;
             const original = target[methodName];
             target[methodName] = function (url, info, sessionId, ...rest) {
+                const request = object(info);
                 if (methodName === 'handleRaidCreate') {
-                    // Fika's host serverId is the host's PMC or Scav character ID.
-                    // Do not trust the display nickname (which may collide or be overridden for headless).
-                    adapter.assertRaidHostBelongsToSession(sessionId, object(info).serverId);
-                } else if (String(object(info).serverId || '') === String(object(info).profileId || '')) {
-                    // Host shutdown ends the whole match, so require the authenticated active host.
-                    adapter.assertFikaMatchHostBelongsToSession(sessionId, object(info).serverId, methodName);
+                    // Fika's normal host uses its PMC/Scav ID. Its Headless service
+                    // uses the dedicated SPT session ID (verified by info.password).
+                    adapter.assertRaidHostBelongsToSession(sessionId, request.serverId);
+                } else if (methodName === 'handleRaidJoin') {
+                    // Join is a read-only handshake, but the session must exist and
+                    // cannot request a second match while its PMC/Scav is elsewhere.
+                    adapter.assertFikaSessionCanJoinMatch(sessionId, request.serverId);
+                } else if (String(request.serverId || '') === String(request.profileId || '')) {
+                    adapter.assertFikaMatchHostBelongsToSession(sessionId, request.serverId, methodName);
                 } else {
-                    // A normal leave is allowed only for this session's character currently in that match.
-                    adapter.assertFikaProfileBelongsToMatch(sessionId, object(info).profileId, object(info).serverId, methodName);
+                    adapter.assertFikaProfileBelongsToMatch(sessionId, request.profileId, request.serverId, methodName);
                 }
                 return original.call(this, url, info, sessionId, ...rest);
             };
@@ -232,11 +236,12 @@ class Fika243OperationsAdapter {
             throw new Error('FIKA_HOST_SESSION_IDENTITY_UNAVAILABLE');
         }
         const profile = safe(() => this.services.saveServer.getProfile(sid), null);
-        const characters = object(profile && profile.characters);
-        const allowedHostIds = [
-            String(object(characters.pmc)._id || ''),
-            String(object(characters.scav)._id || '')
-        ].filter(Boolean);
+        if (!profile) throw new Error('FIKA_HOST_SESSION_IDENTITY_UNAVAILABLE');
+        const characters = object(profile.characters);
+        const isHeadless = String(object(profile.info).password || '') === 'fika-headless';
+        const allowedHostIds = isHeadless
+            ? [sid]
+            : [String(object(characters.pmc)._id || ''), String(object(characters.scav)._id || '')].filter(Boolean);
         if (!allowedHostIds.includes(hostId)) {
             this.log('warn', `Rejected Fika raid create for session ${sid}: serverId is not the authenticated account's PMC/Scav character ID.`);
             throw new Error('FIKA_HOST_SESSION_IDENTITY_MISMATCH');
@@ -267,11 +272,12 @@ class Fika243OperationsAdapter {
             throw new Error('FIKA_MATCH_HOST_SESSION_UNAVAILABLE');
         }
         const profile = safe(() => this.services.saveServer.getProfile(sid), null);
-        const characters = object(profile && profile.characters);
-        const allowedHostIds = [
-            String(object(characters.pmc)._id || ''),
-            String(object(characters.scav)._id || '')
-        ].filter(Boolean);
+        if (!profile) throw new Error('FIKA_MATCH_HOST_SESSION_UNAVAILABLE');
+        const characters = object(profile.characters);
+        const isHeadless = String(object(profile.info).password || '') === 'fika-headless';
+        const allowedHostIds = isHeadless
+            ? [sid]
+            : [String(object(characters.pmc)._id || ''), String(object(characters.scav)._id || '')].filter(Boolean);
         if (!allowedHostIds.includes(matchId)) {
             this.log('warn', `Rejected Fika ${methodName} for session ${sid}: match ID is not one of the authenticated account's PMC/Scav characters.`);
             throw new Error('FIKA_MATCH_HOST_SESSION_MISMATCH');
@@ -316,7 +322,10 @@ class Fika243OperationsAdapter {
         const profile = safe(() => this.services.saveServer.getProfile(sid), null);
         if (!profile) throw new Error('FIKA_MATCH_SESSION_UNAVAILABLE');
         const characters = object(profile.characters);
-        const ownIds = [String(object(characters.pmc)._id || ''), String(object(characters.scav)._id || '')].filter(Boolean);
+        const isHeadless = String(object(profile.info).password || '') === 'fika-headless';
+        const ownIds = isHeadless
+            ? [sid]
+            : [String(object(characters.pmc)._id || ''), String(object(characters.scav)._id || '')].filter(Boolean);
         const match = this.getFikaMatchOrThrow(matchId);
         if (!ownIds.some(id => match.players.has(id))) throw new Error('FIKA_MATCH_SESSION_NOT_MEMBER');
         return true;
@@ -324,8 +333,68 @@ class Fika243OperationsAdapter {
 
     assertFikaProfileBelongsToMatch(sessionId, profileId, matchId, methodName) {
         this.assertProfileBelongsToSession(sessionId, profileId, methodName);
-        const match = this.getFikaMatchOrThrow(matchId);
-        if (!match.players.has(String(profileId || '').trim())) throw new Error('FIKA_MATCH_PROFILE_NOT_MEMBER');
+        const sid = String(sessionId || '').trim();
+        const requested = String(profileId || '').trim();
+        const matchKey = String(matchId || '').trim();
+        const profile = safe(() => this.services.saveServer.getProfile(sid), null);
+        if (!profile) throw new Error('FIKA_MATCH_SESSION_UNAVAILABLE');
+        const characters = object(profile.characters);
+        const accountCharacterIds = [
+            String(object(characters.pmc)._id || ''),
+            String(object(characters.scav)._id || '')
+        ].filter(Boolean);
+        const match = this.getFikaMatchOrThrow(matchKey);
+        const isHeadless = String(object(profile.info).password || '') === 'fika-headless';
+        const isInMatch = isHeadless
+            ? matchKey === sid && match.players.has(sid) && accountCharacterIds.includes(requested)
+            : match.players.has(requested);
+        if (!isInMatch) throw new Error('FIKA_MATCH_PROFILE_NOT_MEMBER');
+        return true;
+    }
+
+    assertFikaSessionCanJoinMatch(sessionId, matchId) {
+        const sid = String(sessionId || '').trim();
+        if (!sid || !this.services.saveServer || typeof this.services.saveServer.getProfile !== 'function') {
+            throw new Error('FIKA_MATCH_SESSION_UNAVAILABLE');
+        }
+        const profile = safe(() => this.services.saveServer.getProfile(sid), null);
+        if (!profile) throw new Error('FIKA_MATCH_SESSION_UNAVAILABLE');
+        const characters = object(profile.characters);
+        const isHeadless = String(object(profile.info).password || '') === 'fika-headless';
+        const ownIds = isHeadless ? [sid] : [
+            String(object(characters.pmc)._id || ''),
+            String(object(characters.scav)._id || '')
+        ].filter(Boolean);
+        return this.assertNoOtherFikaMatch(ownIds, matchId);
+    }
+
+    assertFikaAccountCanJoinMatch(sessionId, requestedProfileId, matchId, methodName) {
+        this.assertProfileBelongsToSession(sessionId, requestedProfileId, methodName);
+        const sid = String(sessionId || '').trim();
+        const profile = safe(() => this.services.saveServer.getProfile(sid), null);
+        if (!profile) throw new Error('FIKA_MATCH_SESSION_UNAVAILABLE');
+        const characters = object(profile.characters);
+        const ownIds = [
+            String(object(characters.pmc)._id || ''),
+            String(object(characters.scav)._id || '')
+        ].filter(Boolean);
+        return this.assertNoOtherFikaMatch(ownIds, matchId);
+    }
+
+    assertNoOtherFikaMatch(profileIds, targetMatchId) {
+        const matchKey = String(targetMatchId || '').trim();
+        this.getFikaMatchOrThrow(matchKey);
+        const service = this.services.fikaMatchService;
+        if (!service || typeof service.getMatchIdByPlayer !== 'function') {
+            throw new Error('FIKA_MATCH_MEMBERSHIP_LOOKUP_UNAVAILABLE');
+        }
+        for (const profileId of profileIds || []) {
+            if (!profileId) continue;
+            const currentMatchId = safe(() => service.getMatchIdByPlayer(profileId), null);
+            if (currentMatchId && String(currentMatchId) !== matchKey) {
+                throw new Error('FIKA_PROFILE_ALREADY_IN_OTHER_MATCH');
+            }
+        }
         return true;
     }
 

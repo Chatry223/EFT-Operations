@@ -25,6 +25,10 @@ const playerB = 'abcdef0123456789abcdef02';
 const saveServer = { getProfile(sessionId) {
     if (sessionId === 'session-a') return { info: { Nickname: 'AccountAlpha' }, characters: { pmc: { _id: playerA, Info: { Nickname: 'Alpha' } }, scav: { _id: 'abcdef0123456789abcdef09', Info: { Nickname: 'Alpha-Scav' } } } };
     if (sessionId === 'session-b') return { info: { Nickname: 'AccountBravo' }, characters: { pmc: { _id: playerB, Info: { Nickname: 'Bravo' } }, scav: { _id: 'abcdef0123456789abcdef10', Info: { Nickname: 'Bravo-Scav' } } } };
+    if (sessionId === 'headless-session') return { info: { username: 'headless-test', password: 'fika-headless' }, characters: {
+        pmc: { _id: 'abcdef0123456789abcdef91', Info: { Nickname: 'headless-test' } },
+        scav: { _id: 'abcdef0123456789abcdef92', Info: { Nickname: 'headless-test-scav' } }
+    } };
     throw new Error('NO_PROFILE');
 } };
 const responses = { noBody: value => ({ wrapped: value }) };
@@ -139,6 +143,42 @@ const hostReview = operations.finishGroup(hostA.group.id, { verified: true, aliv
 assert.equal(hostReview.state, 'review', 'host-attested kills never trigger automatic completion or rewards');
 assert.equal(operations.state.awards.length, 0);
 assert.equal(hostReview.reviewData.objectiveEvidence.length, 3);
+
+// Fika 2.4.3 Headless uses its authenticated SPT Session ID as the Fika serverId,
+// but remains a telemetry reporter rather than a mission squad member or a server verifier.
+const headlessMission = operations.save({ title: 'Headless Host Mission', map: 'woods', mode: 'squad', minPlayers: 2, maxPlayers: 2,
+    objectives: [{ id: 'scavs', type: 'kill', target: 'scav', count: 1 }],
+    rewards: { points: 125, roubles: 0, items: [] } });
+operations.setStatus(headlessMission.id, 'published');
+const headlessA = api.acceptMission('', { missionId: headlessMission.id }, 'session-a').wrapped;
+const headlessB = api.acceptMission('', { missionId: headlessMission.id }, 'session-b').wrapped;
+api.setReady('', { groupId: headlessA.group.id, ready: true }, 'session-a');
+api.setReady('', { groupId: headlessA.group.id, ready: true }, 'session-b');
+operations.startGroup(headlessA.group.id, 'headless-session');
+const headlessKill = api.hostRaidEvent('', {
+    eventId: 'headless-host-kill-001', matchId: 'headless-session',
+    killerProfileId: playerA, victimProfileId: 'abcdef0123456789abcdef93',
+    victimRole: 'assault', victimSide: 'Savage', victimIsAi: true
+}, 'headless-session').wrapped;
+assert.equal(headlessKill.ok, true, 'authenticated Fika Headless host may report for the linked mission Match');
+assert.equal(headlessKill.evidenceTrust, 'host_attested');
+assert.equal(headlessKill.group.objectiveProgress[0].progress, 1);
+assert.equal(headlessKill.group.objectiveProgress[0].trust, 'host_attested');
+assert.equal(operations.state.groups.find(group => group.id === headlessA.group.id).evidenceEvents[0].reporterKind, 'fika_headless_host');
+assert.equal(api.hostRaidEvent('', {
+    eventId: 'headless-host-kill-wrong-match', matchId: 'abcdef0123456789abcdef91',
+    killerProfileId: playerA, victimProfileId: 'abcdef0123456789abcdef94',
+    victimRole: 'assault', victimSide: 'Savage', victimIsAi: true
+}, 'headless-session').wrapped.error, 'HEADLESS_HOST_PROFILE_MISMATCH');
+assert.equal(api.hostRaidEvent('', {
+    eventId: 'headless-host-kill-not-member', matchId: 'headless-session',
+    killerProfileId: 'abcdef0123456789abcdef99', victimProfileId: 'abcdef0123456789abcdef95',
+    victimRole: 'assault', victimSide: 'Savage', victimIsAi: true
+}, 'headless-session').wrapped.error, 'KILLER_NOT_GROUP_MEMBER');
+const headlessReview = operations.finishGroup(headlessA.group.id, { verified: false, source: 'fika-server-adapter', evidenceTrust: 'fika_match_end_lifecycle_with_authenticated_roster', aliveProfileIds: [], extractedProfileIds: [] });
+assert.equal(headlessReview.state, 'review');
+assert.equal(operations.state.awards.filter(award => award.groupId === headlessA.group.id).length, 0,
+    'Headless host telemetry remains review-only and never triggers automatic rewards');
 
 const campaignOps = new OperationsService(path.join(root, 'campaign-data'), { info() {}, warn() {} });
 const campaignMission1 = campaignOps.save({ title: 'Blackout 01', map: 'woods', mode: 'solo', minPlayers: 1, maxPlayers: 1, campaignId: 'Operation Blackout', campaignOrder: 1, objectives: [{ id: 'exit', type: 'extract' }], rewards: { points: 500, roubles: 0, items: [] } });
