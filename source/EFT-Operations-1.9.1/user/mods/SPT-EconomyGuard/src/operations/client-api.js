@@ -158,6 +158,15 @@ class OperationsClientApi {
 
             const member = group.members.find(item => String(item.profileId) === actorProfileId || String(item.scavProfileId || '') === actorProfileId);
             if (!member) throw new Error(type === 'kill' ? 'KILLER_NOT_GROUP_MEMBER' : 'ACTOR_NOT_GROUP_MEMBER');
+            if (!this.fikaOperationsAdapter || typeof this.fikaOperationsAdapter.isProfileInFikaMatch !== 'function') {
+                throw new Error('FIKA_MATCH_MEMBERSHIP_UNAVAILABLE');
+            }
+            if (!this.fikaOperationsAdapter.isProfileInFikaMatch(matchId, matchId)) {
+                throw new Error('FIKA_HOST_NOT_IN_MATCH');
+            }
+            if (!this.fikaOperationsAdapter.isProfileInFikaMatch(matchId, actorProfileId)) {
+                throw new Error('FIKA_ACTOR_NOT_IN_MATCH');
+            }
             if (type === 'kill' && group.members.some(item => String(item.profileId) === victimProfileId || String(item.scavProfileId || '') === victimProfileId)) {
                 throw new Error('VICTIM_IS_SQUAD_MEMBER');
             }

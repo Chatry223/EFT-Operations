@@ -298,6 +298,18 @@ class OperationsService {
         else g.progressTrust = Object.assign(Object.create(null), g.progressTrust);
         if (!g.progressByTrust || typeof g.progressByTrust !== 'object' || Array.isArray(g.progressByTrust)) g.progressByTrust = Object.create(null);
         else g.progressByTrust = Object.assign(Object.create(null), g.progressByTrust);
+        let semanticHostEventKey = null;
+        if (hostAttested) {
+            if (event.type === 'kill') {
+                semanticHostEventKey = 'kill:' + String(event.matchId) + ':' + requireProfileId(event.victimProfileId);
+            } else if (event.type === 'visit') {
+                const visitActorId = requireProfileId(event.profileId);
+                const visitTarget = text(event.target, 100, 'VISIT_TRIGGER_ID', true).toLowerCase();
+                semanticHostEventKey = 'visit:' + String(event.matchId) + ':' + visitActorId + ':' + visitTarget;
+            }
+            if (!Array.isArray(g.processedHostEventKeys)) g.processedHostEventKeys = [];
+            if (g.processedHostEventKeys.includes(semanticHostEventKey)) return clone(g.progress);
+        }
         if (!Array.isArray(g.evidenceEvents)) g.evidenceEvents = [];
         const targetCandidates = [event.target, event.targetCategory].map(value => String(value || '').trim().toLowerCase()).filter(Boolean);
         for (const objective of m.objectives) {
@@ -351,6 +363,10 @@ class OperationsService {
         // the operations store without limit. IDs are scoped to this raid group.
         g.processedEventIds.push(eventId);
         if (g.processedEventIds.length > 10000) g.processedEventIds.splice(0, g.processedEventIds.length - 10000);
+        if (semanticHostEventKey) {
+            g.processedHostEventKeys.push(semanticHostEventKey);
+            if (g.processedHostEventKeys.length > 10000) g.processedHostEventKeys.splice(0, g.processedHostEventKeys.length - 10000);
+        }
         this.persist(); return clone(g.progress);
     }
 

@@ -35,6 +35,9 @@ const matchService = {
     endMatch(id, reason) { return { id, reason }; }
 };
 assert.equal(adapter.patchMatchService(matchService), true);
+assert.equal(adapter.isProfileInFikaMatch('match-1', 'profile-a'), true);
+assert.equal(adapter.isProfileInFikaMatch('match-1', 'profile-outsider'), false);
+assert.throws(() => adapter.isProfileInFikaMatch('missing-match', 'profile-a'), /FIKA_MATCH_NOT_FOUND/);
 const originalResult = matchService.endMatch('match-1', 'host_left');
 assert.deepEqual(originalResult, { id: 'match-1', reason: 'host_left' });
 const matchEvents = adapter.getRecentEvents(10);

@@ -84,6 +84,12 @@ const hostB = api.acceptMission('', { missionId: hostMission.id }, 'session-b').
 api.setReady('', { groupId: hostA.group.id, ready: true }, 'session-a');
 api.setReady('', { groupId: hostA.group.id, ready: true }, 'session-b');
 operations.startGroup(hostA.group.id, 'abcdef0123456789abcdef10');
+const activeFikaProfiles = new Set(['abcdef0123456789abcdef10', playerA]);
+api.fikaOperationsAdapter = {
+    isProfileInFikaMatch(matchId, profileId) {
+        return matchId === 'abcdef0123456789abcdef10' && activeFikaProfiles.has(profileId);
+    }
+};
 
 const hostKill = { eventId: 'host-kill-001', groupId: hostA.group.id, matchId: 'abcdef0123456789abcdef10',
     killerProfileId: 'abcdef0123456789abcdef10', victimProfileId: 'abcdef0123456789abcdef11',
@@ -98,6 +104,11 @@ assert.equal(firstKill.group.objectiveProgress.find(x => x.id === 'scavs').progr
 assert.equal(firstKill.group.objectiveProgress.find(x => x.id === 'scavs').trust, 'host_attested');
 assert.deepEqual(firstKill.group.objectiveProgress.find(x => x.id === 'scavs').evidenceCounts, [{ trust: 'host_attested', count: 1 }]);
 const liveHostGroup = operations.state.groups.find(x => x.id === hostA.group.id);
+const hostEventCountAfterFirstKill = liveHostGroup.evidenceEvents.length;
+assert.equal(api.hostRaidEvent('', Object.assign({}, hostKill, { eventId: 'host-kill-new-id-same-victim' }), 'session-b').wrapped.ok, true);
+assert.equal(liveHostGroup.evidenceEvents.length, hostEventCountAfterFirstKill, 'a new eventId cannot count the same AI victim twice');
+assert.equal(api.hostRaidEvent('', Object.assign({}, hostKill, { killerProfileId: playerB, eventId: 'host-kill-actor-not-in-live-match' }), 'session-b').wrapped.error, 'FIKA_ACTOR_NOT_IN_MATCH',
+    'an accepted squad member who is not actually present in the Fika match cannot report an objective');
 const savedTrustLedger = liveHostGroup.progressByTrust;
 delete liveHostGroup.progressByTrust;
 const legacyState = api.playerState('', {}, 'session-b').wrapped;
@@ -118,8 +129,12 @@ const hostVisit = api.hostRaidEvent('', { type: 'visit', eventId: 'host-visit-00
 assert.equal(hostVisit.ok, true);
 assert.equal(hostVisit.group.objectiveProgress.find(x => x.id === 'visit').progress, 1);
 assert.equal(hostVisit.group.objectiveProgress.find(x => x.id === 'visit').trust, 'host_attested');
+const visitEvidenceCount = liveHostGroup.evidenceEvents.filter(event => event.type === 'visit').length;
 const duplicateVisit = api.hostRaidEvent('', { type: 'visit', eventId: 'host-visit-001', matchId: 'abcdef0123456789abcdef10', actorProfileId: 'abcdef0123456789abcdef10', triggerId: 'bunker2' }, 'session-b').wrapped;
 assert.equal(duplicateVisit.group.objectiveProgress.find(x => x.id === 'visit').progress, 1);
+const semanticDuplicateVisit = api.hostRaidEvent('', { type: 'visit', eventId: 'host-visit-new-id-same-trigger', matchId: 'abcdef0123456789abcdef10', actorProfileId: 'abcdef0123456789abcdef10', triggerId: 'bunker2' }, 'session-b').wrapped;
+assert.equal(semanticDuplicateVisit.ok, true);
+assert.equal(liveHostGroup.evidenceEvents.filter(event => event.type === 'visit').length, visitEvidenceCount, 'one operator cannot inflate visits by changing eventId');
 const hostReview = operations.finishGroup(hostA.group.id, { verified: true, aliveProfileIds: [playerA, playerB], extractedProfileIds: [playerA, playerB] });
 assert.equal(hostReview.state, 'review', 'host-attested kills never trigger automatic completion or rewards');
 assert.equal(operations.state.awards.length, 0);

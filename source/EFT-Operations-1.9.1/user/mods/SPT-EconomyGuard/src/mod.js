@@ -96,6 +96,7 @@ class SptEconomyGuardMod {
             try { httpResponseUtil = container.resolve('HttpResponseUtil'); } catch (_) { /* response helper is optional in test/minimal containers */ }
             if (!this.operationsClientApi) this.operationsClientApi = new OperationsClientApi({ logger });
             this.operationsClientApi.operations = this.operations;
+            this.operationsClientApi.fikaOperationsAdapter = this.fikaOperationsAdapter;
             this.operationsClientApi.saveServer = saveServer;
             this.operationsClientApi.httpResponseUtil = httpResponseUtil;
             this.operationsClientApi.logger = logger;

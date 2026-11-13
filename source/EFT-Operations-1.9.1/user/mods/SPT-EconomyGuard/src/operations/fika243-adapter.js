@@ -301,6 +301,13 @@ class Fika243OperationsAdapter {
         return true;
     }
 
+    isProfileInFikaMatch(matchId, profileId) {
+        const id = String(profileId || '').trim();
+        if (!id) return false;
+        const match = this.getFikaMatchOrThrow(matchId);
+        return match.players.has(id);
+    }
+
     assertFikaSessionBelongsToMatch(sessionId, matchId) {
         const sid = String(sessionId || '').trim();
         if (!sid || !this.services.saveServer || typeof this.services.saveServer.getProfile !== 'function') {
