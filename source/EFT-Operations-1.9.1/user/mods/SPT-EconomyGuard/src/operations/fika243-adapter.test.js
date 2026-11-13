@@ -34,6 +34,7 @@ const matchService = {
     getMatch(id) { return id === 'match-1' ? { players: new Map([['profile-a', {}], ['profile-b', {}]]) } : null; },
     endMatch(id, reason) { return { id, reason }; }
 };
+adapter.services.fikaMatchService = matchService;
 assert.equal(adapter.patchMatchService(matchService), true);
 assert.equal(adapter.isProfileInFikaMatch('match-1', 'profile-a'), true);
 assert.equal(adapter.isProfileInFikaMatch('match-1', 'profile-outsider'), false);
