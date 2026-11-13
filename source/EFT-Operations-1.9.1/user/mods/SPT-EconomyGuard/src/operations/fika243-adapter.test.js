@@ -173,7 +173,7 @@ liveMatchService.addPlayerToMatch(hostProfileId, 'abcdef0123456789abcdef13', { i
 assert.equal(ops.state.groups.find(x => x.id === group.id).state, 'in_raid', 'the host profile plus every ready squad member in the same Fika match starts the operation');
 assert.equal(ops.state.groups.find(x => x.id === group.id).raidId, hostProfileId);
 assert.deepEqual(ops.state.groups.find(x => x.id === group.id).members.map(x => x.scavProfileId), [null, 'abcdef0123456789abcdef13']);
-ops.recordRaidEvent(group.id, { type: 'extract', amount: 1, map: 'woods', source: 'fika-server-adapter', evidenceTrust: 'server_verified' });
+ops.recordRaidEvent(group.id, { eventId: 'adapter-test-extract-001', type: 'extract', amount: 1, map: 'woods', source: 'fika-server-adapter', evidenceTrust: 'server_verified' });
 assert.ok(lifecycleAdapter.captureRaidStart('abcdef0123456789abcdef11', { playerSide: 'pmc', location: 'woods' }, { location: 'woods' }));
 assert.ok(lifecycleAdapter.captureRaidStart('abcdef0123456789abcdef12', { playerSide: 'savage', location: 'woods' }, { location: 'woods' }));
 raidProfiles.set('abcdef0123456789abcdef11', profileFor('abcdef0123456789abcdef11', [
