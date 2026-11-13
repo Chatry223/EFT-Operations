@@ -157,7 +157,7 @@ class OperationsClientApi {
             if (info.groupId && String(info.groupId) !== String(group.id)) throw new Error('RAID_GROUP_MISMATCH');
 
             const member = group.members.find(item => String(item.profileId) === actorProfileId || String(item.scavProfileId || '') === actorProfileId);
-            if (!member) throw new Error('ACTOR_NOT_GROUP_MEMBER');
+            if (!member) throw new Error(type === 'kill' ? 'KILLER_NOT_GROUP_MEMBER' : 'ACTOR_NOT_GROUP_MEMBER');
             if (type === 'kill' && group.members.some(item => String(item.profileId) === victimProfileId || String(item.scavProfileId || '') === victimProfileId)) {
                 throw new Error('VICTIM_IS_SQUAD_MEMBER');
             }
