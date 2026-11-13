@@ -220,7 +220,8 @@ function buildOperationsLeaderboard(identity, ctx) {
     const rows = [];
     for (const entry of identity.players) {
         if (entry.hidden || !entry.pmcProfileId) continue;
-        const stats = safeCall(() => service.getPlayer(entry.pmcProfileId), null);
+        let stats = null;
+        try { stats = service.getPlayer(entry.pmcProfileId); } catch (_) { continue; }
         if (!stats || typeof stats !== 'object') continue;
         const points = Number(stats.points);
         const completedMissions = Number(stats.completedMissions);
