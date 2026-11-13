@@ -15,7 +15,7 @@ const MAX_ENTRIES_PER_DIRECTORY = 20000;
 const MAX_JSON_BYTES = 2 * 1024 * 1024;
 const MAX_PREVIEW_ENTRIES = 50;
 const MAX_PREVIEW_TOTAL_BYTES = 4 * 1024 * 1024;
-const TARGET = /(?:^|\\/)(?:Loader\\/loader\\.json|Presets\\/v[1-9][0-9]*\\.json)$/i;
+const TARGET = /(?:^|\/)(?:Loader\/loader\.json|Presets\/v[1-9][0-9]*\.json)$/i;
 
 function crc32(buffer) {
     let crc = 0xffffffff;
