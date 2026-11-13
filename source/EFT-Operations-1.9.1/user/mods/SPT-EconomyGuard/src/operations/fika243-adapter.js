@@ -154,25 +154,34 @@ class Fika243OperationsAdapter {
     patchUpdateCallbacks(instance) {
         if (!instance) return false;
         const proto = Object.getPrototypeOf(instance);
-        const hasHooks = proto && (Object.prototype.hasOwnProperty.call(proto, 'handleRaidAddPlayer')
-            || Object.prototype.hasOwnProperty.call(proto, 'handlePlayerDied')
-            || Object.prototype.hasOwnProperty.call(proto, 'handleSetStatus'));
+        const updateMethods = [
+            'handlePing', 'handlePlayerspawn', 'handleSethost',
+            'handleSetStatus', 'handleRaidAddPlayer', 'handlePlayerDied'
+        ];
+        const hasHooks = proto && updateMethods.some(name => Object.prototype.hasOwnProperty.call(proto, name));
         const target = hasHooks ? proto : instance;
         const adapter = this;
         let complete = true;
-        for (const methodName of ['handleRaidAddPlayer', 'handlePlayerDied', 'handleSetStatus']) {
+        for (const methodName of updateMethods) {
             if (typeof target[methodName] !== 'function') { complete = false; continue; }
             const flag = '__egFika243Identity_' + methodName;
             if (target[flag]) continue;
             const original = target[methodName];
             target[methodName] = function (url, info, sessionId, ...rest) {
-                if (methodName === 'handleSetStatus') {
-                    // Fika 2.4.3 ignores the supplied sessionID in this callback.
-                    // Only the authenticated account that owns the host character
-                    // and is actually registered as the match host may change match status.
-                    adapter.assertFikaMatchHostBelongsToSession(sessionId, object(info).serverId, methodName);
+                const request = object(info);
+                const matchId = request.serverId;
+                if (methodName === 'handleSethost' || methodName === 'handleSetStatus') {
+                    // Only the authenticated host may change match endpoint or lifecycle state.
+                    adapter.assertFikaMatchHostBelongsToSession(sessionId, matchId, methodName);
+                } else if (methodName === 'handlePing') {
+                    // Any authenticated match member may refresh the timeout, not outsiders.
+                    adapter.assertFikaSessionBelongsToMatch(sessionId, matchId, methodName);
+                } else if (methodName === 'handlePlayerspawn' || methodName === 'handlePlayerDied') {
+                    adapter.assertFikaProfileBelongsToMatch(sessionId, request.profileId, matchId, methodName);
                 } else {
-                    adapter.assertProfileBelongsToSession(sessionId, object(info).profileId, methodName);
+                    // Enrollment: authenticate the joining account and require a live destination match.
+                    adapter.assertProfileBelongsToSession(sessionId, request.profileId, methodName);
+                    adapter.assertFikaMatchExists(matchId, methodName);
                 }
                 const result = original.call(this, url, info, sessionId, ...rest);
                 if (methodName === 'handlePlayerDied') safe(() => adapter.capturePlayerDeath(sessionId, info));
@@ -274,6 +283,41 @@ class Fika243OperationsAdapter {
         return true;
     }
 
+
+    getFikaMatchOrThrow(matchId) {
+        const id = String(matchId || '').trim();
+        const service = this.services.fikaMatchService;
+        const match = id && service && typeof service.getMatch === 'function'
+            ? safe(() => service.getMatch(id), null) : null;
+        if (!match || !(match.players instanceof Map)) throw new Error('FIKA_MATCH_NOT_FOUND');
+        return match;
+    }
+
+    assertFikaMatchExists(matchId) {
+        this.getFikaMatchOrThrow(matchId);
+        return true;
+    }
+
+    assertFikaSessionBelongsToMatch(sessionId, matchId) {
+        const sid = String(sessionId || '').trim();
+        if (!sid || !this.services.saveServer || typeof this.services.saveServer.getProfile !== 'function') {
+            throw new Error('FIKA_MATCH_SESSION_UNAVAILABLE');
+        }
+        const profile = safe(() => this.services.saveServer.getProfile(sid), null);
+        if (!profile) throw new Error('FIKA_MATCH_SESSION_UNAVAILABLE');
+        const characters = object(profile.characters);
+        const ownIds = [String(object(characters.pmc)._id || ''), String(object(characters.scav)._id || '')].filter(Boolean);
+        const match = this.getFikaMatchOrThrow(matchId);
+        if (!ownIds.some(id => match.players.has(id))) throw new Error('FIKA_MATCH_SESSION_NOT_MEMBER');
+        return true;
+    }
+
+    assertFikaProfileBelongsToMatch(sessionId, profileId, matchId, methodName) {
+        this.assertProfileBelongsToSession(sessionId, profileId, methodName);
+        const match = this.getFikaMatchOrThrow(matchId);
+        if (!match.players.has(String(profileId || '').trim())) throw new Error('FIKA_MATCH_PROFILE_NOT_MEMBER');
+        return true;
+    }
 
     patchLifecycle(instance) {
         if (!instance) return false;

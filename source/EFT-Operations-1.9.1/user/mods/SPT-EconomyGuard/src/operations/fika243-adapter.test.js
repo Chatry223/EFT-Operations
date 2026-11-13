@@ -51,7 +51,7 @@ const hostMatchMap = new Map([[hostMatchId, { isDead: false }]]);
 adapter.services.fikaMatchService = {
     getMatchIdByProfile() { return 'match-1'; },
     getMatch(id) {
-        if (id === 'match-1') return { hostUsername: 'pmc-name' };
+        if (id === 'match-1') return { hostUsername: 'pmc-name', players: new Map([[hostMatchId, {}], ['abcdef0123456789abcdef02', {}]]) };
         if (id === hostMatchId) return { players: hostMatchMap };
         if (id === 'foreign-host-match') return { players: new Map([['abcdef0123456789abcdef99', { isDead: false }]]) };
         return null;
@@ -67,17 +67,26 @@ assert.equal(raidEnd.rewardEligible, false, 'client raid-result payloads must ne
 // Reject attempts to add/mark a different account's profile in the match.
 let acceptedUpdateCalls = 0;
 const fakeUpdateCallbacks = {
+    handlePing(url, info, sessionId) { acceptedUpdateCalls++; return 'ping'; },
+    handlePlayerspawn(url, info, sessionId) { acceptedUpdateCalls++; return 'spawn'; },
+    handleSethost(url, info, sessionId) { acceptedUpdateCalls++; return 'host'; },
     handleRaidAddPlayer(url, info, sessionId) { acceptedUpdateCalls++; return 'added'; },
     handlePlayerDied(url, info, sessionId) { acceptedUpdateCalls++; return 'dead'; },
     handleSetStatus(url, info, sessionId) { acceptedUpdateCalls++; return 'status:' + info.status; }
 };
 assert.equal(adapter.patchUpdateCallbacks(fakeUpdateCallbacks), true);
-assert.equal(fakeUpdateCallbacks.handleRaidAddPlayer('', { profileId: 'abcdef0123456789abcdef01' }, 'session-1'), 'added');
-assert.equal(fakeUpdateCallbacks.handlePlayerDied('', { profileId: 'abcdef0123456789abcdef02' }, 'session-1'), 'dead');
+assert.equal(fakeUpdateCallbacks.handlePing('', { serverId: 'match-1' }, 'session-1'), 'ping');
+assert.equal(fakeUpdateCallbacks.handlePlayerspawn('', { serverId: 'match-1', profileId: 'abcdef0123456789abcdef02', groupId: 'group-a' }, 'session-1'), 'spawn');
+assert.equal(fakeUpdateCallbacks.handleSethost('', { serverId: hostMatchId, ips: ['127.0.0.1'], port: 7777, natPunch: false, isHeadless: false }, 'session-1'), 'host');
+assert.equal(fakeUpdateCallbacks.handleRaidAddPlayer('', { serverId: 'match-1', profileId: 'abcdef0123456789abcdef01', isSpectator: false }, 'session-1'), 'added');
+assert.equal(fakeUpdateCallbacks.handlePlayerDied('', { serverId: 'match-1', profileId: 'abcdef0123456789abcdef02' }, 'session-1'), 'dead');
 assert.equal(fakeUpdateCallbacks.handleSetStatus('', { serverId: hostMatchId, status: 'complete' }, 'session-1'), 'status:complete');
+assert.throws(() => fakeUpdateCallbacks.handlePing('', { serverId: 'foreign-host-match' }, 'session-1'), /FIKA_MATCH_SESSION_NOT_MEMBER/);
+assert.throws(() => fakeUpdateCallbacks.handlePlayerspawn('', { serverId: 'foreign-host-match', profileId: 'abcdef0123456789abcdef02', groupId: 'group-x' }, 'session-1'), /FIKA_MATCH_PROFILE_NOT_MEMBER/);
+assert.throws(() => fakeUpdateCallbacks.handleSethost('', { serverId: 'foreign-host-match', ips: ['1.2.3.4'], port: 9999 }, 'session-1'), /FIKA_MATCH_HOST_SESSION_MISMATCH/);
 assert.throws(() => fakeUpdateCallbacks.handleSetStatus('', { serverId: 'foreign-host-match', status: 'complete' }, 'session-1'), /FIKA_MATCH_HOST_SESSION_MISMATCH/);
 assert.throws(() => fakeUpdateCallbacks.handleSetStatus('', { serverId: 'unknown-match', status: 'complete' }, 'session-1'), /FIKA_MATCH_HOST_SESSION_MISMATCH/);
-assert.equal(acceptedUpdateCalls, 3, 'a non-host session cannot change another match status');
+assert.equal(acceptedUpdateCalls, 6, 'unrelated accounts cannot mutate another match endpoint, status, grouping or timeout');
 const deathEvidence = adapter.getRecentEvents(20).find(event => event.type === 'fika_player_died');
 assert.ok(deathEvidence, 'authenticated Fika player-death reports should be retained for review');
 assert.equal(deathEvidence.profileId, 'abcdef0123456789abcdef01');
@@ -109,9 +118,9 @@ assert.equal(raidEvidenceWithVictim.reportedFoundInRaidQuestItems.length, 1);
 assert.equal(raidEvidenceWithVictim.reportedDroppedQuestItems.length, 1);
 assert.equal(raidEvidenceWithVictim.evidenceTrust, 'untrusted_client_report');
 assert.equal(raidEvidenceWithVictim.rewardEligible, false);
-assert.throws(() => fakeUpdateCallbacks.handleRaidAddPlayer('', { profileId: 'abcdef0123456789abcdef99' }, 'session-1'), /FIKA_SESSION_PROFILE_MISMATCH/);
-assert.throws(() => fakeUpdateCallbacks.handlePlayerDied('', { profileId: 'abcdef0123456789abcdef99' }, 'session-1'), /FIKA_SESSION_PROFILE_MISMATCH/);
-assert.equal(acceptedUpdateCalls, 3, 'mismatched account IDs and non-host status updates must be rejected before Fika mutates its match registry');
+assert.throws(() => fakeUpdateCallbacks.handleRaidAddPlayer('', { serverId: 'match-1', profileId: 'abcdef0123456789abcdef99' }, 'session-1'), /FIKA_SESSION_PROFILE_MISMATCH/);
+assert.throws(() => fakeUpdateCallbacks.handlePlayerDied('', { serverId: 'match-1', profileId: 'abcdef0123456789abcdef99' }, 'session-1'), /FIKA_SESSION_PROFILE_MISMATCH/);
+assert.equal(acceptedUpdateCalls, 6, 'mismatched accounts and non-host requests are rejected before Fika mutates its match registry');
 
 // Raid creation and host/member leave requests must also match the authenticated account.
 let acceptedRaidCalls = 0;
@@ -232,7 +241,10 @@ const statusMatchService = {
 };
 const statusInstances = {
     SaveServer: { getProfile() { return null; } },
-    FikaUpdateCallbacks: { handleRaidAddPlayer() {}, handlePlayerDied() {}, handleSetStatus() {} },
+    FikaUpdateCallbacks: {
+        handlePing() {}, handlePlayerspawn() {}, handleSethost() {},
+        handleRaidAddPlayer() {}, handlePlayerDied() {}, handleSetStatus() {}
+    },
     FikaRaidCallbacks: { handleRaidCreate() {}, handleRaidLeave() {} },
     FikaMatchService: statusMatchService,
     LocationLifecycleService: { startLocalRaid() { return { location: 'woods' }; }, endLocalRaid() {} }
