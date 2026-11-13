@@ -5,12 +5,17 @@ const os = require('os');
 const path = require('path');
 const { OperationsService } = require('../src/operations/service');
 const { OperationsClientApi } = require('../src/operations/client-api');
-function reviewChecklist(objectiveIds, memberIndexes) {
+function reviewChecklist(objectiveIds, memberIndexes, outcomes = {}) {
     const objectiveEvidenceRefs = {};
     for (const objectiveId of objectiveIds) objectiveEvidenceRefs[objectiveId] = `Test evidence for objective ${objectiveId}`;
     const memberEvidenceRefs = {};
-    for (const memberIndex of memberIndexes) memberEvidenceRefs[String(memberIndex)] = `Test evidence for member ${memberIndex}`;
-    return { confirmed: true, confirmedObjectiveIds: objectiveIds, confirmedMemberIndexes: memberIndexes, objectiveEvidenceRefs, memberEvidenceRefs };
+    const memberOutcomes = {};
+    for (const memberIndex of memberIndexes) {
+        const key = String(memberIndex);
+        memberEvidenceRefs[key] = `Test evidence for member ${memberIndex}`;
+        memberOutcomes[key] = outcomes[key] || 'success';
+    }
+    return { confirmed: true, confirmedObjectiveIds: objectiveIds, confirmedMemberIndexes: memberIndexes, objectiveEvidenceRefs, memberEvidenceRefs, memberOutcomes };
 }
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'eft-ops-api-'));
