@@ -14,7 +14,7 @@ const MAX_NEWS = 40;
 const NEWS_KINDS = ['news', 'update', 'event', 'alert'];
 const BRAND_RE = /economy\s*guard/i;
 const CARD_IDS = ['fleaOffers', 'raidsCompleted', 'totalKills', 'registeredPlayers', 'activeRaids'];
-const TAB_IDS = ['leaderboard', 'online', 'raids', 'market', 'activity'];
+const TAB_IDS = ['leaderboard', 'online', 'raids', 'market', 'activity', 'operations'];
 const TOP_IDS = ['announcements', 'cards'];
 
 function defaultLayout() {

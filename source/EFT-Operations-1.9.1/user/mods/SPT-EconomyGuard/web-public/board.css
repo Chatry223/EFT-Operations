@@ -132,3 +132,9 @@ td.num,th.num{text-align:end;font-variant-numeric:tabular-nums}
 .more{display:block;margin:12px auto 0;background:var(--glass2);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:8px 20px;cursor:pointer;font:inherit}
 .foot{margin-top:26px;text-align:center;color:var(--muted);font-size:12px}
 @media(max-width:640px){.hero{padding:18px}.brand h1{font-size:24px}.ochip{min-width:0;flex:1}.hero-meta{flex-direction:row;align-items:center;width:100%;justify-content:space-between}.slide-body{padding:20px 20px 46px}.slide h2{font-size:21px}.stat b{font-size:26px}.tab{padding:8px 14px}}
+
+/* Military operations leaderboard */
+.op-next{display:flex;flex-direction:column;gap:5px;min-width:150px;white-space:normal}
+.op-progress{display:block;height:5px;overflow:hidden;border-radius:99px;background:var(--glass2)}
+.op-progress i{display:block;height:100%;border-radius:inherit;background:var(--accent)}
+.op-next small{color:var(--muted);font-size:11px}

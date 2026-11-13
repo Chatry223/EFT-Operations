@@ -111,7 +111,7 @@ class SptEconomyGuardMod {
             this.guard.writeHealth();
             this.guard.log('error', `Admin panel startup failed: ${err.stack || err.message}`);
         }
-        this.startStatusBoard(container, config, { saveServer, configServer, databaseServer });
+        this.startStatusBoard(container, config, { saveServer, configServer, databaseServer, operations: this.operations });
         if (this.guard.isProtect()) {
             this.guard.log('warn', 'PROTECT mode enabled. Only high-confidence price anomalies and exact server-side payment mismatches are blocked.');
         } else {
