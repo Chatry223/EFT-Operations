@@ -6,8 +6,11 @@ const path = require('path');
 const { EconomyGuard } = require('../src/engine');
 const { AdminPanelServer } = require('../src/admin-panel');
 const { OperationsService } = require('../src/operations/service');
+let root = null;
+let panel = null;
+let outsideZip = null;
 (async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'eg-admin-'));
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'eg-admin-'));
   const modDir = path.join(root,'user','mods','SPT-EconomyGuard'); fs.mkdirSync(path.join(modDir,'config'),{recursive:true}); fs.cpSync(path.join(__dirname,'..','web'),path.join(modDir,'web'),{recursive:true});
   const cfg={enabled:true,mode:'audit',dataDirectory:path.join(root,'data'),restrictions:{enabled:true},storage:{caseRetentionDays:90},notifications:{enabled:true,prefix:'WATCH',separator:'\\n',messages:{}},price:{maxOvervalueRatio:20},flea:{maxTrackedEventsInMemory:100}};
   fs.writeFileSync(path.join(modDir,'config','config.json'),JSON.stringify(cfg,null,2));
@@ -25,7 +28,7 @@ const { OperationsService } = require('../src/operations/service');
     {eventId:'match-profile-secret',type:'fika_match_end',groupId:'group-review-1',matchId:'fika-match-secret',players:['PROFILESECRET'],displayName:'Alpha PMC',evidenceTrust:'fika_match_end_lifecycle_with_authenticated_roster'}
   ];
   const fikaOperationsAdapter={getStatus:()=>({detected:true,enabled:true,observerInstalled:true,hookState:'ready'}),getRecentEvents:()=>fikaEvents};
-  const panel=new AdminPanelServer(modDir,guard,{info(){},warn(){},error(){}},{enabled:true,host:'127.0.0.1',port:0},{saveServer,launcherController,operations,board,fikaOperationsAdapter});
+  panel=new AdminPanelServer(modDir,guard,{info(){},warn(){},error(){}},{enabled:true,host:'127.0.0.1',port:0},{saveServer,launcherController,operations,board,fikaOperationsAdapter});
   assert.match(panel.token,/^[a-f0-9]{64}$/i);
   const profileId='0123456789abcdef01234567',tpl='5e81f423763d9f754677bf2e';
   const created=await panel.createServerAccount({username:'friend_new',password:'StrongPassword123!',edition:'Standard'});
@@ -66,7 +69,7 @@ const { OperationsService } = require('../src/operations/service');
   const noOpsAuth=await fetch(`http://127.0.0.1:${port}/api/operations`,{headers:{Host:`127.0.0.1:${port}`}}); assert.strictEqual(noOpsAuth.status,401);
   const noArchiveAuth=await fetch(`http://127.0.0.1:${port}/api/svm/archive-preview?archive=../outside.zip`,{headers:{Host:`127.0.0.1:${port}`}}); assert.strictEqual(noArchiveAuth.status,401,'SVM archive preview must require admin authentication');
   const opsHeaders={Host:`127.0.0.1:${port}`,Authorization:`Bearer ${panel.token}`,'Content-Type':'application/json'};
-  const outsideZip=path.join(path.dirname(root),path.basename(root)+'-outside.zip');
+  outsideZip=path.join(path.dirname(root),path.basename(root)+'-outside.zip');
   fs.writeFileSync(outsideZip,'not-a-zip');
   const archiveTraversal=await fetch(`http://127.0.0.1:${port}/api/svm/archive-preview?archive=${encodeURIComponent('../'+path.basename(outsideZip))}`,{headers:opsHeaders});
   assert.strictEqual(archiveTraversal.status,400,'SVM archive preview must reject paths outside the SPT server root');
@@ -142,11 +145,19 @@ const { OperationsService } = require('../src/operations/service');
   })});
   assert.strictEqual(emptyEvidenceReview.status,400,'blank per-objective evidence references must be rejected');
   assert.strictEqual((await emptyEvidenceReview.json()).error,'INVALID_REVIEW_OBJECTIVE_EVIDENCE_REF');
+  const missingMemberOutcomeReview=await fetch(`http://127.0.0.1:${port}/api/operations/review`,{method:'POST',headers:opsHeaders,body:JSON.stringify({
+    groupId:'group-review-1',decision:'approve',note:'Missing individual outcome negative test',
+    attestation:{confirmed:true,confirmedObjectiveIds:['kills','loot','extract'],confirmedMemberIndexes:[0],
+      objectiveEvidenceRefs:{kills:'admin case #K-17',loot:'SPT profile snapshot #L-2',extract:'raid outcome record #E-1'},
+      memberEvidenceRefs:{'0':'operator outcome record #M-1'}}
+  })});
+  assert.strictEqual(missingMemberOutcomeReview.status,400,'per-member outcome is mandatory');
+  assert.strictEqual((await missingMemberOutcomeReview.json()).error,'REVIEW_MEMBER_OUTCOMES_REQUIRED');
   const checklistReview=await fetch(`http://127.0.0.1:${port}/api/operations/review`,{method:'POST',headers:opsHeaders,body:JSON.stringify({
     groupId:'group-review-1',decision:'approve',note:'Reviewed objective evidence and member raid result',
     attestation:{confirmed:true,confirmedObjectiveIds:['kills','loot','extract'],confirmedMemberIndexes:[0],
       objectiveEvidenceRefs:{kills:'admin case #K-17',loot:'SPT profile snapshot #L-2',extract:'raid outcome record #E-1'},
-      memberEvidenceRefs:{'0':'operator outcome record #M-1'}}
+      memberEvidenceRefs:{'0':'operator outcome record #M-1'},memberOutcomes:{'0':'success'}}
   })});
   const checklistReviewText=await checklistReview.text();
   assert.strictEqual(checklistReview.status,200,checklistReviewText);
@@ -154,6 +165,8 @@ const { OperationsService } = require('../src/operations/service');
   assert.strictEqual(checklistResult.group.review.attestationMethod,'admin_review_checklist');
   assert.deepStrictEqual(checklistResult.group.review.confirmedObjectiveIds,['kills','loot','extract']);
   assert.deepStrictEqual(checklistResult.group.review.confirmedMemberIndexes,[0]);
+  assert.deepStrictEqual(checklistResult.group.review.memberOutcomes,[{memberIndex:0,result:'success',evidenceRef:'operator outcome record #M-1'}]);
+  assert.deepStrictEqual(checklistResult.group.review.successfulMemberIndexes,[0]);
   assert.strictEqual(operations.state.awards.filter(x=>x.groupId==='group-review-1').length,1,'approval creates the idempotent member award only after checklist validation');
   const bad=await fetch(`http://127.0.0.1:${port}/api/health`,{headers:{Host:`127.0.0.1:${port}`,Authorization:'Bearer bad'}});
   assert.strictEqual(bad.status,401);
@@ -161,4 +174,14 @@ const { OperationsService } = require('../src/operations/service');
   fs.rmSync(root,{recursive:true,force:true});
   fs.rmSync(outsideZip,{force:true});
   console.log('PASS admin panel auth, account provisioning, ban controls, local API, blocklists and config updates');
-})().catch(err=>{console.error(err);process.exitCode=1;});
+})().catch(async err=>{
+  console.error(err);
+  try {
+    if (panel && panel.server && panel.server.listening) {
+      await new Promise(resolve=>panel.server.close(resolve));
+    }
+  } catch (_) { /* preserve the original assertion error */ }
+  try { if (root) fs.rmSync(root,{recursive:true,force:true}); } catch (_) {}
+  try { if (outsideZip) fs.rmSync(outsideZip,{force:true}); } catch (_) {}
+  process.exitCode=1;
+});
