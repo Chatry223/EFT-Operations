@@ -444,21 +444,56 @@ class OperationsService {
                 || Object.keys(memberRefs).some(index => !expectedMemberKeys.includes(index))) {
                 throw new Error('REVIEW_MEMBER_EVIDENCE_REQUIRED');
             }
+            const submittedOutcomes = attestation.memberOutcomes;
+            if (!submittedOutcomes || typeof submittedOutcomes !== 'object' || Array.isArray(submittedOutcomes)
+                || Object.keys(submittedOutcomes).length !== expectedMemberKeys.length
+                || Object.keys(submittedOutcomes).some(index => !expectedMemberKeys.includes(index))) {
+                throw new Error('REVIEW_MEMBER_OUTCOMES_REQUIRED');
+            }
+            const cleanMemberOutcomes = Object.create(null);
             for (const memberIndex of expectedMemberIndexes) {
-                cleanMemberEvidenceRefs[String(memberIndex)] = text(memberRefs[String(memberIndex)], 500, 'REVIEW_MEMBER_EVIDENCE_REF', true);
+                const key = String(memberIndex);
+                cleanMemberEvidenceRefs[key] = text(memberRefs[key], 500, 'REVIEW_MEMBER_EVIDENCE_REF', true);
+                const outcome = submittedOutcomes[key];
+                if (!['success', 'failed'].includes(outcome)) throw new Error('INVALID_REVIEW_MEMBER_OUTCOME');
+                cleanMemberOutcomes[key] = outcome;
             }
             confirmedObjectiveIds = expectedObjectiveIds;
             confirmedMemberIndexes = expectedMemberIndexes;
-            for (const member of g.members) { member.result = 'success'; this.award(m, g, member.profileId); }
+            for (const memberIndex of expectedMemberIndexes) {
+                const member = g.members[memberIndex];
+                const outcome = cleanMemberOutcomes[String(memberIndex)];
+                member.result = outcome;
+                member.reviewEvidenceRef = cleanMemberEvidenceRefs[String(memberIndex)];
+                if (outcome === 'success') this.award(m, g, member.profileId);
+                if (Array.isArray(g.results)) {
+                    const result = g.results.find(item => item && item.profileId === member.profileId);
+                    if (result) { result.success = outcome === 'success'; result.result = outcome; }
+                }
+            }
         } else {
-            for (const member of g.members) member.result = 'denied';
+            for (const member of g.members) {
+                member.result = 'denied';
+                if (Array.isArray(g.results)) {
+                    const result = g.results.find(item => item && item.profileId === member.profileId);
+                    if (result) { result.success = false; result.result = 'denied'; }
+                }
+            }
         }
         g.state = 'completed';
+        const reviewedMemberOutcomes = (Array.isArray(g.members) ? g.members : []).map((member, memberIndex) => ({
+            memberIndex,
+            result: member.result || (decision === 'approve' ? 'failed' : 'denied'),
+            evidenceRef: decision === 'approve' ? cleanMemberEvidenceRefs[String(memberIndex)] : ''
+        }));
         g.review = {
             decision, note: reviewNote, reviewer: reviewedBy, attested: decision === 'approve',
             attestationMethod: decision === 'approve' ? 'admin_review_checklist' : null,
             confirmedObjectiveIds, objectiveEvidenceRefs: cleanObjectiveEvidenceRefs,
             confirmedMemberIndexes, memberEvidenceRefs: cleanMemberEvidenceRefs,
+            memberOutcomes: reviewedMemberOutcomes,
+            successfulMemberIndexes: reviewedMemberOutcomes.filter(item => item.result === 'success').map(item => item.memberIndex),
+            failedMemberIndexes: reviewedMemberOutcomes.filter(item => item.result !== 'success').map(item => item.memberIndex),
             objectivesConfirmed: decision === 'approve', allMembersConfirmed: decision === 'approve',
             reviewedAt: new Date().toISOString()
         };

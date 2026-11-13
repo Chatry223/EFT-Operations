@@ -4,12 +4,17 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { OperationsService } = require('./service');
-function reviewChecklist(objectiveIds, memberIndexes) {
+function reviewChecklist(objectiveIds, memberIndexes, outcomes = {}) {
     const objectiveEvidenceRefs = {};
     for (const objectiveId of objectiveIds) objectiveEvidenceRefs[objectiveId] = `Test evidence for objective ${objectiveId}`;
     const memberEvidenceRefs = {};
-    for (const memberIndex of memberIndexes) memberEvidenceRefs[String(memberIndex)] = `Test evidence for member ${memberIndex}`;
-    return { confirmed: true, confirmedObjectiveIds: objectiveIds, confirmedMemberIndexes: memberIndexes, objectiveEvidenceRefs, memberEvidenceRefs };
+    const memberOutcomes = {};
+    for (const memberIndex of memberIndexes) {
+        const key = String(memberIndex);
+        memberEvidenceRefs[key] = `Test evidence for member ${memberIndex}`;
+        memberOutcomes[key] = outcomes[key] || 'success';
+    }
+    return { confirmed: true, confirmedObjectiveIds: objectiveIds, confirmedMemberIndexes: memberIndexes, objectiveEvidenceRefs, memberEvidenceRefs, memberOutcomes };
 }
 
 const legacyRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'eft-ops-legacy-'));
@@ -100,12 +105,26 @@ assert.throws(() => reloaded.resolveReview(reviewGroup.id, 'approve', 'Evidence 
 assert.throws(() => reloaded.resolveReview(reviewGroup.id, 'approve', 'Evidence checked', 'ADMIN', { confirmed: true, confirmedObjectiveIds: ['kills', 'extract'], objectiveEvidenceRefs: { kills: 'host log', extract: 'host log' }, confirmedMemberIndexes: [0], memberEvidenceRefs: { '0': 'roster log' } }), /REVIEW_MEMBERS_NOT_CONFIRMED/);
 assert.throws(() => reloaded.resolveReview(reviewGroup.id, 'approve', 'Evidence checked', 'ADMIN', { confirmed: true, confirmedObjectiveIds: ['kills', 'extract'], objectiveEvidenceRefs: { kills: 'host log' }, confirmedMemberIndexes: [0, 1], memberEvidenceRefs: { '0': 'roster log', '1': 'roster log' } }), /REVIEW_OBJECTIVE_EVIDENCE_REQUIRED/);
 assert.throws(() => reloaded.resolveReview(reviewGroup.id, 'approve', 'Evidence checked', 'ADMIN', { confirmed: true, confirmedObjectiveIds: ['kills', 'extract'], objectiveEvidenceRefs: { kills: 'host log', extract: 'raid log' }, confirmedMemberIndexes: [0, 1], memberEvidenceRefs: { '0': 'roster log' } }), /REVIEW_MEMBER_EVIDENCE_REQUIRED/);
-const reviewed = reloaded.resolveReview(reviewGroup.id, 'approve', 'Verified against independently reviewed raid evidence', 'ADMIN', reviewChecklist(['kills', 'extract'], [0, 1]));
+assert.throws(() => reloaded.resolveReview(reviewGroup.id, 'approve', 'Evidence checked', 'ADMIN', {
+  confirmed: true, confirmedObjectiveIds: ['kills', 'extract'], objectiveEvidenceRefs: { kills: 'host log', extract: 'raid log' },
+  confirmedMemberIndexes: [0, 1], memberEvidenceRefs: { '0': 'roster log', '1': 'roster log' }
+}), /REVIEW_MEMBER_OUTCOMES_REQUIRED/);
+assert.throws(() => reloaded.resolveReview(reviewGroup.id, 'approve', 'Evidence checked', 'ADMIN', {
+  confirmed: true, confirmedObjectiveIds: ['kills', 'extract'], objectiveEvidenceRefs: { kills: 'host log', extract: 'raid log' },
+  confirmedMemberIndexes: [0, 1], memberEvidenceRefs: { '0': 'roster log', '1': 'roster log' }, memberOutcomes: { '0': 'success', '1': 'pending' }
+}), /INVALID_REVIEW_MEMBER_OUTCOME/);
+const reviewed = reloaded.resolveReview(reviewGroup.id, 'approve', 'Verified against independently reviewed raid evidence', 'ADMIN',
+  reviewChecklist(['kills', 'extract'], [0, 1], { '0': 'success', '1': 'failed' }));
 assert.deepEqual(reviewed.review.confirmedObjectiveIds, ['kills', 'extract']);
 assert.deepEqual(reviewed.review.confirmedMemberIndexes, [0, 1]);
 assert.equal(reviewed.review.attestationMethod, 'admin_review_checklist');
 assert.equal(reviewed.state, 'completed');
+assert.deepEqual(reviewed.members.map(member => member.result), ['success', 'failed']);
+assert.deepEqual(reviewed.review.successfulMemberIndexes, [0]);
+assert.deepEqual(reviewed.review.failedMemberIndexes, [1]);
 assert.equal(reloaded.getPlayer('abcdef0123456789abcdef05').points, 250);
+assert.equal(reloaded.getPlayer('abcdef0123456789abcdef06').points, 0, 'a member marked failed receives no points or reward');
+assert.equal(reloaded.state.awards.filter(award => award.groupId === reviewGroup.id).length, 1, 'only the individually successful member receives an award');
 assert.equal(reloaded.reviewQueue().length, 1, 'the unrelated untrusted outcome remains pending review');
 const manualMission = reloaded.save({ title: 'Admin verified objective override', map: 'woods', mode: 'solo', minPlayers: 1, maxPlayers: 1,
   objectives: [{ id: 'kills', type: 'kill', target: 'scav', count: 3, required: true }], rewards: { points: 75, roubles: 0, items: [] } });
