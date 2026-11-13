@@ -166,7 +166,7 @@ const headlessKill = api.hostRaidEvent('', {
     killerProfileId: playerA, victimProfileId: 'abcdef0123456789abcdef93',
     victimRole: 'assault', victimSide: 'Savage', victimIsAi: true
 }, 'abcdef0123456789abcdef90').wrapped;
-assert.equal(headlessKill.ok, true, 'authenticated Fika Headless host may report for the linked mission Match');
+assert.equal(headlessKill.ok, true, 'authenticated Fika Headless host may report for the linked mission Match: ' + JSON.stringify(headlessKill));
 assert.equal(headlessKill.evidenceTrust, 'host_attested');
 assert.equal(headlessKill.group.objectiveProgress[0].progress, 1);
 assert.equal(headlessKill.group.objectiveProgress[0].trust, 'host_attested');
