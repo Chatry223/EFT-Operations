@@ -58,7 +58,7 @@ adapter.services.saveServer = { getProfile(sessionId) {
         pmc: { _id: 'abcdef0123456789abcdef21', Info: { Nickname: 'second-pmc' } },
         scav: { _id: 'abcdef0123456789abcdef22', Info: { Nickname: 'second-scav' } }
     } };
-    if (sessionId === 'headless-session') return { info: { password: 'fika-headless' }, characters: {
+    if (sessionId === 'abcdef0123456789abcdef90') return { info: { password: 'fika-headless' }, characters: {
         pmc: { _id: 'abcdef0123456789abcdef91', Info: { Nickname: 'headless-pmc' } },
         scav: { _id: 'abcdef0123456789abcdef92', Info: { Nickname: 'headless-scav' } }
     } };
@@ -68,7 +68,7 @@ adapter.services.saveServer = { getProfile(sessionId) {
     } };
 } };
 const hostMatchId = 'abcdef0123456789abcdef01';
-const headlessSessionId = 'headless-session';
+const headlessSessionId = 'abcdef0123456789abcdef90';
 const headlessCharacterId = 'abcdef0123456789abcdef91';
 const hostMatchMap = new Map([[hostMatchId, { isDead: false }]]);
 const matchRegistry = new Map([
