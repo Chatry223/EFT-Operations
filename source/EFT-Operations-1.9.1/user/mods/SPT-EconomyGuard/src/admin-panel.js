@@ -800,6 +800,7 @@ class AdminPanelServer {
                                 actorName,
                                 target: event.target, targetCategory: event.targetCategory,
                                 victimRole: event.victimRole, victimSide: event.victimSide,
+                                reporterKind: event.reporterKind === 'fika_headless_host' ? 'fika_headless_host' : 'fika_player_host',
                                 evidenceTrust: event.evidenceTrust, timestamp: event.timestamp
                             };
                             if (event.type === 'kill') safeEvent.killerName = actorName;
@@ -808,6 +809,65 @@ class AdminPanelServer {
                         objectiveEvidence
                     };
                 }));
+            }
+            if (req.method === 'GET' && pathname === '/api/operations/review-history') {
+                const operations = this.requireOperations();
+                const groups = (operations.state && Array.isArray(operations.state.groups) ? operations.state.groups : [])
+                    .filter(group => group && group.review && typeof group.review === 'object' && group.review.reviewedAt)
+                    .sort((a, b) => Date.parse(b.review.reviewedAt || 0) - Date.parse(a.review.reviewedAt || 0))
+                    .slice(0, 500);
+                const history = groups.map(group => {
+                    const review = group.review || {};
+                    const mission = ((operations.state && operations.state.missions) || []).find(item => item.id === group.missionId);
+                    // Redact private account/raid identifiers even when an administrator
+                    // accidentally pasted one into a free-text evidence reference or note.
+                    const privateTokens = [
+                        group.id, group.raidId,
+                        ...safeArray(group.members).flatMap(member => [member.profileId, member.scavProfileId])
+                    ].filter(value => typeof value === 'string' && value.length >= 8);
+                    const redact = value => {
+                        let result = String(value == null ? '' : value);
+                        for (const token of privateTokens) result = result.split(token).join('[redacted]');
+                        return result.slice(0, 1000);
+                    };
+                    const outcomeRows = safeArray(review.memberOutcomes);
+                    const members = safeArray(group.members).map((member, index) => {
+                        const saved = outcomeRows.find(item => item && item.memberIndex === index);
+                        const fallbackResult = ['success', 'failed', 'denied'].includes(member.result)
+                            ? member.result : (review.decision === 'deny' ? 'denied' : 'legacy_outcome_unknown');
+                        const result = saved && ['success', 'failed', 'denied'].includes(saved.result)
+                            ? saved.result : fallbackResult;
+                        const reference = saved && saved.evidenceRef != null
+                            ? saved.evidenceRef
+                            : (review.memberEvidenceRefs && review.memberEvidenceRefs[String(index)])
+                                || member.reviewEvidenceRef || '';
+                        return {
+                            displayName: redact(member.displayName || 'Unknown operator'),
+                            result,
+                            evidenceRef: redact(reference)
+                        };
+                    });
+                    const objectiveRefs = review.objectiveEvidenceRefs && typeof review.objectiveEvidenceRefs === 'object'
+                        ? review.objectiveEvidenceRefs : {};
+                    const objectives = Object.entries(objectiveRefs).map(([objectiveId, evidenceRef]) => {
+                        const objective = mission && safeArray(mission.objectives).find(item => String(item.id) === String(objectiveId));
+                        const label = objective
+                            ? String(objective.type || 'objective') + (objective.target ? ' · ' + String(objective.target) : '')
+                            : 'Archived objective';
+                        return { label: redact(label), evidenceRef: redact(evidenceRef) };
+                    });
+                    return {
+                        missionTitle: redact(mission ? mission.title : 'Archived operation'),
+                        decision: review.decision === 'approve' ? 'approved' : 'denied',
+                        note: redact(review.note || ''),
+                        reviewer: redact(review.reviewer || 'ADMIN'),
+                        reviewedAt: review.reviewedAt,
+                        attestationMethod: review.attestationMethod || 'legacy_review',
+                        members,
+                        objectives
+                    };
+                });
+                return this.send(res, 200, history);
             }
             if (req.method === 'GET' && pathname === '/api/operations/fika') return this.send(res, 200, this.fikaOperationsAdapter ? { status: this.fikaOperationsAdapter.getStatus(), events: this.fikaOperationsAdapter.getRecentEvents(150).map(sanitizeFikaEvent) } : { status: { detected: false, enabled: false, reason: 'OPERATIONS_OR_FIKA_ADAPTER_DISABLED' }, events: [] });
             if (req.method === 'GET' && pathname === '/api/operations/leaderboard') {

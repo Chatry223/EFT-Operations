@@ -168,6 +168,29 @@ let outsideZip = null;
   assert.deepStrictEqual(checklistResult.group.review.memberOutcomes,[{memberIndex:0,result:'success',evidenceRef:'operator outcome record #M-1'}]);
   assert.deepStrictEqual(checklistResult.group.review.successfulMemberIndexes,[0]);
   assert.strictEqual(operations.state.awards.filter(x=>x.groupId==='group-review-1').length,1,'approval creates the idempotent member award only after checklist validation');
+
+  operations.state.groups.push({
+    id:'history-group-secret',missionId:savedMission.id,raidId:'history-match-secret',state:'completed',
+    members:[{profileId:'HISTORYPROFILESECRET',scavProfileId:'HISTORYSCAVSECRET',displayName:'Bravo PMC',result:'failed'}],
+    review:{decision:'approve',note:'One operator did not extract',reviewer:'ADMIN',reviewedAt:'2026-11-13T01:00:00.000Z',
+      attestationMethod:'admin_review_checklist',
+      memberOutcomes:[{memberIndex:0,result:'failed',evidenceRef:'operator outcome record #R-2'}],
+      objectiveEvidenceRefs:{kills:'admin case #K-2'}}
+  });
+  const historyResponse=await fetch(`http://127.0.0.1:${port}/api/operations/review-history`,{headers:opsHeaders});
+  assert.strictEqual(historyResponse.status,200);
+  const historyRows=await historyResponse.json();
+  const approvedHistory=historyRows.find(row=>row.missionTitle==='API Test Mission' && row.members.some(member=>member.displayName==='Alpha PMC'));
+  assert.ok(approvedHistory,'completed admin reviews remain visible after leaving the pending queue');
+  assert.strictEqual(approvedHistory.decision,'approved');
+  assert.deepStrictEqual(approvedHistory.members[0],{displayName:'Alpha PMC',result:'success',evidenceRef:'operator outcome record #M-1'});
+  const deniedMemberHistory=historyRows.find(row=>row.members.some(member=>member.displayName==='Bravo PMC'));
+  assert.ok(deniedMemberHistory);
+  assert.strictEqual(deniedMemberHistory.members[0].result,'failed','failed operators remain in review history without an award row');
+  assert.strictEqual(deniedMemberHistory.members[0].evidenceRef,'operator outcome record #R-2');
+  const safeReviewHistory=JSON.stringify(historyRows);
+  for(const secret of ['PROFILESECRET','SCAVSECRET','history-group-secret','history-match-secret','HISTORYPROFILESECRET','HISTORYSCAVSECRET','GROUPSECRET','AWARDPROFILESECRET'])
+    assert.ok(!safeReviewHistory.includes(secret),`review history must not expose private identifier ${secret}`);
   const bad=await fetch(`http://127.0.0.1:${port}/api/health`,{headers:{Host:`127.0.0.1:${port}`,Authorization:'Bearer bad'}});
   assert.strictEqual(bad.status,401);
   await new Promise(resolve=>panel.server.close(resolve));
