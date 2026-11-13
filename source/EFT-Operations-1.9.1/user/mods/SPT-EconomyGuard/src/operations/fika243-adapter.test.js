@@ -124,12 +124,16 @@ assert.throws(() => fakeUpdateCallbacks.handleSethost('', { serverId: 'foreign-h
 assert.throws(() => fakeUpdateCallbacks.handleSetStatus('', { serverId: 'foreign-host-match', status: 'complete' }, 'session-1'), /FIKA_MATCH_HOST_SESSION_MISMATCH/);
 assert.throws(() => fakeUpdateCallbacks.handleSetStatus('', { serverId: 'unknown-match', status: 'complete' }, 'session-1'), /FIKA_MATCH_HOST_SESSION_MISMATCH/);
 assert.equal(acceptedUpdateCalls, 11, 'foreign accounts cannot mutate Fika state while legitimate Headless callbacks remain supported');
-const deathEvidence = adapter.getRecentEvents(20).find(event => event.type === 'fika_player_died');
+const deathEvidence = adapter.getRecentEvents(20).find(event => event.type === 'fika_player_died' && event.profileId === 'abcdef0123456789abcdef01');
 assert.ok(deathEvidence, 'authenticated Fika player-death reports should be retained for review');
-assert.equal(deathEvidence.profileId, 'abcdef0123456789abcdef01');
 assert.equal(deathEvidence.reportedCharacterProfileId, 'abcdef0123456789abcdef02');
 assert.equal(deathEvidence.evidenceTrust, 'authenticated_client_report');
 assert.equal(deathEvidence.rewardEligible, false, 'player-death reports must not auto-award');
+const headlessDeathEvidence = adapter.getRecentEvents(20).find(event => event.type === 'fika_player_died' && event.profileId === headlessCharacterId);
+assert.ok(headlessDeathEvidence, 'Fika Headless host character death callback remains observable');
+assert.equal(headlessDeathEvidence.reportedCharacterProfileId, headlessCharacterId);
+assert.equal(headlessDeathEvidence.evidenceTrust, 'authenticated_client_report');
+assert.equal(headlessDeathEvidence.rewardEligible, false);
 const raidEvidenceWithVictim = adapter.captureRaidEnd('session-1', {
     serverId: 'woods.456',
     results: {
@@ -157,7 +161,7 @@ assert.equal(raidEvidenceWithVictim.evidenceTrust, 'untrusted_client_report');
 assert.equal(raidEvidenceWithVictim.rewardEligible, false);
 assert.throws(() => fakeUpdateCallbacks.handleRaidAddPlayer('', { serverId: 'match-1', profileId: 'abcdef0123456789abcdef99' }, 'session-1'), /FIKA_SESSION_PROFILE_MISMATCH/);
 assert.throws(() => fakeUpdateCallbacks.handlePlayerDied('', { serverId: 'match-1', profileId: 'abcdef0123456789abcdef99' }, 'session-1'), /FIKA_SESSION_PROFILE_MISMATCH/);
-assert.equal(acceptedUpdateCalls, 6, 'mismatched accounts and non-host requests are rejected before Fika mutates its match registry');
+assert.equal(acceptedUpdateCalls, 11, 'mismatched accounts and non-host requests are rejected while valid Headless callbacks remain available');
 
 // Raid creation and host/member leave requests must also match the authenticated account.
 let acceptedRaidCalls = 0;
@@ -173,13 +177,13 @@ assert.equal(fakeRaidCallbacks.handleRaidJoin('', { serverId: 'match-1' }, 'sess
 assert.equal(fakeRaidCallbacks.handleRaidLeave('', { serverId: 'match-1', profileId: 'abcdef0123456789abcdef02' }, 'session-1'), 'left');
 assert.equal(fakeRaidCallbacks.handleRaidLeave('', { serverId: hostMatchId, profileId: hostMatchId }, 'session-1'), 'left', 'normal host sentinel must be authenticated as the active host');
 assert.equal(fakeRaidCallbacks.handleRaidLeave('', { serverId: headlessSessionId, profileId: headlessSessionId }, headlessSessionId), 'left', 'Fika Headless host sentinel is its dedicated SPT Session ID');
-assert.equal(acceptedRaidCalls, 5);
+assert.equal(acceptedRaidCalls, 6);
 assert.throws(() => fakeRaidCallbacks.handleRaidCreate('', { serverId: 'foreign-host-match', hostUsername: 'pmc-name' }, 'session-1'), /FIKA_HOST_SESSION_IDENTITY_MISMATCH/);
 assert.throws(() => fakeRaidCallbacks.handleRaidJoin('', { serverId: 'missing-match' }, 'session-1'), /FIKA_MATCH_NOT_FOUND/);
 assert.throws(() => fakeRaidCallbacks.handleRaidJoin('', { serverId: 'match-1' }, 'session-2'), /FIKA_PROFILE_ALREADY_IN_OTHER_MATCH/);
 assert.throws(() => fakeRaidCallbacks.handleRaidLeave('', { serverId: 'match-1', profileId: 'abcdef0123456789abcdef99' }, 'session-1'), /FIKA_SESSION_PROFILE_MISMATCH/);
 assert.throws(() => fakeRaidCallbacks.handleRaidLeave('', { serverId: hostMatchId, profileId: hostMatchId }, 'session-unrelated'), /FIKA_MATCH_HOST_SESSION_MISMATCH/);
-assert.equal(acceptedRaidCalls, 5, 'spoofed create/join/leave requests must be rejected before Fika mutates matches');
+assert.equal(acceptedRaidCalls, 6, 'spoofed create/join/leave requests must be rejected before Fika mutates matches');
 
 // Exact Fika 2.4.3 lifecycle simulation: bind a ready operation group only
 // after all mission members have joined the same map/match, then create a review

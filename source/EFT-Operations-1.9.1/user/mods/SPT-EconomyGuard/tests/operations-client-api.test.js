@@ -143,6 +143,8 @@ const hostReview = operations.finishGroup(hostA.group.id, { verified: true, aliv
 assert.equal(hostReview.state, 'review', 'host-attested kills never trigger automatic completion or rewards');
 assert.equal(operations.state.awards.length, 0);
 assert.equal(hostReview.reviewData.objectiveEvidence.length, 3);
+// Close the reviewed prior group before reusing the same operators in the next test raid.
+operations.resolveReview(hostA.group.id, 'deny', 'Test setup: previous run evidence not approved', 'ADMIN');
 
 // Fika 2.4.3 Headless uses its authenticated SPT Session ID as the Fika serverId,
 // but remains a telemetry reporter rather than a mission squad member or a server verifier.
