@@ -721,7 +721,7 @@ class Fika243OperationsAdapter {
             this.status.playerLeaveHook = false;
         }
         return patched || this.status.matchEndHook || this.status.matchDeleteHook || this.status.matchCreateHook
-            || this.status.playerJoinHook || this.status.playerDeathHook || this.status.playerLeaveHook;
+            || this.status.matchStatusHook || this.status.playerJoinHook || this.status.playerDeathHook || this.status.playerLeaveHook;
     }
 
     captureMatchPlayerJoin(service, matchId, playerId) {
