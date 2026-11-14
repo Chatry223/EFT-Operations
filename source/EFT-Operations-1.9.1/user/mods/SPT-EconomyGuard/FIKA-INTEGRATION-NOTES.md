@@ -48,3 +48,20 @@ Still required:
 1. Build the client DLL on Windows using Visual Studio/MSBuild and the exact local EFT Managed + BepInEx assemblies. The graphical builder now checks SPT Common `3.11.1.0` and Fika Core `1.2.3.0` before building. No compiled DLL has yet been produced in this environment.
 2. Run a live disposable SPT `3.11.1` + Fika Server `2.4.3` + Fika client `1.2.3` test covering host/client, PMC/Scav, map matching, Ready Check, match linking, raid end, and review.
 3. Implement and independently validate objective evidence before enabling automatic mission completion or rewards. Admin review remains mandatory.
+
+
+## Fika Server 2.4.3 lifecycle evidence extension — 2026-11-14
+
+The exact upstream tag `project-fika/Fika-Server@v2.4.3` was inspected, including `src/services/FikaMatchService.ts`, `src/controllers/FikaUpdateController.ts`, and `src/controllers/FikaRaidController.ts`.
+
+The adapter now observes these actual server-side mutations:
+
+- `FikaMatchService.addPlayerToMatch(matchId, playerId, data)`: records the player being added to the in-memory match roster.
+- `FikaMatchService.setPlayerDead(matchId, playerId)`: records the server-accepted dead-state mutation. The triggering callback is still client-originated, so its trust label is `fika_server_accepted_client_event`, not independent server proof.
+- `FikaMatchService.removePlayerFromMatch(matchId, playerId)`: records removal from the server-side roster. Fika's method does not supply a reason, so the record explicitly uses `leaveReason: unknown`; it must never be interpreted as successful extraction.
+
+These lifecycle records are linked to the matching mission review by Match ID and the member's PMC/Scav profile IDs. Review data preserves each event's ID, type, player ID, timestamp, trust label and source. All lifecycle records have `rewardEligible: false`.
+
+The review still remains unverified because Fika 2.4.3 does not independently prove a successful extraction or every in-raid objective. `player_raid_end` client payloads remain untrusted. Automatic mission rewards remain disabled unless a future independently validated server source can satisfy the strict `server_verified` completion gate.
+
+Regression coverage now checks join/death/leave observation, exact trust labels, preservation of the review evidence, and readiness failure when the required lifecycle hooks are unavailable.
