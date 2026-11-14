@@ -30,13 +30,15 @@ class Fika243OperationsAdapter {
         this.status.updateIdentityHook = false;
         this.status.raidIdentityHook = false;
         this.status.playerJoinHook = false;
+        this.status.playerDeathHook = false;
+        this.status.playerLeaveHook = false;
         this.status.matchEndHook = false;
         this.status.matchDeleteHook = false;
         this.status.matchCreateHook = false;
         this.status.lifecycleHook = false;
         this.status.observerInstalled = false;
         this.status.hookState = 'not_installed';
-        this.status.missingHooks = ['saveServer', 'updateIdentity', 'raidIdentity', 'playerJoin', 'matchEnd', 'matchDelete', 'matchCreate', 'lifecycle'];
+        this.status.missingHooks = ['saveServer', 'updateIdentity', 'raidIdentity', 'playerJoin', 'playerDeath', 'playerLeave', 'matchEnd', 'matchDelete', 'matchCreate', 'lifecycle'];
     }
 
     log(level, message) {
@@ -139,6 +141,8 @@ class Fika243OperationsAdapter {
             updateIdentity: this.status.updateIdentityHook === true,
             raidIdentity: this.status.raidIdentityHook === true,
             playerJoin: this.status.playerJoinHook === true,
+            playerDeath: this.status.playerDeathHook === true,
+            playerLeave: this.status.playerLeaveHook === true,
             matchEnd: this.status.matchEndHook === true,
             matchDelete: this.status.matchDeleteHook === true,
             matchCreate: this.status.matchCreateHook === true,
@@ -532,6 +536,7 @@ class Fika243OperationsAdapter {
                 const original = target.addPlayerToMatch;
                 target.addPlayerToMatch = function (matchId, playerId, data, ...rest) {
                     const result = original.call(this, matchId, playerId, data, ...rest);
+                    safe(() => adapter.captureMatchPlayerJoin(this, matchId, playerId));
                     safe(() => adapter.tryStartMissionGroup(this, matchId));
                     return result;
                 };
@@ -542,7 +547,98 @@ class Fika243OperationsAdapter {
         } else {
             this.status.playerJoinHook = false;
         }
-        return patched || this.status.matchEndHook || this.status.matchDeleteHook || this.status.matchCreateHook || this.status.playerJoinHook;
+
+        // These are server-side MatchService mutations in Fika 2.4.3, unlike the
+        // client-originated /fika/update/playerDied and /fika/raid/leave requests.
+        if (typeof target.setPlayerDead === 'function') {
+            if (!target.__egFika243PlayerDeathHook) {
+                const original = target.setPlayerDead;
+                target.setPlayerDead = function (matchId, playerId, ...rest) {
+                    const result = original.call(this, matchId, playerId, ...rest);
+                    safe(() => adapter.captureMatchPlayerDeath(this, matchId, playerId));
+                    return result;
+                };
+                Object.defineProperty(target, '__egFika243PlayerDeathHook', { value: true, enumerable: false });
+                patched = true;
+            }
+            this.status.playerDeathHook = true;
+        } else {
+            this.status.playerDeathHook = false;
+        }
+
+        if (typeof target.removePlayerFromMatch === 'function') {
+            if (!target.__egFika243PlayerLeaveHook) {
+                const original = target.removePlayerFromMatch;
+                target.removePlayerFromMatch = function (matchId, playerId, ...rest) {
+                    const result = original.call(this, matchId, playerId, ...rest);
+                    safe(() => adapter.captureMatchPlayerLeave(this, matchId, playerId));
+                    return result;
+                };
+                Object.defineProperty(target, '__egFika243PlayerLeaveHook', { value: true, enumerable: false });
+                patched = true;
+            }
+            this.status.playerLeaveHook = true;
+        } else {
+            this.status.playerLeaveHook = false;
+        }
+        return patched || this.status.matchEndHook || this.status.matchDeleteHook || this.status.matchCreateHook
+            || this.status.playerJoinHook || this.status.playerDeathHook || this.status.playerLeaveHook;
+    }
+
+    captureMatchPlayerJoin(service, matchId, playerId) {
+        const id = String(matchId || '');
+        const player = String(playerId || '');
+        if (!id || !player) return null;
+        const match = safe(() => service.getMatch && service.getMatch(id), null);
+        if (!match || !(match.players instanceof Map) || !match.players.has(player)) return null;
+        const eventId = `fika-player-join:${id}:${player}`;
+        if (this.getRecentEvents(500).some(event => event.eventId === eventId)) return null;
+        const event = {
+            eventId, type: 'fika_player_joined', timestamp: new Date().toISOString(),
+            fikaServerVersion: EXPECTED_FIKA_VERSION, matchId: id, playerId: player,
+            isDead: object(match.players.get(player)).isDead === true,
+            evidenceTrust: 'fika_server_match_state', source: 'FikaMatchService.addPlayerToMatch',
+            rewardEligible: false
+        };
+        this.appendEvent(event);
+        return event;
+    }
+
+    captureMatchPlayerDeath(service, matchId, playerId) {
+        const id = String(matchId || '');
+        const player = String(playerId || '');
+        if (!id || !player) return null;
+        const match = safe(() => service.getMatch && service.getMatch(id), null);
+        if (!match || !(match.players instanceof Map) || !match.players.has(player)
+            || object(match.players.get(player)).isDead !== true) return null;
+        const eventId = `fika-player-death:${id}:${player}`;
+        if (this.getRecentEvents(500).some(event => event.eventId === eventId)) return null;
+        const event = {
+            eventId, type: 'fika_player_death_confirmed', timestamp: new Date().toISOString(),
+            fikaServerVersion: EXPECTED_FIKA_VERSION, matchId: id, playerId: player,
+            evidenceTrust: 'fika_server_match_state', source: 'FikaMatchService.setPlayerDead',
+            rewardEligible: false
+        };
+        this.appendEvent(event);
+        return event;
+    }
+
+    captureMatchPlayerLeave(service, matchId, playerId) {
+        const id = String(matchId || '');
+        const player = String(playerId || '');
+        if (!id || !player) return null;
+        const match = safe(() => service.getMatch && service.getMatch(id), null);
+        if (match && match.players instanceof Map && match.players.has(player)) return null;
+        const eventId = `fika-player-leave:${id}:${player}`;
+        if (this.getRecentEvents(500).some(event => event.eventId === eventId)) return null;
+        const event = {
+            eventId, type: 'fika_player_left_match', timestamp: new Date().toISOString(),
+            fikaServerVersion: EXPECTED_FIKA_VERSION, matchId: id, playerId: player,
+            leaveReason: 'unknown', evidenceTrust: 'fika_server_match_state',
+            source: 'FikaMatchService.removePlayerFromMatch', rewardEligible: false
+        };
+        this.appendEvent(event);
+        return event;
     }
 
     tryStartMissionGroup(service, matchId) {
@@ -609,6 +705,12 @@ class Fika243OperationsAdapter {
         const aliveProfileIds = match && match.players instanceof Map
             ? [...match.players.entries()].filter(([playerId, player]) => memberIds.has(String(playerId)) && object(player).isDead !== true).map(([playerId]) => raidProfileToAccount.get(String(playerId)))
             : [];
+        const lifecycleEvents = this.getRecentEvents(500).filter(event => String(event.matchId || '') === String(matchId)
+            && ['fika_player_joined', 'fika_player_death_confirmed', 'fika_player_left_match'].includes(event.type)
+            && memberIds.has(String(event.playerId || ''))).map(event => ({
+                eventId: event.eventId, type: event.type, playerId: String(event.playerId),
+                timestamp: event.timestamp, evidenceTrust: event.evidenceTrust, source: event.source
+            }));
         const extractedProfileIds = this.getRecentEvents(500)
             .filter(event => event.type === 'player_raid_end' && String(event.matchId || '') === String(matchId)
                 && group.members.some(member => String(member.profileId) === String(event.profileId || ''))
@@ -619,6 +721,7 @@ class Fika243OperationsAdapter {
                 verified: false,
                 aliveProfileIds,
                 extractedProfileIds,
+                memberLifecycle: lifecycleEvents,
                 evidenceTrust: 'fika_registry_and_client_reports_unverified',
                 source: 'fika-server-adapter'
             });
