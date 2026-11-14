@@ -17,7 +17,8 @@
     "blockInvalidPaymentScheme": true,
     "blockInsufficientFunds": true,
     "maxSellPayoutMultiplier": 3,
-    "sellPayoutSafetyFactor": 1.35
+    "sellPayoutSafetyFactor": 1.35,
+    "reviewSellPayoutMultiplier": 2
   },
   "flea": {
     "blockSelfPurchase": true,
