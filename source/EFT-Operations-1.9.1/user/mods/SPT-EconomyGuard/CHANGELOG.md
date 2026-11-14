@@ -80,3 +80,5 @@
 - Added regression coverage for a container with a 60-round nested stack, correct SVM 20% buyback valuation, and exclusion of unrelated items.
 - Documented the exact integration model, remaining runtime gates, and the existing 4.05x trader payout guard-band review item in `PRICE-MOD-COMPATIBILITY.md`.
 - Added a configurable, non-blocking Trader payout review threshold (default 2x SPT Handbook/SVM expected value). Intermediate anomalies enter the medium-severity review queue; the existing 4.05x hard-block ceiling is unchanged pending real transaction-log analysis.
+- Added an end-to-end `TradeHelper.sellItem` hook regression: verifies a 2.5x payout creates a persisted MEDIUM case, preserves the original SPT sell result, and does not duplicate the case on repeated hook installation.
+- Linked payout review cases to the actual SPT profile ID and nickname (with the login session stored separately), so the Admin Center can identify the player instead of showing `Unknown`.
