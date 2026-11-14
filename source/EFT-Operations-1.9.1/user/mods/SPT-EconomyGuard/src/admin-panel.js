@@ -788,6 +788,18 @@ class AdminPanelServer {
                             submittedAt: group.reviewData && group.reviewData.submittedAt || '',
                             progressTrust: group.progressTrust || {},
                             progressByTrust: group.progressByTrust || {},
+                            memberLifecycle: safeArray(group.reviewData && group.reviewData.memberLifecycle).map(event => {
+                                const playerId = String(event.playerId || '');
+                                const actor = safeArray(group.members).find(member =>
+                                    String(member.profileId || '') === playerId || String(member.scavProfileId || '') === playerId);
+                                return {
+                                    type: String(event.type || ''),
+                                    displayName: actor ? String(actor.displayName || 'Unknown operator') : 'Unknown operator',
+                                    timestamp: event.timestamp || '',
+                                    evidenceTrust: String(event.evidenceTrust || ''),
+                                    source: String(event.source || '')
+                                };
+                            }),
                             evidenceCount: Array.isArray(group.evidenceEvents) ? group.evidenceEvents.length : 0
                         },
                         fikaEvidence: fikaEvidence.map(sanitizeFikaEvent),
