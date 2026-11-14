@@ -24,6 +24,8 @@ function sanitizeFikaEvent(event) {
         exitName: item.exitName || '',
         playTimeSeconds: item.playTimeSeconds,
         reason: item.reason || '',
+        matchStatusName: item.statusName || '',
+        matchStatusCode: item.status,
         evidenceTrust: item.evidenceTrust || '',
         rewardEligible: item.rewardEligible === true,
         reportedVictimCount: Number(item.reportedVictimCount || 0),
