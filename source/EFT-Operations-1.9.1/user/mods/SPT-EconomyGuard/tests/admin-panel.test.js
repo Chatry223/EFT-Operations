@@ -169,6 +169,35 @@ let outsideZip = null;
   assert.deepStrictEqual(checklistResult.group.review.successfulMemberIndexes,[0]);
   assert.strictEqual(operations.state.awards.filter(x=>x.groupId==='group-review-1').length,1,'approval creates the idempotent member award only after checklist validation');
 
+  // A squad review must award only successful members, never the whole group.
+  const mixedGroup={
+    id:'group-mixed-outcomes',missionId:savedMission.id,raidId:'mixed-match-secret',state:'review',
+    members:[
+      {profileId:'111111111111111111111111',displayName:'Successful Operator',result:'review'},
+      {profileId:'222222222222222222222222',displayName:'Failed Operator',result:'review'}
+    ],
+    progress:{kills:1,loot:2,extract:1}
+  };
+  operations.state.groups.push(mixedGroup);
+  const mixedReview=operations.resolveReview('group-mixed-outcomes','approve','Individual squad outcome verification','ADMIN',{
+    confirmed:true,
+    confirmedObjectiveIds:['kills','loot','extract'],
+    confirmedMemberIndexes:[0,1],
+    objectiveEvidenceRefs:{kills:'case #K-20',loot:'profile snapshot #L-20',extract:'raid record #E-20'},
+    memberEvidenceRefs:{'0':'member #M-20 success','1':'member #M-21 failed'},
+    memberOutcomes:{'0':'success','1':'failed'}
+  });
+  assert.strictEqual(mixedReview.members[0].result,'success');
+  assert.strictEqual(mixedReview.members[1].result,'failed');
+  assert.strictEqual(mixedReview.review.successfulMemberIndexes.join(','),'0');
+  assert.strictEqual(mixedReview.review.failedMemberIndexes.join(','),'1');
+  const mixedAwards=operations.state.awards.filter(x=>x.groupId==='group-mixed-outcomes');
+  assert.strictEqual(mixedAwards.length,1,'only the successful member receives an award');
+  assert.strictEqual(mixedAwards[0].profileId,'111111111111111111111111');
+  assert.strictEqual(operations.state.playerStats['111111111111111111111111'].points,75);
+  assert.strictEqual(operations.state.playerStats['222222222222222222222222'],undefined,'failed member receives no points');
+  assert.strictEqual(operations.award(savedMission,mixedGroup,'111111111111111111111111'),false,'award ledger prevents duplicate member rewards');
+
   operations.state.groups.push({
     id:'history-group-secret',missionId:savedMission.id,raidId:'history-match-secret',state:'completed',
     members:[{profileId:'HISTORYPROFILESECRET',scavProfileId:'HISTORYSCAVSECRET',displayName:'Bravo PMC',result:'failed'}],
