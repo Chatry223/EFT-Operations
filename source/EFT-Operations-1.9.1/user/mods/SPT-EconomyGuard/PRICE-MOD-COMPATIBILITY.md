@@ -25,7 +25,7 @@ This is a compatibility improvement at the SPT inventory-model boundary; it does
 
 ## Trader payout threshold — intentionally unchanged
 
-The current default cap is `maxSellPayoutMultiplier=3` multiplied by `sellPayoutSafetyFactor=1.35`, which permits up to 4.05 times the computed SPT Handbook/SVM expected payout. This is a generous guard band and deserves policy review against real transaction logs, but it was not tightened in this change: changing it without representative legitimate-sale data risks false-positive blocks. The expected payout, actual payout, ceiling, Handbook breakdown, SVM coefficient and selected item count remain available for audit.
+The current hard-block cap is `maxSellPayoutMultiplier=3` multiplied by `sellPayoutSafetyFactor=1.35`, which permits up to 4.05 times the computed SPT Handbook/SVM expected payout. It was not tightened without representative legitimate-sale data. A separate non-blocking review threshold, `reviewSellPayoutMultiplier=2`, now creates a medium-severity review for valid sales above 2x expected payout while leaving the transaction untouched. Only sales above the existing hard ceiling are blocked in Protect mode. The expected payout, actual payout, ratio, review threshold, ceiling, Handbook breakdown, SVM coefficient and selected item count remain available for audit.
 
 ## Validation boundary
 
