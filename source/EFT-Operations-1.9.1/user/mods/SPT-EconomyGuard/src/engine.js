@@ -1244,6 +1244,9 @@ class EconomyGuard {
                         guard.createReviewCase('TRADER_SELL_PAYOUT_REVIEW', {
                             sessionId,
                             traderId: request && request.tid,
+                            profileId: String(profileWithItems && (profileWithItems._id || profileWithItems.id) || ''),
+                            playerName: String(profileWithItems && profileWithItems.Info && profileWithItems.Info.Nickname || ''),
+                            sessionId,
                             playerId: getProfileId(profileWithItems, sessionId),
                             selectedItemIds: selectedIds,
                             check
