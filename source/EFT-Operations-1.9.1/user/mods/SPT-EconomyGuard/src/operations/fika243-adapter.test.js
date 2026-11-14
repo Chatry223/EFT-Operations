@@ -255,7 +255,11 @@ const probeEvents = lifecycleAdapter.getRecentEvents(20).filter(event => event.m
 assert.deepEqual(probeEvents.map(event => event.type).sort(), [
     'fika_player_death_confirmed', 'fika_player_joined', 'fika_player_left_match'
 ].sort(), 'server-side Fika roster, death and leave mutations must be recorded');
-assert.ok(probeEvents.every(event => event.evidenceTrust === 'fika_server_match_state' && event.rewardEligible === false));
+assert.ok(probeEvents.every(event => event.rewardEligible === false));
+assert.equal(probeEvents.find(event => event.type === 'fika_player_death_confirmed').evidenceTrust, 'fika_server_accepted_client_event',
+    'death state is server-accepted but originates from an authenticated client callback');
+assert.ok(probeEvents.filter(event => event.type !== 'fika_player_death_confirmed')
+    .every(event => event.evidenceTrust === 'fika_server_membership_mutation'));
 assert.equal(ops.state.groups.find(x => x.id === group.id).state, 'forming');
 const hostProfileId = 'abcdef0123456789abcdef11';
 liveMatchService.createMatch({ serverId: hostProfileId, settings: { location: 'woods' } });
