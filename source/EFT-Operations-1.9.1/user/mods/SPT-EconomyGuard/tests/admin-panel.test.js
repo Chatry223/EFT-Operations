@@ -25,7 +25,8 @@ let outsideZip = null;
   const fikaEvents=[
     {eventId:'event-profile-secret',type:'player_raid_end',groupId:'group-review-1',matchId:'fika-match-secret',profileId:'PROFILESECRET',displayName:'Alpha PMC',map:'woods',exitStatus:'Survived',exitName:'Outskirts',reportedVictimCount:1,reportedVictims:[{profileId:'VICTIMSECRET',name:'Scav-Test',role:'assault',side:'Savage',corroboratedByFikaDeathReport:true}],reportedLootItemCount:2,reportedLootByTpl:{'tpl-123':2},acceptedLootByTpl:{'tpl-123':2},reportedLootItems:[{itemId:'ITEMSECRET',tpl:'tpl-123',count:2,acceptedBySpt:true}],reportedSessionCounters:[{key:['KilledSavage'],value:1}],evidenceTrust:'untrusted_client_report',rewardEligible:false},
     {eventId:'death-profile-secret',type:'fika_player_died',groupId:'group-review-1',matchId:'fika-match-secret',profileId:'PROFILESECRET',reportedCharacterProfileId:'VICTIMSECRET',displayName:'Bravo PMC',evidenceTrust:'authenticated_client_report'},
-    {eventId:'match-profile-secret',type:'fika_match_end',groupId:'group-review-1',matchId:'fika-match-secret',players:['PROFILESECRET'],displayName:'Alpha PMC',evidenceTrust:'fika_match_end_lifecycle_with_authenticated_roster'}
+    {eventId:'match-profile-secret',type:'fika_match_end',groupId:'group-review-1',matchId:'fika-match-secret',players:['PROFILESECRET'],displayName:'Alpha PMC',evidenceTrust:'fika_match_end_lifecycle_with_authenticated_roster'},
+    {eventId:'match-status-profile-secret',type:'fika_match_status_changed',groupId:'group-review-1',matchId:'fika-match-secret',status:2,statusName:'COMPLETE',players:['PROFILESECRET'],evidenceTrust:'fika_server_lifecycle',rewardEligible:false}
   ];
   const fikaOperationsAdapter={getStatus:()=>({detected:true,enabled:true,observerInstalled:true,hookState:'ready'}),getRecentEvents:()=>fikaEvents};
   panel=new AdminPanelServer(modDir,guard,{info(){},warn(){},error(){}},{enabled:true,host:'127.0.0.1',port:0},{saveServer,launcherController,operations,board,fikaOperationsAdapter});
@@ -112,6 +113,10 @@ let outsideZip = null;
   for(const secret of ['PROFILESECRET','VICTIMSECRET','SCAVSECRET','ITEMSECRET','fika-match-secret','LEADERSECRET','BOTSECRET','host-event-secret','loot-event-secret'])
     assert.ok(!safeReviewJson.includes(secret),`review API must not expose internal identifier ${secret}`);
   assert.strictEqual(reviewRows[0].fikaEvidence[0].reportedVictims[0].name,'Scav-Test');
+  assert.strictEqual(reviewRows[0].fikaEvidence[3].matchStatusName,'COMPLETE','Admin API must expose the Fika status label in review evidence');
+  assert.strictEqual(reviewRows[0].fikaEvidence[3].matchStatusCode,2);
+  assert.strictEqual(reviewRows[0].fikaEvidence[3].playerCount,1);
+  assert.strictEqual(reviewRows[0].fikaEvidence[3].rewardEligible,false,'sanitized status evidence must preserve the non-reward trust boundary');
 
   profiles['session-leaderboard']={info:{id:'session-leaderboard',username:'alpha'},characters:{pmc:{_id:profileId,Info:{Nickname:'Alpha PMC'}},scav:{_id:'abcdef0123456789abcdef98',Info:{Nickname:'Alpha Scav'}}}};
   operations.state.playerStats[profileId]={points:500,completedMissions:1};
