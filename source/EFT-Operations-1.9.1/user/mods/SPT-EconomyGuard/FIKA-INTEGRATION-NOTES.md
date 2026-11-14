@@ -92,3 +92,9 @@ The Fika admin panel now reports:
 - **ENABLED — UNMONITORED** — configuration permits transfers but the controller hook is unavailable.
 
 The observer does not change `allowItemSending`, does not block or alter transfers, and does not alter Fika's response semantics. A regression test covers tree aggregation, observed sender debit, uncertain responses, thrown errors, hook idempotence, and response preservation.
+
+## Fika Server 2.4.3 match-status observer — 2026-11-14
+
+The exact upstream `project-fika/Fika-Server@v2.4.3` implementation of `FikaMatchService.setMatchStatus(matchId, status)` and `EFikaMatchStatus` was inspected. The status enum is `LOADING = 0`, `IN_GAME = 1`, `COMPLETE = 2`. The adapter now wraps the service method after the original async mutation completes and records the status, match ID, current roster, mission association, timestamp, source and `fika_server_lifecycle` trust label. It preserves the original Promise result and does not change Fika state.
+
+`COMPLETE` is corroborating lifecycle evidence only. It does not prove that any player extracted, survived, or completed a mission objective. Every status event has `rewardEligible: false`; the mission still enters admin review at match end and automatic awards remain disabled without independent server proof. The new hook is included in the observer readiness calculation and has a regression test for async result preservation and trust boundaries.
