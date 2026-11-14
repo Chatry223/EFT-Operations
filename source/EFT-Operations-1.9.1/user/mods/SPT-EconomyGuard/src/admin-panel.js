@@ -24,6 +24,8 @@ function sanitizeFikaEvent(event) {
         exitName: item.exitName || '',
         playTimeSeconds: item.playTimeSeconds,
         reason: item.reason || '',
+        matchStatusName: item.statusName || '',
+        matchStatusCode: item.status,
         evidenceTrust: item.evidenceTrust || '',
         rewardEligible: item.rewardEligible === true,
         reportedVictimCount: Number(item.reportedVictimCount || 0),
@@ -722,12 +724,23 @@ class AdminPanelServer {
                         } else if (objective.type === 'raid_complete') {
                             reportedCount = new Set(raidEnds.filter(event => !!String(event.exitStatus || '').trim()).map(event => String(event.profileId || event.displayName || 'unknown'))).size;
                         }
-                        const progressCount = Number((group.progress || {})[objective.id] || 0);
-                        const progressTrust = String((group.progressTrust || {})[objective.id] || 'none');
-                        const verifiedCount = progressTrust === 'server_verified' ? progressCount : 0;
-                        hostAttestedCount = progressTrust === 'host_attested' ? progressCount : 0;
-                        const sptAcceptedCount = progressTrust === 'spt_accepted_client_delta' ? progressCount : 0;
-                        const clientReportedCount = progressTrust === 'client_report_only' ? progressCount : 0;
+                        const progressCount = Math.min(objective.count, Math.max(0, Math.floor(Number((group.progress || {})[objective.id] || 0))));
+                        const rawCounts = group.progressByTrust && group.progressByTrust[objective.id]
+                            && typeof group.progressByTrust[objective.id] === 'object' && !Array.isArray(group.progressByTrust[objective.id])
+                            ? group.progressByTrust[objective.id] : {};
+                        const trustKeys = ['server_verified', 'host_attested', 'spt_accepted_client_delta', 'client_report_only', 'legacy_unattributed'];
+                        const parsedCounts = Object.fromEntries(trustKeys.map(key => [key, Math.max(0, Math.floor(Number(rawCounts[key]) || 0))]));
+                        const rawTotal = Object.values(parsedCounts).reduce((sum, count) => sum + count, 0);
+                        const evidenceCounts = rawTotal > progressCount
+                            ? { server_verified: 0, host_attested: 0, spt_accepted_client_delta: 0, client_report_only: 0, legacy_unattributed: progressCount }
+                            : { ...parsedCounts, legacy_unattributed: parsedCounts.legacy_unattributed + progressCount - rawTotal };
+                        const verifiedCount = evidenceCounts.server_verified;
+                        hostAttestedCount = evidenceCounts.host_attested;
+                        const sptAcceptedCount = evidenceCounts.spt_accepted_client_delta;
+                        const clientReportedCount = evidenceCounts.client_report_only;
+                        const unattributedCount = evidenceCounts.legacy_unattributed;
+                        const activeTrusts = Object.entries(evidenceCounts).filter(([, count]) => count > 0).map(([trust]) => trust);
+                        const progressTrust = activeTrusts.length > 1 ? 'mixed' : (activeTrusts[0] || 'none');
                         return {
                             objectiveId: objective.id,
                             type: objective.type,
@@ -740,13 +753,17 @@ class AdminPanelServer {
                             hostAttestedCount,
                             sptAcceptedCount,
                             clientReportedCount,
+                            unattributedCount,
+                            evidenceCounts,
                             reportedCount,
                             evidenceStatus: verifiedCount >= objective.count ? 'server_verified'
-                                : hostAttestedCount > 0 ? 'host_attested_admin_review'
-                                    : sptAcceptedCount > 0 ? 'spt_accepted_client_delta_review'
-                                        : clientReportedCount > 0 ? 'client_report_only'
-                                            : reportedCount > 0 && objective.type === 'raid_complete' ? 'fika_lifecycle_observed_unverified'
-                                        : reportedCount > 0 ? 'client_report_only' : 'no_evidence'
+                                : activeTrusts.length > 1 ? 'mixed_evidence_admin_review'
+                                    : hostAttestedCount > 0 ? 'host_attested_admin_review'
+                                        : sptAcceptedCount > 0 ? 'spt_accepted_client_delta_review'
+                                            : clientReportedCount > 0 ? 'client_report_only'
+                                                : unattributedCount > 0 ? 'legacy_unattributed_admin_review'
+                                                    : reportedCount > 0 && objective.type === 'raid_complete' ? 'fika_lifecycle_observed_unverified'
+                                                        : reportedCount > 0 ? 'client_report_only' : 'no_evidence'
                         };
                     });
                     return {
@@ -772,6 +789,19 @@ class AdminPanelServer {
                             source: group.reviewData && group.reviewData.source || '',
                             submittedAt: group.reviewData && group.reviewData.submittedAt || '',
                             progressTrust: group.progressTrust || {},
+                            progressByTrust: group.progressByTrust || {},
+                            memberLifecycle: safeArray(group.reviewData && group.reviewData.memberLifecycle).map(event => {
+                                const playerId = String(event.playerId || '');
+                                const actor = safeArray(group.members).find(member =>
+                                    String(member.profileId || '') === playerId || String(member.scavProfileId || '') === playerId);
+                                return {
+                                    type: String(event.type || ''),
+                                    displayName: actor ? String(actor.displayName || 'Unknown operator') : 'Unknown operator',
+                                    timestamp: event.timestamp || '',
+                                    evidenceTrust: String(event.evidenceTrust || ''),
+                                    source: String(event.source || '')
+                                };
+                            }),
                             evidenceCount: Array.isArray(group.evidenceEvents) ? group.evidenceEvents.length : 0
                         },
                         fikaEvidence: fikaEvidence.map(sanitizeFikaEvent),
@@ -784,6 +814,7 @@ class AdminPanelServer {
                                 actorName,
                                 target: event.target, targetCategory: event.targetCategory,
                                 victimRole: event.victimRole, victimSide: event.victimSide,
+                                reporterKind: event.reporterKind === 'fika_headless_host' ? 'fika_headless_host' : 'fika_player_host',
                                 evidenceTrust: event.evidenceTrust, timestamp: event.timestamp
                             };
                             if (event.type === 'kill') safeEvent.killerName = actorName;
@@ -792,6 +823,65 @@ class AdminPanelServer {
                         objectiveEvidence
                     };
                 }));
+            }
+            if (req.method === 'GET' && pathname === '/api/operations/review-history') {
+                const operations = this.requireOperations();
+                const groups = (operations.state && Array.isArray(operations.state.groups) ? operations.state.groups : [])
+                    .filter(group => group && group.review && typeof group.review === 'object' && group.review.reviewedAt)
+                    .sort((a, b) => Date.parse(b.review.reviewedAt || 0) - Date.parse(a.review.reviewedAt || 0))
+                    .slice(0, 500);
+                const history = groups.map(group => {
+                    const review = group.review || {};
+                    const mission = ((operations.state && operations.state.missions) || []).find(item => item.id === group.missionId);
+                    // Redact private account/raid identifiers even when an administrator
+                    // accidentally pasted one into a free-text evidence reference or note.
+                    const privateTokens = [
+                        group.id, group.raidId,
+                        ...safeArray(group.members).flatMap(member => [member.profileId, member.scavProfileId])
+                    ].filter(value => typeof value === 'string' && value.length >= 8);
+                    const redact = value => {
+                        let result = String(value == null ? '' : value);
+                        for (const token of privateTokens) result = result.split(token).join('[redacted]');
+                        return result.slice(0, 1000);
+                    };
+                    const outcomeRows = safeArray(review.memberOutcomes);
+                    const members = safeArray(group.members).map((member, index) => {
+                        const saved = outcomeRows.find(item => item && item.memberIndex === index);
+                        const fallbackResult = ['success', 'failed', 'denied'].includes(member.result)
+                            ? member.result : (review.decision === 'deny' ? 'denied' : 'legacy_outcome_unknown');
+                        const result = saved && ['success', 'failed', 'denied'].includes(saved.result)
+                            ? saved.result : fallbackResult;
+                        const reference = saved && saved.evidenceRef != null
+                            ? saved.evidenceRef
+                            : (review.memberEvidenceRefs && review.memberEvidenceRefs[String(index)])
+                                || member.reviewEvidenceRef || '';
+                        return {
+                            displayName: redact(member.displayName || 'Unknown operator'),
+                            result,
+                            evidenceRef: redact(reference)
+                        };
+                    });
+                    const objectiveRefs = review.objectiveEvidenceRefs && typeof review.objectiveEvidenceRefs === 'object'
+                        ? review.objectiveEvidenceRefs : {};
+                    const objectives = Object.entries(objectiveRefs).map(([objectiveId, evidenceRef]) => {
+                        const objective = mission && safeArray(mission.objectives).find(item => String(item.id) === String(objectiveId));
+                        const label = objective
+                            ? String(objective.type || 'objective') + (objective.target ? ' · ' + String(objective.target) : '')
+                            : 'Archived objective';
+                        return { label: redact(label), evidenceRef: redact(evidenceRef) };
+                    });
+                    return {
+                        missionTitle: redact(mission ? mission.title : 'Archived operation'),
+                        decision: review.decision === 'approve' ? 'approved' : 'denied',
+                        note: redact(review.note || ''),
+                        reviewer: redact(review.reviewer || 'ADMIN'),
+                        reviewedAt: review.reviewedAt,
+                        attestationMethod: review.attestationMethod || 'legacy_review',
+                        members,
+                        objectives
+                    };
+                });
+                return this.send(res, 200, history);
             }
             if (req.method === 'GET' && pathname === '/api/operations/fika') return this.send(res, 200, this.fikaOperationsAdapter ? { status: this.fikaOperationsAdapter.getStatus(), events: this.fikaOperationsAdapter.getRecentEvents(150).map(sanitizeFikaEvent) } : { status: { detected: false, enabled: false, reason: 'OPERATIONS_OR_FIKA_ADAPTER_DISABLED' }, events: [] });
             if (req.method === 'GET' && pathname === '/api/operations/leaderboard') {
@@ -860,8 +950,12 @@ class AdminPanelServer {
             }
             return this.send(res, 404, { error: 'NOT_FOUND' });
         } catch (err) {
-            const known = ['INVALID_PROFILE_ID', 'INVALID_TPL', 'INVALID_CHANNEL', 'INVALID_EXPIRY', 'INVALID_MODE', 'INVALID_NOTIFICATIONS', 'INVALID_MESSAGES', 'INVALID_MESSAGE_ENTRY', 'INVALID_PRICE_SETTINGS', 'INVALID_CASE_STATUS', 'CASE_NOT_FOUND', 'BODY_TOO_LARGE', 'INVALID_JSON', 'INVALID_USERNAME', 'INVALID_PASSWORD', 'INVALID_EDITION', 'USERNAME_ALREADY_EXISTS', 'ACCOUNT_CREATION_FAILED', 'ACCOUNT_CREATION_NOT_FOUND', 'ACCOUNT_PROVISIONING_UNAVAILABLE', 'PROFILE_NOT_FOUND', 'INVALID_IP_LIST', 'INVALID_IP_ENTRY', 'IP_ALLOWLIST_EMPTY', 'SAVE_FAILED', 'MISSION_NOT_FOUND', 'MISSION_NOT_EDITABLE', 'MISSION_UNAVAILABLE', 'GROUP_FULL', 'GROUP_NOT_FOUND', 'NOT_GROUP_MEMBER', 'GROUP_NOT_READY', 'RAID_NOT_ACTIVE', 'OPERATIONS_UNAVAILABLE', 'INVALID_MISSION', 'INVALID_TITLE', 'INVALID_DESCRIPTION', 'INVALID_MAP', 'INVALID_MODE', 'INVALID_MIN_PLAYERS', 'INVALID_MAX_PLAYERS', 'INVALID_OBJECTIVES', 'INVALID_REWARD_POINTS', 'INVALID_REWARD_ROUBLES', 'INVALID_REWARD_TPL', 'INVALID_REWARD_ITEM_COUNT', 'INVALID_START_AT', 'INVALID_END_AT', 'MISSION_NOT_READY', 'REVIEW_NOT_FOUND', 'INVALID_REVIEW_DECISION', 'INVALID_REVIEW_NOTE', 'REVIEW_ATTESTATION_REQUIRED', 'REVIEW_OBJECTIVES_NOT_CONFIRMED', 'REVIEW_OBJECTIVE_EVIDENCE_REQUIRED', 'INVALID_REVIEW_OBJECTIVE_EVIDENCE_REF', 'REVIEW_MEMBERS_NOT_CONFIRMED', 'REVIEW_MEMBER_EVIDENCE_REQUIRED', 'INVALID_REVIEW_MEMBER_EVIDENCE_REF'];
-            const status = known.includes(err.message) || String(err.message).startsWith('INVALID_') || String(err.message).startsWith('BOARD_') || String(err.message).startsWith('NEWS_') || String(err.message).startsWith('SVM_') || String(err.message).startsWith('UNKNOWN_SVM_') ? 400 : 500;
+            const known = ['INVALID_PROFILE_ID', 'INVALID_TPL', 'INVALID_CHANNEL', 'INVALID_EXPIRY', 'INVALID_MODE', 'INVALID_NOTIFICATIONS', 'INVALID_MESSAGES', 'INVALID_MESSAGE_ENTRY', 'INVALID_PRICE_SETTINGS', 'INVALID_CASE_STATUS', 'CASE_NOT_FOUND', 'BODY_TOO_LARGE', 'INVALID_JSON', 'INVALID_USERNAME', 'INVALID_PASSWORD', 'INVALID_EDITION', 'USERNAME_ALREADY_EXISTS', 'ACCOUNT_CREATION_FAILED', 'ACCOUNT_CREATION_NOT_FOUND', 'ACCOUNT_PROVISIONING_UNAVAILABLE', 'PROFILE_NOT_FOUND', 'INVALID_IP_LIST', 'INVALID_IP_ENTRY', 'IP_ALLOWLIST_EMPTY', 'SAVE_FAILED', 'MISSION_NOT_FOUND', 'MISSION_NOT_EDITABLE', 'MISSION_UNAVAILABLE', 'GROUP_FULL', 'GROUP_NOT_FOUND', 'NOT_GROUP_MEMBER', 'GROUP_NOT_READY', 'RAID_NOT_ACTIVE', 'OPERATIONS_UNAVAILABLE', 'INVALID_MISSION', 'INVALID_TITLE', 'INVALID_DESCRIPTION', 'INVALID_MAP', 'INVALID_MODE', 'INVALID_MIN_PLAYERS', 'INVALID_MAX_PLAYERS', 'INVALID_OBJECTIVES', 'INVALID_REWARD_POINTS', 'INVALID_REWARD_ROUBLES', 'INVALID_REWARD_TPL', 'INVALID_REWARD_ITEM_COUNT', 'INVALID_START_AT', 'INVALID_END_AT', 'MISSION_NOT_READY', 'REVIEW_NOT_FOUND', 'INVALID_REVIEW_DECISION', 'INVALID_REVIEW_NOTE', 'REVIEW_ATTESTATION_REQUIRED', 'REVIEW_OBJECTIVES_NOT_CONFIRMED', 'REVIEW_OBJECTIVE_EVIDENCE_REQUIRED', 'INVALID_REVIEW_OBJECTIVE_EVIDENCE_REF', 'REVIEW_MEMBERS_NOT_CONFIRMED', 'REVIEW_MEMBER_EVIDENCE_REQUIRED', 'INVALID_REVIEW_MEMBER_EVIDENCE_REF', 'REVIEW_MEMBER_OUTCOMES_REQUIRED', 'INVALID_REVIEW_MEMBER_OUTCOME'];
+            const errorCode = String(err.message || '');
+            const status = known.includes(errorCode) || errorCode.startsWith('INVALID_')
+                || errorCode.startsWith('REVIEW_') || errorCode.startsWith('BOARD_')
+                || errorCode.startsWith('NEWS_') || errorCode.startsWith('SVM_')
+                || errorCode.startsWith('UNKNOWN_SVM_') ? 400 : 500;
             this.log(status === 500 ? 'error' : 'warn', `Admin API ${pathname}: ${err.message}`);
             return this.send(res, status, { error: err.message || 'INTERNAL_ERROR' });
         }

@@ -121,6 +121,7 @@ class StatusBoard {
         return {
             now: Date.now, settings, secret: this.store.secret,
             profiles: saveServer && typeof saveServer.getProfiles === 'function' ? safeCall(() => saveServer.getProfiles(), {}) : {},
+            operations: this.services.operations || null,
             presence: guard.onlinePresence, presenceAvailable: !!(online && online.available),
             activeRaids: this.collector.getActiveRaids(Date.now(), settings.raidTtlMinutes),
             offers: this.collector.getOffers(),

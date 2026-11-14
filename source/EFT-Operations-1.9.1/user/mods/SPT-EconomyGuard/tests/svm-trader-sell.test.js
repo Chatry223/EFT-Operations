@@ -64,12 +64,20 @@ try {
     assert.equal(within.priceSource, 'spt-handbook');
     assert.equal(within.ceiling, 81000);
     assert.equal(within.valid, true);
+    assert.equal(within.payoutRatio, 4.05);
+    assert.equal(within.reviewRequired, true, 'payouts above the review threshold are flagged without crossing the hard block ceiling');
 
     const over = guard.checkTraderSell(instance, profile, {
         tid: traderId, items: [{ id: 'item-1' }], price: 81001
     }, 'session-1');
     assert.equal(over.known, true);
     assert.equal(over.valid, false, 'payout above the SVM-adjusted 20% buyback ceiling must be rejected');
+
+    const ordinary = guard.checkTraderSell(instance, profile, {
+        tid: traderId, items: [{ id: 'item-1' }], price: 30000
+    }, 'session-1');
+    assert.equal(ordinary.valid, true);
+    assert.equal(ordinary.reviewRequired, false, 'ordinary payout within twice the SPT/SVM expected value must not create a review');
 
     // Fallback path for SPT-compatible wrappers or test doubles that do not expose getLoyaltyLevel.
     const fallbackInstance = Object.assign({}, instance, {
@@ -115,6 +123,41 @@ try {
     assert.equal(zero.known, true);
     assert.equal(zero.expectedRub, 0);
     assert.equal(zero.valid, true);
+
+    // PackNStrap-style container sale: the request selects only the root ID,
+    // but SPT stores each contained item as a separate Inventory row.
+    const packRoot = 'packnstrap-container';
+    const containedAmmo = 'packnstrap-ammo';
+    const packTpl = 'abcdef0123456789abcdef0101';
+    const ammoTpl = 'abcdef0123456789abcdef0102';
+    const nestedProfile = {
+        Inventory: { items: [
+            { _id: packRoot, _tpl: packTpl, parentId: 'hideout' },
+            { _id: containedAmmo, _tpl: ammoTpl, parentId: packRoot, upd: { StackObjectsCount: 60 } },
+            { _id: 'unrelated-item', _tpl: 'abcdef0123456789abcdef0103', parentId: 'hideout' }
+        ] },
+        TradersInfo: { [traderId]: { loyaltyLevel: 2 } }
+    };
+    const nestedInstance = Object.assign({}, instance, {
+        databaseService: { getItems() { return { [packTpl]: {}, [ammoTpl]: {} }; } },
+        handbookHelper: {
+            getTemplatePrice(tpl) {
+                if (tpl === packTpl) return 1000;
+                if (tpl === ammoTpl) return 100;
+                return 0;
+            },
+            inRUB(value, currency) { assert.equal(currency, 'RUB'); return value; }
+        }
+    });
+    const nestedSale = guard.checkTraderSell(nestedInstance, nestedProfile, {
+        tid: traderId, items: [{ id: packRoot }], price: 5670
+    }, 'session-1');
+    assert.equal(nestedSale.known, true);
+    assert.equal(nestedSale.assetValue, 7000, 'container root plus 60 contained rounds must be valued');
+    assert.equal(nestedSale.selectedItemCount, 2, 'unrelated inventory items must not be included');
+    assert.equal(nestedSale.assetBreakdown.length, 2);
+    assert.equal(nestedSale.expectedRub, 1400, '20% SVM buyback applies to the full selected item tree');
+    assert.equal(nestedSale.valid, true, 'payout at the configured ceiling must remain valid');
 } finally {
     fs.rmSync(root, { recursive: true, force: true });
 }

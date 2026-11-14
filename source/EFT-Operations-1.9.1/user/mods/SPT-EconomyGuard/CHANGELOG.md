@@ -55,3 +55,33 @@
 - Client requests target the server's `EFTOperations` static-router prefix and attempt to reuse the active SPT PHP session cookie; no fabricated player ID or credential is used.
 - The client project is source-only in this release; it was not compiled in this Linux environment and must be built against the user's Windows game assemblies.
 - Raid start, kill/extract proof, rewards, 3D briefing room and synchronized video remain out of scope for this milestone.
+
+
+
+## 1.9.1 — Fika 2.4.3 per-player lifecycle evidence
+- Added version-gated observation of Fika Server 2.4.3 `FikaMatchService.addPlayerToMatch`, `setPlayerDead`, and `removePlayerFromMatch` mutations.
+- Match review records now retain per-member join, server-accepted death-state, and roster-removal evidence with timestamps, source, and explicit trust labels.
+- A roster removal is recorded with an unknown reason and is never treated as extraction.
+- Death-state evidence is labeled as a server-accepted client event, not independent server proof, because the Fika callback originates from the client.
+- All lifecycle evidence remains ineligible for automatic rewards; unverified raids continue to require individual admin review.
+- Added regression coverage for lifecycle hooks, trust labels, review persistence, and required-hook readiness.
+- Added a read-only observer at the exact Fika 2.4.3 `FikaSendItemController.sendItem` execution boundary; records sender/receiver profile references, item-tree TPL/count summary, and whether the sender inventory debit was observed.
+- The transfer observer preserves Fika's original response/exception behavior, records uncertain outcomes without claiming delivery, and never makes item transfers reward-eligible.
+- The authenticated Fika admin panel distinguishes a closed route, an enabled-and-observed route, and an enabled-but-unmonitored route.
+- Added regression tests for successful debit observation, failed/uncertain transfer, exception propagation, item-tree aggregation, and non-interference.
+
+
+## 1.9.2 — Live price and nested-container valuation hardening
+
+- Confirmed the LiveFleaPrices integration point is SPT's refreshed `RagfairPriceService` dynamic-price cache, which reflects the mod's final price table after blacklist, limiter and trader-price rules; added regression coverage for cache refresh and the 1-RUB sentinel fallback.
+- Kept trader buyback valuation anchored to SPT Handbook prices and the active SVM loyalty coefficient; LiveFleaPrices flea prices cannot inflate trader payout expectations.
+- Fixed trader sell valuation to expand the selected inventory item tree, including PackNStrap-style containers, nested contents, weapon attachments and contained stacks.
+- Added a fail-safe unknown result when the selected inventory tree cannot be resolved; unrelated inventory items are never included.
+- Added regression coverage for a container with a 60-round nested stack, correct SVM 20% buyback valuation, and exclusion of unrelated items.
+- Documented the exact integration model, remaining runtime gates, and the existing 4.05x trader payout guard-band review item in `PRICE-MOD-COMPATIBILITY.md`.
+- Added a configurable, non-blocking Trader payout review threshold (default 2x SPT Handbook/SVM expected value). Intermediate anomalies enter the medium-severity review queue; the existing 4.05x hard-block ceiling is unchanged pending real transaction-log analysis.
+- Added an end-to-end `TradeHelper.sellItem` hook regression: verifies a 2.5x payout creates a persisted MEDIUM case, preserves the original SPT sell result, and does not duplicate the case on repeated hook installation.
+- Linked payout review cases to the actual SPT profile ID and nickname (with the login session stored separately), so the Admin Center can identify the player instead of showing `Unknown`.
+
+- Added observation of the exact Fika 2.4.3 `FikaMatchService.setMatchStatus` transition. The review stream now records `LOADING`, `IN_GAME`, and `COMPLETE` with the live roster and explicit `fika_server_lifecycle` trust; `COMPLETE` is never treated as extraction proof or reward authorization.
+- Added regression coverage for async status-hook response preservation, roster capture, trust labeling, and `rewardEligible: false`; the match-status hook is now part of Fika observer readiness.

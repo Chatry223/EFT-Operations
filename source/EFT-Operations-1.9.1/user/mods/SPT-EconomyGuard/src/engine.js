@@ -867,10 +867,18 @@ class EconomyGuard {
         if (!selected.length || selected.length !== selectedIds.length) {
             return { known: false, valid: true, reason: 'TRADER_SELL_ITEMS_UNAVAILABLE', assetValue: 0, confidence: 'LOW' };
         }
+        // Trader sell requests identify the selected root item(s), while SPT's
+        // inventory stores container contents as separate rows linked by parentId.
+        // Expand the exact selected trees before valuation so PackNStrap cases,
+        // nested containers, weapon attachments and contained stacks are counted.
+        const selectedTree = core.itemTree(selectedIds, inventory);
+        if (!selectedTree.length || selectedTree.length < selected.length) {
+            return { known: false, valid: true, reason: 'TRADER_SELL_ITEM_TREE_INCOMPLETE', assetValue: 0, confidence: 'LOW' };
+        }
         // Trader buyback is based on SPT Handbook value, not LiveFleaPrices/Ragfair
         // dynamic price. Do not let a volatile flea price inflate the trader payout ceiling.
-        const asset = this.getTraderSellAssetValue(selected, instance);
-        const qualityMultiplier = this.getPriceQualityMultiplier(instance, selected);
+        const asset = this.getTraderSellAssetValue(selectedTree, instance);
+        const qualityMultiplier = this.getPriceQualityMultiplier(instance, selectedTree);
         // SPT 3.11.1 TraderHelper.getTrader() returns ITraderBase directly,
         // not a { base } wrapper. The effective buyback coefficient lives on the
         // player's current loyalty-level row, not on ITraderBase itself.
@@ -901,7 +909,13 @@ class EconomyGuard {
         const multiplier = Number(this.config.trader.maxSellPayoutMultiplier) || 3;
         const safety = Number(this.config.trader.sellPayoutSafetyFactor) || 1.35;
         const ceiling = expectedRub * multiplier * safety;
-        return { known: true, valid: actualRub <= ceiling, expectedRub, actualRub, ceiling, assetValue: asset.value, qualityMultiplier, confidence: asset.confidence, priceSource: asset.source, traderId: request.tid, buyPriceCoef, buybackPercent, loyaltyLevel: Number(profile && profile.TradersInfo && profile.TradersInfo[request.tid] && profile.TradersInfo[request.tid].loyaltyLevel) || null };
+        const payoutRatio = expectedRub > 0 ? actualRub / expectedRub : null;
+        // Intermediate overpayments are sent to a review queue, not blocked.
+        // Keep the established hard ceiling separate until real transaction
+        // samples justify changing it.
+        const reviewMultiplier = Number(this.config.trader.reviewSellPayoutMultiplier) || 2;
+        const reviewRequired = payoutRatio !== null && payoutRatio > reviewMultiplier;
+        return { known: true, valid: actualRub <= ceiling, expectedRub, actualRub, ceiling, payoutRatio, reviewMultiplier, reviewRequired, assetValue: asset.value, selectedItemCount: selectedTree.length, assetBreakdown: asset.breakdown, qualityMultiplier, confidence: asset.confidence, priceSource: asset.source, traderId: request.tid, buyPriceCoef, buybackPercent, loyaltyLevel: Number(profile && profile.TradersInfo && profile.TradersInfo[request.tid] && profile.TradersInfo[request.tid].loyaltyLevel) || null };
     }
 
     checkFleaListing(instance, profile, request) {
@@ -1225,6 +1239,19 @@ class EconomyGuard {
                 guard.traceTransaction('TRADE_HELPER_SELL_ITEM', profileWithItems, request || {}, { payout: request && request.price });
                 try {
                     const check = guard.checkTraderSell(this, profileWithItems, request || {}, sessionId);
+                    if (check.known && check.valid && check.reviewRequired) {
+                        const selectedIds = Array.from(new Set((request.items || []).map(item => item && item.id).filter(Boolean))).sort();
+                        guard.createReviewCase('TRADER_SELL_PAYOUT_REVIEW', {
+                            sessionId,
+                            traderId: request && request.tid,
+                            profileId: String(profileWithItems && (profileWithItems._id || profileWithItems.id) || ''),
+                            playerName: String(profileWithItems && profileWithItems.Info && profileWithItems.Info.Nickname || ''),
+                            sessionId,
+                            playerId: getProfileId(profileWithItems, sessionId),
+                            selectedItemIds: selectedIds,
+                            check
+                        }, `trader-sell:${getProfileId(profileWithItems, sessionId)}:${request && request.tid}:${selectedIds.join(',')}`);
+                    }
                     if (check.known && !check.valid && guard.isProtect()) {
                         guard.block(this, output, 'TRADER_SELL_PAYOUT_TOO_HIGH', 'Trader sale payout exceeds the configured conservative item valuation ceiling.', { traderId: request.tid, check });
                         return;

@@ -48,3 +48,53 @@ Still required:
 1. Build the client DLL on Windows using Visual Studio/MSBuild and the exact local EFT Managed + BepInEx assemblies. The graphical builder now checks SPT Common `3.11.1.0` and Fika Core `1.2.3.0` before building. No compiled DLL has yet been produced in this environment.
 2. Run a live disposable SPT `3.11.1` + Fika Server `2.4.3` + Fika client `1.2.3` test covering host/client, PMC/Scav, map matching, Ready Check, match linking, raid end, and review.
 3. Implement and independently validate objective evidence before enabling automatic mission completion or rewards. Admin review remains mandatory.
+
+
+## Fika Server 2.4.3 lifecycle evidence extension — 2026-11-14
+
+The exact upstream tag `project-fika/Fika-Server@v2.4.3` was inspected, including `src/services/FikaMatchService.ts`, `src/controllers/FikaUpdateController.ts`, and `src/controllers/FikaRaidController.ts`.
+
+The adapter now observes these actual server-side mutations:
+
+- `FikaMatchService.addPlayerToMatch(matchId, playerId, data)`: records the player being added to the in-memory match roster.
+- `FikaMatchService.setPlayerDead(matchId, playerId)`: records the server-accepted dead-state mutation. The triggering callback is still client-originated, so its trust label is `fika_server_accepted_client_event`, not independent server proof.
+- `FikaMatchService.removePlayerFromMatch(matchId, playerId)`: records removal from the server-side roster. Fika's method does not supply a reason, so the record explicitly uses `leaveReason: unknown`; it must never be interpreted as successful extraction.
+
+These lifecycle records are linked to the matching mission review by Match ID and the member's PMC/Scav profile IDs. Review data preserves each event's ID, type, player ID, timestamp, trust label and source. All lifecycle records have `rewardEligible: false`.
+
+The review still remains unverified because Fika 2.4.3 does not independently prove a successful extraction or every in-raid objective. `player_raid_end` client payloads remain untrusted. Automatic mission rewards remain disabled unless a future independently validated server source can satisfy the strict `server_verified` completion gate.
+
+Regression coverage now checks join/death/leave observation, exact trust labels, preservation of the review evidence, and readiness failure when the required lifecycle hooks are unavailable.
+
+
+## Fika Server 2.4.3 item-transfer observer — 2026-11-14
+
+The exact upstream tag `project-fika/Fika-Server@v2.4.3` was inspected for the item-send path:
+
+`FikaItemEventRouter.handleItemEvent("SendToPlayer")` → `FikaSendItemCallbacks.handleSendItem` → `FikaSendItemController.sendItem(pmcData, body, sessionID)`.
+
+The controller:
+- resolves sender and receiver profiles using SPT session IDs;
+- obtains the selected root item and its descendants from the sender PMC inventory;
+- queues a system message containing the item tree for the receiver;
+- removes the root item from the sender inventory;
+- returns the original SPT item-event response.
+
+The adapter now patches the registered `FikaSendItemController` instance (not the HTTP callback, because `SendToPlayer` is handled by Fika's item-event router). It snapshots the server profile's PMC item tree before and after the original async method, then writes an audit event to the existing bounded Fika JSONL stream.
+
+Evidence fields include sender/receiver session and profile references, root item ID, descendant item count, aggregated TPL/stack counts, transfer state, source method, timestamp, and trust label. The wrapper returns the exact original response object and rethrows the original exception.
+
+**Important trust boundary:** observing the controller and seeing the sender inventory root disappear proves that the server-side debit was observed; it does not independently prove that the receiver later opened or retained the mail. If the root remains, the operation throws, or either profile cannot be inspected, the event is marked uncertain/not confirmed. These records are audit evidence only and always have `rewardEligible: false`.
+
+The Fika admin panel now reports:
+- **DISABLED** — Fika's item-transfer route is closed by configuration;
+- **ENABLED — server controller observed** — the observer is installed, but individual delivery still needs outcome review;
+- **ENABLED — UNMONITORED** — configuration permits transfers but the controller hook is unavailable.
+
+The observer does not change `allowItemSending`, does not block or alter transfers, and does not alter Fika's response semantics. A regression test covers tree aggregation, observed sender debit, uncertain responses, thrown errors, hook idempotence, and response preservation.
+
+## Fika Server 2.4.3 match-status observer — 2026-11-14
+
+The exact upstream `project-fika/Fika-Server@v2.4.3` implementation of `FikaMatchService.setMatchStatus(matchId, status)` and `EFikaMatchStatus` was inspected. The status enum is `LOADING = 0`, `IN_GAME = 1`, `COMPLETE = 2`. The adapter now wraps the service method after the original async mutation completes and records the status, match ID, current roster, mission association, timestamp, source and `fika_server_lifecycle` trust label. It preserves the original Promise result and does not change Fika state.
+
+`COMPLETE` is corroborating lifecycle evidence only. It does not prove that any player extracted, survived, or completed a mission objective. Every status event has `rewardEligible: false`; the mission still enters admin review at match end and automatic awards remain disabled without independent server proof. The new hook is included in the observer readiness calculation and has a regression test for async result preservation and trust boundaries.

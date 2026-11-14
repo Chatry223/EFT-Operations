@@ -12,6 +12,10 @@ const { AdminPanelServer } = require('../src/admin-panel');
 const { StatusBoard } = require('../src/board');
 
 const quiet = { info() {}, warn() {}, error() {} };
+
+const oldBoardLayout = sanitizeLayout({ tabs: ['leaderboard', 'online', 'raids', 'market', 'activity'] }, defaultLayout());
+assert.ok(oldBoardLayout.tabs.includes('operations'), 'older StatusBoard layouts gain the mission standings tab without losing existing tabs');
+
 const SECRET = 'c'.repeat(64);
 const A = 'aaaa00000000000000000001', B = 'bbbb00000000000000000002';
 const counters = map => ({ Items: Object.entries(map).map(([k, v]) => ({ Key: k.split('/'), Value: v })) });
@@ -54,7 +58,7 @@ assert.deepStrictEqual(snap.announcements, []);
 // ---- layout validation
 const base = defaultLayout();
 const edited = sanitizeLayout({ tabs: ['market', 'nope', 'leaderboard', 'market'], cards: [{ id: 'totalKills', enabled: true }, { id: 'zzz', enabled: true }], top: [{ id: 'cards', enabled: true }, { id: 'announcements', enabled: false }] }, base);
-assert.deepStrictEqual(edited.tabs, ['market', 'leaderboard', 'online', 'raids', 'activity'], 'unknown/duplicate ids dropped, missing ids appended');
+assert.deepStrictEqual(edited.tabs, ['market', 'leaderboard', 'online', 'raids', 'activity', 'operations'], 'unknown/duplicate ids dropped, missing ids appended');
 assert.deepStrictEqual(edited.cards.map(c => c.id), ['totalKills', 'fleaOffers', 'raidsCompleted', 'registeredPlayers', 'activeRaids']);
 assert.strictEqual(edited.cards.find(c => c.id === 'fleaOffers').enabled, true, 'missing ids keep their previous state');
 assert.deepStrictEqual(edited.top.map(t => [t.id, t.enabled]), [['cards', true], ['announcements', false]]);

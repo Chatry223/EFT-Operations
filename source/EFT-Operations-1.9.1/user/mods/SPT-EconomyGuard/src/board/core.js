@@ -203,21 +203,55 @@ function buildIdentity(ctx) {
         if (!stats) continue;
         const banned = ctx.isBanned ? !!ctx.isBanned(profileId) : false;
         const hidden = !!hiddenProfiles[profileId] || (ctx.settings.hideBanned !== false && banned);
-        const entry = { profileId, nickname: stats.nickname, stats, hidden };
+        const pmcId = String(profile.characters && profile.characters.pmc && profile.characters.pmc._id || '');
+        const scavId = String(profile.characters && profile.characters.scav && profile.characters.scav._id || '');
+        const entry = { profileId, pmcProfileId: pmcId, nickname: stats.nickname, stats, hidden };
         players.push(entry);
         byAnyId.set(profileId, entry);
-        const pmcId = profile.characters && profile.characters.pmc && profile.characters.pmc._id;
-        const scavId = profile.characters && profile.characters.scav && profile.characters.scav._id;
-        if (pmcId) byAnyId.set(String(pmcId), entry);
-        if (scavId) byAnyId.set(String(scavId), entry);
+        if (pmcId) byAnyId.set(pmcId, entry);
+        if (scavId) byAnyId.set(scavId, entry);
     }
     return { players, byAnyId };
+}
+
+function buildOperationsLeaderboard(identity, ctx) {
+    const service = ctx.operations;
+    if (!service || typeof service.getPlayer !== 'function') return [];
+    const rows = [];
+    for (const entry of identity.players) {
+        if (entry.hidden || !entry.pmcProfileId) continue;
+        let stats = null;
+        try { stats = service.getPlayer(entry.pmcProfileId); } catch (_) { continue; }
+        if (!stats || typeof stats !== 'object') continue;
+        const points = Number(stats.points);
+        const completedMissions = Number(stats.completedMissions);
+        if (!Number.isSafeInteger(points) || points < 0
+            || !Number.isSafeInteger(completedMissions) || completedMissions < 0
+            || (points === 0 && completedMissions === 0)) continue;
+        const pointsToNextRank = Number(stats.pointsToNextRank);
+        const rankProgressPercent = Number(stats.rankProgressPercent);
+        rows.push({
+            id: publicId(ctx.secret, entry.profileId, 'p'),
+            name: entry.nickname,
+            points,
+            completedMissions,
+            militaryRank: cleanName(stats.rank || 'Recruit', 40),
+            nextRank: cleanName(stats.nextRank || '', 40),
+            pointsToNextRank: Number.isSafeInteger(pointsToNextRank) && pointsToNextRank > 0 ? pointsToNextRank : 0,
+            rankProgressPercent: Number.isFinite(rankProgressPercent)
+                ? Math.max(0, Math.min(100, Math.round(rankProgressPercent))) : 0
+        });
+    }
+    rows.sort((a, b) => b.points - a.points || b.completedMissions - a.completedMissions || a.name.localeCompare(b.name));
+    rows.forEach((row, index) => { row.rank = index + 1; });
+    return rows;
 }
 
 function buildSnapshot(ctx) {
     const now = ctx.now ? ctx.now() : Date.now();
     const settings = ctx.settings;
     const identity = buildIdentity(ctx);
+    const operationsLeaderboard = buildOperationsLeaderboard(identity, ctx);
     const presence = ctx.presence instanceof Map ? ctx.presence : new Map();
     const presenceAvailable = ctx.presenceAvailable === true;
     const knownNames = new Set(identity.players.map(p => p.nickname.toLowerCase()));
@@ -353,11 +387,13 @@ function buildSnapshot(ctx) {
             refreshSeconds: settings.refreshSeconds, allowLanguageSwitch: settings.allowLanguageSwitch !== false,
             background: ctx.background || null, sections: settings.sections, showPmc: settings.showPmc !== false,
             showPmcBadge: settings.showPmcBadge === true, layout: settings.layout, onlineIncludesMarket: settings.onlineIncludesMarket !== false,
+            operationsAvailable: !!(ctx.operations && typeof ctx.operations.getPlayer === 'function'),
             generatedAt: new Date(now).toISOString()
         },
         counters,
         online,
         leaderboard,
+        operationsLeaderboard,
         raids,
         market,
         trades,
@@ -368,5 +404,5 @@ function buildSnapshot(ctx) {
 
 module.exports = {
     MAP_NAMES, DEFAULT_SCORE_WEIGHTS, cleanName, nameKey, mapName, publicId, readCounter, extractPlayerStats,
-    computeScore, roundRaids, rankRows, classifyVictim, summariseMarket, buildIdentity, buildSnapshot, isInfrastructureProfile
+    computeScore, roundRaids, rankRows, classifyVictim, summariseMarket, buildIdentity, buildOperationsLeaderboard, buildSnapshot, isInfrastructureProfile
 };

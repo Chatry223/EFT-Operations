@@ -5,7 +5,9 @@
       live: 'Live', offline: 'Connection lost', updated: 'Updated', ago: 'ago', now: 'just now', online_label: 'ONLINE',
       s_flea: 'Flea offers', s_raidsDone: 'Raids completed', s_kills: 'Total kills', s_registered: 'Registered players', s_activeRaids: 'Active raids',
       l_flea: 'flea offers', l_raidsDone: 'raids completed', l_kills: 'total kills', l_registered: 'registered players', l_activeRaids: 'raids in progress',
-      t_leaderboard: 'Leaderboard', t_online: 'Online', t_raids: 'Raids', t_market: 'Flea market', t_activity: 'Activity',
+      t_leaderboard: 'Leaderboard', t_online: 'Online', t_raids: 'Raids', t_market: 'Flea market', t_activity: 'Activity', t_operations: 'Military operations',
+      op_title: 'Mission standings', op_rank: 'Military rank', op_points: 'Mission points', op_completed: 'Missions completed',
+      op_next: 'Next rank', op_points_to_next: 'points to next rank', op_max_rank: 'Highest rank reached', op_empty: 'No mission rewards have been recorded yet.',
       all: 'All', players: 'Players', pmcs: 'PMC (AI)', search: 'Search name…', me_ph: 'Your in-game name',
       rank: '#', name: 'Name', status: 'Status', level: 'Level', score: 'Score', kills: 'Kills', deaths: 'Deaths', kd: 'K/D', survival: 'Survival', playtime: 'Playtime',
       st_online: 'Online', st_offline: 'Offline', hours: 'h', more: 'Show more', none: 'Nothing to show yet.', headshots: 'Headshots', pmc_kills: 'PMC kills', boss_kills: 'Boss kills',
@@ -28,7 +30,9 @@
       live: 'زنده', offline: 'قطع ارتباط', updated: 'به‌روزرسانی', ago: 'پیش', now: 'همین الان', online_label: 'آنلاین',
       s_flea: 'آفر فلی‌مارکت', s_raidsDone: 'ریید انجام‌شده', s_kills: 'کل کشته‌ها', s_registered: 'بازیکن ثبت‌شده', s_activeRaids: 'ریید فعال',
       l_flea: 'آفر فلی‌مارکت', l_raidsDone: 'ریید انجام‌شده', l_kills: 'کشته در کل', l_registered: 'بازیکن ثبت‌شده', l_activeRaids: 'ریید در جریان',
-      t_leaderboard: 'رتبه‌بندی', t_online: 'آنلاین‌ها', t_raids: 'ریدها', t_market: 'فلی‌مارکت', t_activity: 'رویدادها',
+      t_leaderboard: 'رتبه‌بندی', t_online: 'آنلاین‌ها', t_raids: 'ریدها', t_market: 'فلی‌مارکت', t_activity: 'رویدادها', t_operations: 'عملیات نظامی',
+      op_title: 'رتبه‌بندی مأموریت‌ها', op_rank: 'درجه نظامی', op_points: 'امتیاز مأموریت', op_completed: 'مأموریت تکمیل‌شده',
+      op_next: 'درجه بعدی', op_points_to_next: 'امتیاز تا درجه بعدی', op_max_rank: 'بالاترین درجه کسب شده', op_empty: 'هنوز پاداش مأموریتی ثبت نشده است.',
       all: 'همه', players: 'بازیکنان', pmcs: 'PMC (هوش مصنوعی)', search: 'جست‌وجوی نام…', me_ph: 'نام داخل بازی شما',
       rank: 'رتبه', name: 'نام', status: 'وضعیت', level: 'لول', score: 'امتیاز', kills: 'کشته', deaths: 'مرگ', kd: 'K/D', survival: 'بقا', playtime: 'زمان بازی',
       st_online: 'آنلاین', st_offline: 'آفلاین', hours: 'ساعت', more: 'نمایش بیشتر', none: 'هنوز چیزی برای نمایش نیست.', headshots: 'هدشات', pmc_kills: 'کشتن PMC', boss_kills: 'کشتن باس',
@@ -48,7 +52,7 @@
       footer: 'آمار به‌صورت زنده از سرور بازی به‌روز می‌شود.'
     }
   };
-  const DEFAULT_LAYOUT = { top: [{ id: 'announcements', enabled: true }, { id: 'cards', enabled: true }], cards: [{ id: 'fleaOffers', enabled: true }], headerLines: [{ id: 'raidsCompleted', enabled: true }], tabs: ['leaderboard', 'online', 'raids', 'market', 'activity'] };
+  const DEFAULT_LAYOUT = { top: [{ id: 'announcements', enabled: true }, { id: 'cards', enabled: true }], cards: [{ id: 'fleaOffers', enabled: true }], headerLines: [{ id: 'raidsCompleted', enabled: true }], tabs: ['leaderboard', 'online', 'raids', 'market', 'activity', 'operations'] };
   const STAT_KEYS = { fleaOffers: ['s_flea', 'l_flea'], raidsCompleted: ['s_raidsDone', 'l_raidsDone'], totalKills: ['s_kills', 'l_kills'], registeredPlayers: ['s_registered', 'l_registered'], activeRaids: ['s_activeRaids', 'l_activeRaids'] };
   const state = { data: null, etag: null, lang: 'en', tab: null, kind: 'all', search: '', sortKey: 'rank', sortDir: 1, limit: 50, me: '', open: new Set(), lastOk: 0, timer: null, topKey: '', cardEls: {}, newsTimer: null, newsIndex: 0 };
   const $ = id => document.getElementById(id);
@@ -170,7 +174,8 @@
   }
   function renderTabs() {
     const m = state.data.meta, layout = m.layout || DEFAULT_LAYOUT;
-    const enabled = id => id === 'activity' ? (m.sections.feed || m.sections.trades) : m.sections[id];
+    const enabled = id => id === 'activity' ? (m.sections.feed || m.sections.trades)
+      : id === 'operations' ? m.operationsAvailable === true : m.sections[id];
     const tabs = layout.tabs.filter(enabled);
     if (!tabs.includes(state.tab)) state.tab = tabs[0] || null;
     $('tabs').replaceChildren(...tabs.map(id => h('button', { class: `tab${state.tab === id ? ' active' : ''}`, type: 'button', role: 'tab', 'aria-selected': state.tab === id ? 'true' : 'false', text: t(`t_${id}`), onclick: () => { state.tab = id; render(); } })));
@@ -226,6 +231,38 @@
     el.append(`${t('you_rank')} `, h('b', { text: `#${fmt(me.rank)}` }), ` ${t('of')} ${fmt(all.length)} · ${fmt(me.score)} ${t('pts')}`);
     if (above) el.append(` · ${tpl('cmp_behind', { n: fmt(above.score - me.score), name: above.name })}`);
     if (below) el.append(` · ${tpl('cmp_ahead', { n: fmt(me.score - below.score), name: below.name })}`);
+  }
+
+  function operationsView() {
+    const rows = Array.isArray(state.data.operationsLeaderboard) ? state.data.operationsLeaderboard : [];
+    const head = h('tr', null,
+      h('th', { text: t('rank') }),
+      h('th', { text: t('name') }),
+      h('th', { text: t('op_rank') }),
+      h('th', { class: 'num', text: t('op_points') }),
+      h('th', { class: 'num', text: t('op_completed') }),
+      h('th', { text: t('op_next') }));
+    const body = rows.map(row => {
+      const percent = Math.max(0, Math.min(100, Number(row.rankProgressPercent) || 0));
+      const next = row.nextRank
+        ? h('div', { class: 'op-next' },
+            h('span', { text: row.nextRank }),
+            h('div', { class: 'op-progress', role: 'presentation' }, h('i', { style: `width:${percent}%` })),
+            h('small', { text: `${fmt(row.pointsToNextRank)} ${t('op_points_to_next')}` }))
+        : h('span', { class: 'pill', text: t('op_max_rank') });
+      return h('tr', null,
+        h('td', null, h('span', { class: `rank${row.rank <= 3 ? ` r${row.rank}` : ''}`, text: fmt(row.rank) })),
+        h('td', null, h('strong', { text: row.name })),
+        h('td', null, h('span', { class: 'pill', text: row.militaryRank })),
+        h('td', { class: 'num', text: fmt(row.points) }),
+        h('td', { class: 'num', text: fmt(row.completedMissions) }),
+        h('td', null, next));
+    });
+    return h('section', { class: 'card' },
+      h('h2', null, t('op_title'), h('em', { text: fmt(rows.length) })),
+      rows.length
+        ? h('div', { class: 'table-wrap' }, h('table', null, h('thead', null, head), h('tbody', null, body)))
+        : h('div', { class: 'empty', text: t('op_empty') }));
   }
 
   const activityPill = a => h('span', { class: `pill ${a || ''}`, text: t(a || 'online') });
@@ -288,7 +325,7 @@
     if (!state.data) return;
     const active = document.activeElement, focusId = active && active.id && active.tagName === 'INPUT' ? active.id : null, caret = focusId ? active.selectionStart : 0;
     renderHero(); renderTop(); renderTabs();
-    const views = { leaderboard: leaderboardView, online: onlineView, raids: raidsView, market: marketView, activity: activityView };
+    const views = { leaderboard: leaderboardView, online: onlineView, raids: raidsView, market: marketView, activity: activityView, operations: operationsView };
     $('view').replaceChildren(state.tab && views[state.tab] ? views[state.tab]() : h('div', { class: 'empty', text: t('none') }));
     if (focusId) { const next = document.getElementById(focusId); if (next) { next.focus(); try { next.setSelectionRange(caret, caret); } catch (_) { /* unsupported */ } } }
   }

@@ -5,12 +5,17 @@ const os = require('os');
 const path = require('path');
 const { OperationsService } = require('../src/operations/service');
 const { OperationsClientApi } = require('../src/operations/client-api');
-function reviewChecklist(objectiveIds, memberIndexes) {
+function reviewChecklist(objectiveIds, memberIndexes, outcomes = {}) {
     const objectiveEvidenceRefs = {};
     for (const objectiveId of objectiveIds) objectiveEvidenceRefs[objectiveId] = `Test evidence for objective ${objectiveId}`;
     const memberEvidenceRefs = {};
-    for (const memberIndex of memberIndexes) memberEvidenceRefs[String(memberIndex)] = `Test evidence for member ${memberIndex}`;
-    return { confirmed: true, confirmedObjectiveIds: objectiveIds, confirmedMemberIndexes: memberIndexes, objectiveEvidenceRefs, memberEvidenceRefs };
+    const memberOutcomes = {};
+    for (const memberIndex of memberIndexes) {
+        const key = String(memberIndex);
+        memberEvidenceRefs[key] = `Test evidence for member ${memberIndex}`;
+        memberOutcomes[key] = outcomes[key] || 'success';
+    }
+    return { confirmed: true, confirmedObjectiveIds: objectiveIds, confirmedMemberIndexes: memberIndexes, objectiveEvidenceRefs, memberEvidenceRefs, memberOutcomes };
 }
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'eft-ops-api-'));
@@ -20,6 +25,10 @@ const playerB = 'abcdef0123456789abcdef02';
 const saveServer = { getProfile(sessionId) {
     if (sessionId === 'session-a') return { info: { Nickname: 'AccountAlpha' }, characters: { pmc: { _id: playerA, Info: { Nickname: 'Alpha' } }, scav: { _id: 'abcdef0123456789abcdef09', Info: { Nickname: 'Alpha-Scav' } } } };
     if (sessionId === 'session-b') return { info: { Nickname: 'AccountBravo' }, characters: { pmc: { _id: playerB, Info: { Nickname: 'Bravo' } }, scav: { _id: 'abcdef0123456789abcdef10', Info: { Nickname: 'Bravo-Scav' } } } };
+    if (sessionId === 'abcdef0123456789abcdef90') return { info: { username: 'headless-test', password: 'fika-headless' }, characters: {
+        pmc: { _id: 'abcdef0123456789abcdef91', Info: { Nickname: 'headless-test' } },
+        scav: { _id: 'abcdef0123456789abcdef92', Info: { Nickname: 'headless-test-scav' } }
+    } };
     throw new Error('NO_PROFILE');
 } };
 const responses = { noBody: value => ({ wrapped: value }) };
@@ -79,6 +88,16 @@ const hostB = api.acceptMission('', { missionId: hostMission.id }, 'session-b').
 api.setReady('', { groupId: hostA.group.id, ready: true }, 'session-a');
 api.setReady('', { groupId: hostA.group.id, ready: true }, 'session-b');
 operations.startGroup(hostA.group.id, 'abcdef0123456789abcdef10');
+const activeFikaProfiles = new Map([
+    ['abcdef0123456789abcdef10', new Set(['abcdef0123456789abcdef10', playerA])],
+    ['abcdef0123456789abcdef90', new Set(['abcdef0123456789abcdef90', playerA, playerB])]
+]);
+api.fikaOperationsAdapter = {
+    isProfileInFikaMatch(matchId, profileId) {
+        const currentRoster = activeFikaProfiles.get(matchId);
+        return !!currentRoster && currentRoster.has(profileId);
+    }
+};
 
 const hostKill = { eventId: 'host-kill-001', groupId: hostA.group.id, matchId: 'abcdef0123456789abcdef10',
     killerProfileId: 'abcdef0123456789abcdef10', victimProfileId: 'abcdef0123456789abcdef11',
@@ -91,6 +110,18 @@ assert.equal(firstKill.ok, true);
 assert.equal(firstKill.evidenceTrust, 'host_attested');
 assert.equal(firstKill.group.objectiveProgress.find(x => x.id === 'scavs').progress, 1);
 assert.equal(firstKill.group.objectiveProgress.find(x => x.id === 'scavs').trust, 'host_attested');
+assert.deepEqual(firstKill.group.objectiveProgress.find(x => x.id === 'scavs').evidenceCounts, [{ trust: 'host_attested', count: 1 }]);
+const liveHostGroup = operations.state.groups.find(x => x.id === hostA.group.id);
+const hostEventCountAfterFirstKill = liveHostGroup.evidenceEvents.length;
+assert.equal(api.hostRaidEvent('', Object.assign({}, hostKill, { eventId: 'host-kill-new-id-same-victim' }), 'session-b').wrapped.ok, true);
+assert.equal(liveHostGroup.evidenceEvents.length, hostEventCountAfterFirstKill, 'a new eventId cannot count the same AI victim twice');
+assert.equal(api.hostRaidEvent('', Object.assign({}, hostKill, { killerProfileId: playerB, eventId: 'host-kill-actor-not-in-live-match' }), 'session-b').wrapped.error, 'FIKA_ACTOR_NOT_IN_MATCH',
+    'an accepted squad member who is not actually present in the Fika match cannot report an objective');
+const savedTrustLedger = liveHostGroup.progressByTrust;
+delete liveHostGroup.progressByTrust;
+const legacyState = api.playerState('', {}, 'session-b').wrapped;
+assert.equal(legacyState.group.objectiveProgress.find(x => x.id === 'scavs').trust, 'legacy_unattributed');
+liveHostGroup.progressByTrust = savedTrustLedger;
 assert.equal(operations.state.groups.find(x => x.id === hostA.group.id).evidenceEvents.length, 1);
 const duplicateKill = api.hostRaidEvent('', hostKill, 'session-b').wrapped;
 assert.equal(duplicateKill.ok, true);
@@ -106,12 +137,54 @@ const hostVisit = api.hostRaidEvent('', { type: 'visit', eventId: 'host-visit-00
 assert.equal(hostVisit.ok, true);
 assert.equal(hostVisit.group.objectiveProgress.find(x => x.id === 'visit').progress, 1);
 assert.equal(hostVisit.group.objectiveProgress.find(x => x.id === 'visit').trust, 'host_attested');
+const visitEvidenceCount = liveHostGroup.evidenceEvents.filter(event => event.type === 'visit').length;
 const duplicateVisit = api.hostRaidEvent('', { type: 'visit', eventId: 'host-visit-001', matchId: 'abcdef0123456789abcdef10', actorProfileId: 'abcdef0123456789abcdef10', triggerId: 'bunker2' }, 'session-b').wrapped;
 assert.equal(duplicateVisit.group.objectiveProgress.find(x => x.id === 'visit').progress, 1);
+const semanticDuplicateVisit = api.hostRaidEvent('', { type: 'visit', eventId: 'host-visit-new-id-same-trigger', matchId: 'abcdef0123456789abcdef10', actorProfileId: 'abcdef0123456789abcdef10', triggerId: 'bunker2' }, 'session-b').wrapped;
+assert.equal(semanticDuplicateVisit.ok, true);
+assert.equal(liveHostGroup.evidenceEvents.filter(event => event.type === 'visit').length, visitEvidenceCount, 'one operator cannot inflate visits by changing eventId');
 const hostReview = operations.finishGroup(hostA.group.id, { verified: true, aliveProfileIds: [playerA, playerB], extractedProfileIds: [playerA, playerB] });
 assert.equal(hostReview.state, 'review', 'host-attested kills never trigger automatic completion or rewards');
 assert.equal(operations.state.awards.length, 0);
 assert.equal(hostReview.reviewData.objectiveEvidence.length, 3);
+// Close the reviewed prior group before reusing the same operators in the next test raid.
+operations.resolveReview(hostA.group.id, 'deny', 'Test setup: previous run evidence not approved', 'ADMIN');
+
+// Fika 2.4.3 Headless uses its authenticated SPT Session ID as the Fika serverId,
+// but remains a telemetry reporter rather than a mission squad member or a server verifier.
+const headlessMission = operations.save({ title: 'Headless Host Mission', map: 'woods', mode: 'squad', minPlayers: 2, maxPlayers: 2,
+    objectives: [{ id: 'scavs', type: 'kill', target: 'scav', count: 1 }],
+    rewards: { points: 125, roubles: 0, items: [] } });
+operations.setStatus(headlessMission.id, 'published');
+const headlessA = api.acceptMission('', { missionId: headlessMission.id }, 'session-a').wrapped;
+const headlessB = api.acceptMission('', { missionId: headlessMission.id }, 'session-b').wrapped;
+api.setReady('', { groupId: headlessA.group.id, ready: true }, 'session-a');
+api.setReady('', { groupId: headlessA.group.id, ready: true }, 'session-b');
+operations.startGroup(headlessA.group.id, 'abcdef0123456789abcdef90');
+const headlessKill = api.hostRaidEvent('', {
+    eventId: 'headless-host-kill-001', matchId: 'abcdef0123456789abcdef90',
+    killerProfileId: playerA, victimProfileId: 'abcdef0123456789abcdef93',
+    victimRole: 'assault', victimSide: 'Savage', victimIsAi: true
+}, 'abcdef0123456789abcdef90').wrapped;
+assert.equal(headlessKill.ok, true, 'authenticated Fika Headless host may report for the linked mission Match: ' + JSON.stringify(headlessKill));
+assert.equal(headlessKill.evidenceTrust, 'host_attested');
+assert.equal(headlessKill.group.objectiveProgress[0].progress, 1);
+assert.equal(headlessKill.group.objectiveProgress[0].trust, 'host_attested');
+assert.equal(operations.state.groups.find(group => group.id === headlessA.group.id).evidenceEvents[0].reporterKind, 'fika_headless_host');
+assert.equal(api.hostRaidEvent('', {
+    eventId: 'headless-host-kill-wrong-match', matchId: 'abcdef0123456789abcdef91',
+    killerProfileId: playerA, victimProfileId: 'abcdef0123456789abcdef94',
+    victimRole: 'assault', victimSide: 'Savage', victimIsAi: true
+}, 'abcdef0123456789abcdef90').wrapped.error, 'HEADLESS_HOST_PROFILE_MISMATCH');
+assert.equal(api.hostRaidEvent('', {
+    eventId: 'headless-host-kill-not-member', matchId: 'abcdef0123456789abcdef90',
+    killerProfileId: 'abcdef0123456789abcdef99', victimProfileId: 'abcdef0123456789abcdef95',
+    victimRole: 'assault', victimSide: 'Savage', victimIsAi: true
+}, 'abcdef0123456789abcdef90').wrapped.error, 'KILLER_NOT_GROUP_MEMBER');
+const headlessReview = operations.finishGroup(headlessA.group.id, { verified: false, source: 'fika-server-adapter', evidenceTrust: 'fika_match_end_lifecycle_with_authenticated_roster', aliveProfileIds: [], extractedProfileIds: [] });
+assert.equal(headlessReview.state, 'review');
+assert.equal(operations.state.awards.filter(award => award.groupId === headlessA.group.id).length, 0,
+    'Headless host telemetry remains review-only and never triggers automatic rewards');
 
 const campaignOps = new OperationsService(path.join(root, 'campaign-data'), { info() {}, warn() {} });
 const campaignMission1 = campaignOps.save({ title: 'Blackout 01', map: 'woods', mode: 'solo', minPlayers: 1, maxPlayers: 1, campaignId: 'Operation Blackout', campaignOrder: 1, objectives: [{ id: 'exit', type: 'extract' }], rewards: { points: 500, roubles: 0, items: [] } });

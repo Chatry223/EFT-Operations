@@ -106,7 +106,8 @@ async function testFika243LifecycleAndAcceptedLootEvidence() {
     assert.strictEqual(operations.state.awards.length, 0);
 
     const events = adapter.getRecentEvents(10);
-    assert.strictEqual(events.length, 3);
+    assert.strictEqual(events.length, 4, 'raid start, raid end, Fika match end and mission review are recorded');
+    assert.ok(events.some(x => x.type === 'mission_group_review_created'), 'Fika match end creates a review event for the linked mission group');
     const raid = events.find(x => x.type === 'player_raid_end');
     assert.strictEqual(raid.matchId, hostProfileId);
     assert.strictEqual(raid.profileId, hostProfileId);

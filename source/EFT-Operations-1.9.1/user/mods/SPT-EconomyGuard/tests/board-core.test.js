@@ -105,4 +105,31 @@ assert.strictEqual(core.mapName('factory4_day'), 'Factory'); assert.strictEqual(
 assert.strictEqual(core.cleanName('  A\u0000  b  '), 'A b');
 assert.strictEqual(core.classifyVictim({ Role: 'pmcBEAR' }), 'pmc'); assert.strictEqual(core.classifyVictim({ Role: 'bossKilla' }), 'boss'); assert.strictEqual(core.classifyVictim({ Role: 'assault' }), 'scav');
 assert.strictEqual(core.classifyVictim({ Side: 'Usec' }), 'pmc', 'missing Role falls back to Side'); assert.strictEqual(core.classifyVictim({ Side: 'Savage' }), 'scav'); assert.strictEqual(core.classifyVictim({}), 'unknown');
+
+const D = 'ffff00000000000000000006';
+const opAlpha = JSON.parse(JSON.stringify(profiles[A]));
+opAlpha.characters.pmc._id = D; // Operations are keyed by PMC character ID, not the top-level account key.
+const opCtx = base();
+opCtx.profiles = { [A]: opAlpha, [B]: profiles[B], [C]: profiles[C] };
+const operationLookups = [];
+const operationStats = {
+  [D]: { points: 2500, completedMissions: 3, rank: 'Corporal', nextRank: 'Sergeant', pointsToNextRank: 500, rankProgressPercent: 75 },
+  [B]: { points: 1000, completedMissions: 1, rank: 'Private', nextRank: 'Corporal', pointsToNextRank: 2000, rankProgressPercent: 0 },
+  [C]: { points: 0, completedMissions: 0, rank: 'Recruit', nextRank: 'Private', pointsToNextRank: 1000, rankProgressPercent: 0 }
+};
+opCtx.operations = { getPlayer(id) { operationLookups.push(id); return operationStats[id]; } };
+const operationsSnap = core.buildSnapshot(opCtx);
+assert.strictEqual(operationsSnap.meta.operationsAvailable, true);
+assert.deepStrictEqual(operationsSnap.operationsLeaderboard.map(row => [row.rank, row.name, row.points, row.completedMissions, row.militaryRank]), [
+  [1, 'Alpha', 2500, 3, 'Corporal'],
+  [2, 'Bravo', 1000, 1, 'Private']
+], 'mission points are ranked separately from the game-stat leaderboard');
+assert.ok(operationLookups.includes(D), 'mission stats are queried using the PMC character ID');
+assert.ok(!JSON.stringify(operationsSnap).includes(D) && !JSON.stringify(operationsSnap).includes(A) && !JSON.stringify(operationsSnap).includes(B),
+  'public operations leaderboard must not reveal account or character profile IDs');
+opCtx.settings.hiddenProfiles = { [A]: true };
+const hiddenOperationsSnap = core.buildSnapshot(opCtx);
+assert.deepStrictEqual(hiddenOperationsSnap.operationsLeaderboard.map(row => row.name), ['Bravo'],
+  'manually hidden players must also be hidden from mission standings');
+
 console.log('board-core tests passed');

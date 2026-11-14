@@ -31,7 +31,7 @@ class SptEconomyGuardMod {
             mode: 'audit',
             dataDirectory: 'SPT-EconomyGuard-Data',
             price: { maxOvervalueRatio: 20, minUndervalueRatio: 0.05, referenceDisagreementRatio: 5, allowSingleReferenceSourceForBlocking: false, minimumReferenceRoubles: 100, unknownItemReviewThresholdRoubles: 1000000, marketReviewOvervalueRatio: 10, marketReviewUndervalueRatio: 0.1 },
-            trader: { blockInvalidPaymentScheme: true, maxSellPayoutMultiplier: 3, sellPayoutSafetyFactor: 1.35 },
+            trader: { blockInvalidPaymentScheme: true, maxSellPayoutMultiplier: 3, sellPayoutSafetyFactor: 1.35, reviewSellPayoutMultiplier: 2 },
             flea: { blockSelfPurchase: true, blockPaymentMismatch: true, blockExtremePrice: true, maxTrackedEventsInMemory: 20000, pairWindowMinutes: 10, pairCaseThreshold: 5, cycleWindowHours: 24 },
             restrictions: { enabled: true },
             fence: { absoluteMaxPayoutRoubles: 50000000, blockAbsoluteCap: true },
@@ -96,6 +96,7 @@ class SptEconomyGuardMod {
             try { httpResponseUtil = container.resolve('HttpResponseUtil'); } catch (_) { /* response helper is optional in test/minimal containers */ }
             if (!this.operationsClientApi) this.operationsClientApi = new OperationsClientApi({ logger });
             this.operationsClientApi.operations = this.operations;
+            this.operationsClientApi.fikaOperationsAdapter = this.fikaOperationsAdapter;
             this.operationsClientApi.saveServer = saveServer;
             this.operationsClientApi.httpResponseUtil = httpResponseUtil;
             this.operationsClientApi.logger = logger;
@@ -111,7 +112,7 @@ class SptEconomyGuardMod {
             this.guard.writeHealth();
             this.guard.log('error', `Admin panel startup failed: ${err.stack || err.message}`);
         }
-        this.startStatusBoard(container, config, { saveServer, configServer, databaseServer });
+        this.startStatusBoard(container, config, { saveServer, configServer, databaseServer, operations: this.operations });
         if (this.guard.isProtect()) {
             this.guard.log('warn', 'PROTECT mode enabled. Only high-confidence price anomalies and exact server-side payment mismatches are blocked.');
         } else {

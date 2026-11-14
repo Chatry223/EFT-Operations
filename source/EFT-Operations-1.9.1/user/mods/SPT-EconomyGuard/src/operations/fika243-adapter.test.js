@@ -31,10 +31,16 @@ assert.equal(adapter.getStatus().itemSending.enabled, true, 'enabled Fika item s
 fs.writeFileSync(path.join(fikaDir, 'assets', 'configs', 'fika.jsonc'), JSON.stringify({ server: { allowItemSending: false } }));
 
 const matchService = {
-    getMatch(id) { return id === 'match-1' ? { players: new Map([['profile-a', {}], ['profile-b', {}]]) } : null; },
+    match: { players: new Map([['profile-a', {}], ['profile-b', {}]]), status: 0 },
+    getMatch(id) { return id === 'match-1' ? this.match : null; },
+    async setMatchStatus(id, status) { if (id === 'match-1') this.match.status = status; return true; },
     endMatch(id, reason) { return { id, reason }; }
 };
+adapter.services.fikaMatchService = matchService;
 assert.equal(adapter.patchMatchService(matchService), true);
+assert.equal(adapter.isProfileInFikaMatch('match-1', 'profile-a'), true);
+assert.equal(adapter.isProfileInFikaMatch('match-1', 'profile-outsider'), false);
+assert.throws(() => adapter.isProfileInFikaMatch('missing-match', 'profile-a'), /FIKA_MATCH_NOT_FOUND/);
 const originalResult = matchService.endMatch('match-1', 'host_left');
 assert.deepEqual(originalResult, { id: 'match-1', reason: 'host_left' });
 const matchEvents = adapter.getRecentEvents(10);
@@ -43,10 +49,63 @@ assert.equal(matchEvents[0].type, 'fika_match_end');
 assert.deepEqual(matchEvents[0].players.sort(), ['profile-a', 'profile-b']);
 assert.equal(matchEvents[0].evidenceTrust, 'fika_match_end_lifecycle_with_authenticated_roster');
 assert.equal(matchEvents[0].rewardEligible, false, 'a match-end hook alone must never authorize rewards');
+assert.equal(adapter.getStatus().matchStatusHook, true, 'Fika 2.4.3 match status hook must be installed');
+
+async function verifyMatchStatusObservation() {
+    assert.equal(adapter.getStatus().matchStatusHook, true, 'Fika 2.4.3 status hook must be part of readiness');
+    const inGameResult = await matchService.setMatchStatus('match-1', 1);
+    const completeResult = await matchService.setMatchStatus('match-1', 2);
+    await matchService.setMatchStatus('match-1', 2);
+    assert.equal(inGameResult, true, 'the original Fika async IN_GAME result must be preserved');
+    assert.equal(completeResult, true, 'the original Fika async COMPLETE result must be preserved');
+    const statusEvents = adapter.getRecentEvents(20).filter(event => event.type === 'fika_match_status_changed');
+    assert.equal(statusEvents.length, 2, 'duplicate status writes must not duplicate evidence');
+    const statusEvent = statusEvents.find(event => event.statusName === 'COMPLETE');
+    assert.ok(statusEvent, 'Fika COMPLETE transition must be retained for raid review');
+    assert.deepEqual(statusEvent.players.sort(), ['profile-a', 'profile-b']);
+    assert.equal(statusEvent.evidenceTrust, 'fika_server_lifecycle');
+    assert.equal(statusEvent.rewardEligible, false, 'Fika COMPLETE is not independent extraction proof');
+    assert.ok(statusEvents.some(event => event.statusName === 'IN_GAME'));
+}
 
 // A raid-end request is client-originated. Preserve it for review, but mark it untrusted.
-adapter.services.saveServer = { getProfile() { return { characters: { pmc: { _id: 'abcdef0123456789abcdef01', Info: { Nickname: 'pmc-name' } }, scav: { _id: 'abcdef0123456789abcdef02', Info: { Nickname: 'scav-name' } } } }; } };
-adapter.services.fikaMatchService = { getMatchIdByProfile() { return 'match-1'; }, getMatch(id) { return id === 'match-1' ? { hostUsername: 'pmc-name' } : null; } };
+adapter.services.saveServer = { getProfile(sessionId) {
+    if (sessionId === 'session-unrelated') return { info: { password: 'ordinary' }, characters: {
+        pmc: { _id: 'abcdef0123456789abcdef99', Info: { Nickname: 'other-pmc' } },
+        scav: { _id: 'abcdef0123456789abcdef98', Info: { Nickname: 'other-scav' } }
+    } };
+    if (sessionId === 'session-2') return { info: { password: 'ordinary' }, characters: {
+        pmc: { _id: 'abcdef0123456789abcdef21', Info: { Nickname: 'second-pmc' } },
+        scav: { _id: 'abcdef0123456789abcdef22', Info: { Nickname: 'second-scav' } }
+    } };
+    if (sessionId === 'abcdef0123456789abcdef90') return { info: { password: 'fika-headless' }, characters: {
+        pmc: { _id: 'abcdef0123456789abcdef91', Info: { Nickname: 'headless-pmc' } },
+        scav: { _id: 'abcdef0123456789abcdef92', Info: { Nickname: 'headless-scav' } }
+    } };
+    return { info: { password: 'ordinary' }, characters: {
+        pmc: { _id: 'abcdef0123456789abcdef01', Info: { Nickname: 'pmc-name' } },
+        scav: { _id: 'abcdef0123456789abcdef02', Info: { Nickname: 'scav-name' } }
+    } };
+} };
+const hostMatchId = 'abcdef0123456789abcdef01';
+const headlessSessionId = 'abcdef0123456789abcdef90';
+const headlessCharacterId = 'abcdef0123456789abcdef91';
+const hostMatchMap = new Map([[hostMatchId, { isDead: false }]]);
+const matchRegistry = new Map([
+    ['match-1', { hostUsername: 'pmc-name', players: new Map([[hostMatchId, {}], ['abcdef0123456789abcdef02', {}]]) }],
+    [hostMatchId, { players: hostMatchMap }],
+    ['foreign-host-match', { players: new Map([['abcdef0123456789abcdef99', { isDead: false }]]) }],
+    ['occupied-match', { players: new Map([['abcdef0123456789abcdef21', {}], ['abcdef0123456789abcdef22', {}]]) }],
+    [headlessSessionId, { players: new Map([[headlessSessionId, { isDead: false }], ['abcdef0123456789abcdef01', {}], ['abcdef0123456789abcdef02', {}]]) }]
+]);
+adapter.services.fikaMatchService = {
+    getMatchIdByProfile() { return 'match-1'; },
+    getMatchIdByPlayer(profileId) {
+        for (const [matchId, match] of matchRegistry.entries()) if (match.players instanceof Map && match.players.has(profileId)) return matchId;
+        return undefined;
+    },
+    getMatch(id) { return matchRegistry.get(id) || null; }
+};
 const raidEnd = adapter.captureRaidEnd('session-1', { serverId: 'woods.123', results: { result: 'Survived', exitName: 'Outskirts', playTime: 1200 } });
 assert.equal(raidEnd.matchId, 'match-1');
 assert.equal(raidEnd.profileId, 'abcdef0123456789abcdef01');
@@ -57,19 +116,44 @@ assert.equal(raidEnd.rewardEligible, false, 'client raid-result payloads must ne
 // Reject attempts to add/mark a different account's profile in the match.
 let acceptedUpdateCalls = 0;
 const fakeUpdateCallbacks = {
+    handlePing(url, info, sessionId) { acceptedUpdateCalls++; return 'ping'; },
+    handlePlayerspawn(url, info, sessionId) { acceptedUpdateCalls++; return 'spawn'; },
+    handleSethost(url, info, sessionId) { acceptedUpdateCalls++; return 'host'; },
     handleRaidAddPlayer(url, info, sessionId) { acceptedUpdateCalls++; return 'added'; },
-    handlePlayerDied(url, info, sessionId) { acceptedUpdateCalls++; return 'dead'; }
+    handlePlayerDied(url, info, sessionId) { acceptedUpdateCalls++; return 'dead'; },
+    handleSetStatus(url, info, sessionId) { acceptedUpdateCalls++; return 'status:' + info.status; }
 };
 assert.equal(adapter.patchUpdateCallbacks(fakeUpdateCallbacks), true);
-assert.equal(fakeUpdateCallbacks.handleRaidAddPlayer('', { profileId: 'abcdef0123456789abcdef01' }, 'session-1'), 'added');
-assert.equal(fakeUpdateCallbacks.handlePlayerDied('', { profileId: 'abcdef0123456789abcdef02' }, 'session-1'), 'dead');
-assert.equal(acceptedUpdateCalls, 2);
-const deathEvidence = adapter.getRecentEvents(20).find(event => event.type === 'fika_player_died');
+assert.equal(fakeUpdateCallbacks.handlePing('', { serverId: 'match-1' }, 'session-1'), 'ping');
+assert.equal(fakeUpdateCallbacks.handlePlayerspawn('', { serverId: 'match-1', profileId: 'abcdef0123456789abcdef02', groupId: 'group-a' }, 'session-1'), 'spawn');
+assert.equal(fakeUpdateCallbacks.handleSethost('', { serverId: hostMatchId, ips: ['127.0.0.1'], port: 7777, natPunch: false, isHeadless: false }, 'session-1'), 'host');
+assert.equal(fakeUpdateCallbacks.handleRaidAddPlayer('', { serverId: 'match-1', profileId: 'abcdef0123456789abcdef01', isSpectator: false }, 'session-1'), 'added');
+assert.equal(fakeUpdateCallbacks.handlePlayerDied('', { serverId: 'match-1', profileId: 'abcdef0123456789abcdef02' }, 'session-1'), 'dead');
+assert.equal(fakeUpdateCallbacks.handleSetStatus('', { serverId: hostMatchId, status: 'complete' }, 'session-1'), 'status:complete');
+// Fika 2.4.3 Headless is identified by the SaveServer password marker and is
+// stored in IFikaMatch.players under its SPT Session ID, not its PMC/Scav ID.
+assert.equal(fakeUpdateCallbacks.handlePing('', { serverId: headlessSessionId }, headlessSessionId), 'ping');
+assert.equal(fakeUpdateCallbacks.handleSethost('', { serverId: headlessSessionId, ips: ['10.1.1.2'], port: 7777, natPunch: false, isHeadless: true }, headlessSessionId), 'host');
+assert.equal(fakeUpdateCallbacks.handleSetStatus('', { serverId: headlessSessionId, status: 'complete' }, headlessSessionId), 'status:complete');
+assert.equal(fakeUpdateCallbacks.handlePlayerspawn('', { serverId: headlessSessionId, profileId: headlessCharacterId }, headlessSessionId), 'spawn');
+assert.equal(fakeUpdateCallbacks.handlePlayerDied('', { serverId: headlessSessionId, profileId: headlessCharacterId }, headlessSessionId), 'dead');
+assert.throws(() => fakeUpdateCallbacks.handleSetStatus('', { serverId: headlessSessionId, status: 'complete' }, 'session-1'), /FIKA_MATCH_HOST_SESSION_MISMATCH/);
+assert.throws(() => fakeUpdateCallbacks.handlePing('', { serverId: 'foreign-host-match' }, 'session-1'), /FIKA_MATCH_SESSION_NOT_MEMBER/);
+assert.throws(() => fakeUpdateCallbacks.handlePlayerspawn('', { serverId: 'foreign-host-match', profileId: 'abcdef0123456789abcdef02', groupId: 'group-x' }, 'session-1'), /FIKA_MATCH_PROFILE_NOT_MEMBER/);
+assert.throws(() => fakeUpdateCallbacks.handleSethost('', { serverId: 'foreign-host-match', ips: ['1.2.3.4'], port: 9999 }, 'session-1'), /FIKA_MATCH_HOST_SESSION_MISMATCH/);
+assert.throws(() => fakeUpdateCallbacks.handleSetStatus('', { serverId: 'foreign-host-match', status: 'complete' }, 'session-1'), /FIKA_MATCH_HOST_SESSION_MISMATCH/);
+assert.throws(() => fakeUpdateCallbacks.handleSetStatus('', { serverId: 'unknown-match', status: 'complete' }, 'session-1'), /FIKA_MATCH_HOST_SESSION_MISMATCH/);
+assert.equal(acceptedUpdateCalls, 11, 'foreign accounts cannot mutate Fika state while legitimate Headless callbacks remain supported');
+const deathEvidence = adapter.getRecentEvents(20).find(event => event.type === 'fika_player_died' && event.profileId === 'abcdef0123456789abcdef01');
 assert.ok(deathEvidence, 'authenticated Fika player-death reports should be retained for review');
-assert.equal(deathEvidence.profileId, 'abcdef0123456789abcdef01');
 assert.equal(deathEvidence.reportedCharacterProfileId, 'abcdef0123456789abcdef02');
 assert.equal(deathEvidence.evidenceTrust, 'authenticated_client_report');
 assert.equal(deathEvidence.rewardEligible, false, 'player-death reports must not auto-award');
+const headlessDeathEvidence = adapter.getRecentEvents(20).find(event => event.type === 'fika_player_died' && event.profileId === headlessCharacterId);
+assert.ok(headlessDeathEvidence, 'Fika Headless host character death callback remains observable');
+assert.equal(headlessDeathEvidence.reportedCharacterProfileId, headlessCharacterId);
+assert.equal(headlessDeathEvidence.evidenceTrust, 'authenticated_client_report');
+assert.equal(headlessDeathEvidence.rewardEligible, false);
 const raidEvidenceWithVictim = adapter.captureRaidEnd('session-1', {
     serverId: 'woods.456',
     results: {
@@ -95,24 +179,32 @@ assert.equal(raidEvidenceWithVictim.reportedFoundInRaidQuestItems.length, 1);
 assert.equal(raidEvidenceWithVictim.reportedDroppedQuestItems.length, 1);
 assert.equal(raidEvidenceWithVictim.evidenceTrust, 'untrusted_client_report');
 assert.equal(raidEvidenceWithVictim.rewardEligible, false);
-assert.throws(() => fakeUpdateCallbacks.handleRaidAddPlayer('', { profileId: 'abcdef0123456789abcdef99' }, 'session-1'), /FIKA_SESSION_PROFILE_MISMATCH/);
-assert.throws(() => fakeUpdateCallbacks.handlePlayerDied('', { profileId: 'abcdef0123456789abcdef99' }, 'session-1'), /FIKA_SESSION_PROFILE_MISMATCH/);
-assert.equal(acceptedUpdateCalls, 2, 'mismatched account IDs must be rejected before Fika mutates its match registry');
+assert.throws(() => fakeUpdateCallbacks.handleRaidAddPlayer('', { serverId: 'match-1', profileId: 'abcdef0123456789abcdef99' }, 'session-1'), /FIKA_SESSION_PROFILE_MISMATCH/);
+assert.throws(() => fakeUpdateCallbacks.handlePlayerDied('', { serverId: 'match-1', profileId: 'abcdef0123456789abcdef99' }, 'session-1'), /FIKA_SESSION_PROFILE_MISMATCH/);
+assert.equal(acceptedUpdateCalls, 11, 'mismatched accounts and non-host requests are rejected while valid Headless callbacks remain available');
 
 // Raid creation and host/member leave requests must also match the authenticated account.
 let acceptedRaidCalls = 0;
 const fakeRaidCallbacks = {
     handleRaidCreate(url, info, sessionId) { acceptedRaidCalls++; return 'created'; },
+    handleRaidJoin(url, info, sessionId) { acceptedRaidCalls++; return 'joined'; },
     handleRaidLeave(url, info, sessionId) { acceptedRaidCalls++; return 'left'; }
 };
 assert.equal(adapter.patchRaidCallbacks(fakeRaidCallbacks), true);
-assert.equal(fakeRaidCallbacks.handleRaidCreate('', { serverId: 'match-1', hostUsername: 'pmc-name' }, 'session-1'), 'created');
+assert.equal(fakeRaidCallbacks.handleRaidCreate('', { serverId: hostMatchId, hostUsername: 'pmc-name' }, 'session-1'), 'created');
+assert.equal(fakeRaidCallbacks.handleRaidCreate('', { serverId: headlessSessionId, hostUsername: 'headless-pmc' }, headlessSessionId), 'created');
+assert.equal(fakeRaidCallbacks.handleRaidJoin('', { serverId: 'match-1', profileId: hostMatchId }, 'session-1'), 'joined');
 assert.equal(fakeRaidCallbacks.handleRaidLeave('', { serverId: 'match-1', profileId: 'abcdef0123456789abcdef02' }, 'session-1'), 'left');
-assert.equal(fakeRaidCallbacks.handleRaidLeave('', { serverId: 'match-1', profileId: 'match-1' }, 'session-1'), 'left', 'host sentinel must be authenticated using Fika match host identity');
-assert.equal(acceptedRaidCalls, 3);
-assert.throws(() => fakeRaidCallbacks.handleRaidCreate('', { serverId: 'match-2', hostUsername: 'someone-else' }, 'session-1'), /FIKA_HOST_SESSION_IDENTITY_MISMATCH/);
+assert.equal(fakeRaidCallbacks.handleRaidLeave('', { serverId: hostMatchId, profileId: hostMatchId }, 'session-1'), 'left', 'normal host sentinel must be authenticated as the active host');
+assert.equal(fakeRaidCallbacks.handleRaidLeave('', { serverId: headlessSessionId, profileId: headlessSessionId }, headlessSessionId), 'left', 'Fika Headless host sentinel is its dedicated SPT Session ID');
+assert.equal(acceptedRaidCalls, 6);
+assert.throws(() => fakeRaidCallbacks.handleRaidCreate('', { serverId: 'foreign-host-match', hostUsername: 'pmc-name' }, 'session-1'), /FIKA_HOST_SESSION_IDENTITY_MISMATCH/);
+assert.throws(() => fakeRaidCallbacks.handleRaidJoin('', { serverId: 'missing-match', profileId: hostMatchId }, 'session-1'), /FIKA_MATCH_NOT_FOUND/);
+assert.throws(() => fakeRaidCallbacks.handleRaidJoin('', { serverId: 'match-1', profileId: 'abcdef0123456789abcdef99' }, 'session-1'), /FIKA_SESSION_PROFILE_MISMATCH/);
+assert.throws(() => fakeRaidCallbacks.handleRaidJoin('', { serverId: 'match-1', profileId: 'abcdef0123456789abcdef21' }, 'session-2'), /FIKA_PROFILE_ALREADY_IN_OTHER_MATCH/);
 assert.throws(() => fakeRaidCallbacks.handleRaidLeave('', { serverId: 'match-1', profileId: 'abcdef0123456789abcdef99' }, 'session-1'), /FIKA_SESSION_PROFILE_MISMATCH/);
-assert.equal(acceptedRaidCalls, 3, 'spoofed create/leave requests must be rejected before Fika mutates matches');
+assert.throws(() => fakeRaidCallbacks.handleRaidLeave('', { serverId: hostMatchId, profileId: hostMatchId }, 'session-unrelated'), /FIKA_MATCH_HOST_SESSION_MISMATCH/);
+assert.equal(acceptedRaidCalls, 6, 'spoofed create/join/leave requests must be rejected before Fika mutates matches');
 
 // Exact Fika 2.4.3 lifecycle simulation: bind a ready operation group only
 // after all mission members have joined the same map/match, then create a review
@@ -137,6 +229,14 @@ class FakeFikaMatchService {
     getMatch(id) { return this.matches.get(id); }
     getMatchIdByProfile() { return 'abcdef0123456789abcdef11'; }
     addPlayerToMatch(matchId, playerId, data) { this.matches.get(matchId).players.set(playerId, data); }
+    setPlayerDead(matchId, playerId) {
+        if (this.matches.has(matchId) && this.matches.get(matchId).players.has(playerId)) {
+            this.matches.get(matchId).players.get(playerId).isDead = true;
+        }
+    }
+    removePlayerFromMatch(matchId, playerId) {
+        if (this.matches.has(matchId)) this.matches.get(matchId).players.delete(playerId);
+    }
     // Fika client 1.2.3 sends serverId = host profileId. Fika Server 2.4.3
     // immediately inserts that same ID as the host player during createMatch.
     createMatch(data) {
@@ -165,6 +265,21 @@ raidProfiles.set('abcdef0123456789abcdef12', profileFor('abcdef0123456789abcdef1
 ]));
 lifecycleAdapter.services.saveServer = { getProfile(sessionId) { return raidProfiles.get(sessionId) || null; } };
 assert.equal(lifecycleAdapter.patchMatchService(liveMatchService), true);
+assert.equal(lifecycleAdapter.getStatus().playerDeathHook, true, 'Fika server-side setPlayerDead mutation must be observed');
+assert.equal(lifecycleAdapter.getStatus().playerLeaveHook, true, 'Fika server-side removePlayerFromMatch mutation must be observed');
+liveMatchService.matches.set('probe-match', { players: new Map() });
+liveMatchService.addPlayerToMatch('probe-match', 'probe-player', { isDead: false });
+liveMatchService.setPlayerDead('probe-match', 'probe-player');
+liveMatchService.removePlayerFromMatch('probe-match', 'probe-player');
+const probeEvents = lifecycleAdapter.getRecentEvents(20).filter(event => event.matchId === 'probe-match');
+assert.deepEqual(probeEvents.map(event => event.type).sort(), [
+    'fika_player_death_confirmed', 'fika_player_joined', 'fika_player_left_match'
+].sort(), 'server-side Fika roster, death and leave mutations must be recorded');
+assert.ok(probeEvents.every(event => event.rewardEligible === false));
+assert.equal(probeEvents.find(event => event.type === 'fika_player_death_confirmed').evidenceTrust, 'fika_server_accepted_client_event',
+    'death state is server-accepted but originates from an authenticated client callback');
+assert.ok(probeEvents.filter(event => event.type !== 'fika_player_death_confirmed')
+    .every(event => event.evidenceTrust === 'fika_server_membership_mutation'));
 assert.equal(ops.state.groups.find(x => x.id === group.id).state, 'forming');
 const hostProfileId = 'abcdef0123456789abcdef11';
 liveMatchService.createMatch({ serverId: hostProfileId, settings: { location: 'woods' } });
@@ -173,7 +288,7 @@ liveMatchService.addPlayerToMatch(hostProfileId, 'abcdef0123456789abcdef13', { i
 assert.equal(ops.state.groups.find(x => x.id === group.id).state, 'in_raid', 'the host profile plus every ready squad member in the same Fika match starts the operation');
 assert.equal(ops.state.groups.find(x => x.id === group.id).raidId, hostProfileId);
 assert.deepEqual(ops.state.groups.find(x => x.id === group.id).members.map(x => x.scavProfileId), [null, 'abcdef0123456789abcdef13']);
-ops.recordRaidEvent(group.id, { type: 'extract', amount: 1, map: 'woods', source: 'fika-server-adapter', evidenceTrust: 'server_verified' });
+ops.recordRaidEvent(group.id, { eventId: 'adapter-test-extract-001', type: 'extract', amount: 1, map: 'woods', source: 'fika-server-adapter', evidenceTrust: 'server_verified' });
 assert.ok(lifecycleAdapter.captureRaidStart('abcdef0123456789abcdef11', { playerSide: 'pmc', location: 'woods' }, { location: 'woods' }));
 assert.ok(lifecycleAdapter.captureRaidStart('abcdef0123456789abcdef12', { playerSide: 'savage', location: 'woods' }, { location: 'woods' }));
 raidProfiles.set('abcdef0123456789abcdef11', profileFor('abcdef0123456789abcdef11', [
@@ -200,6 +315,8 @@ liveMatchService.endMatch(hostProfileId, 'host_left');
 const finishedGroup = ops.state.groups.find(x => x.id === group.id);
 assert.equal(finishedGroup.state, 'review', 'Fika match end must enter manual review, not auto-award');
 assert.equal(finishedGroup.reviewData.evidenceTrust, 'fika_registry_and_client_reports_unverified');
+assert.ok(Array.isArray(finishedGroup.reviewData.memberLifecycle), 'per-member Fika lifecycle evidence must be retained in the review record');
+assert.ok(finishedGroup.reviewData.memberLifecycle.some(event => event.type === 'fika_player_joined'));
 assert.deepEqual(finishedGroup.reviewData.aliveProfileIds.sort(), ['abcdef0123456789abcdef11', 'abcdef0123456789abcdef12']);
 assert.deepEqual(finishedGroup.reviewData.extractedProfileIds.sort(), ['abcdef0123456789abcdef11', 'abcdef0123456789abcdef12']);
 assert.equal(ops.state.awards.length, 0, 'untrusted extraction reports must never issue rewards');
@@ -212,14 +329,23 @@ const statusMatchService = {
     matches: new Map(),
     getMatch(id) { return this.matches.get(id) || null; },
     addPlayerToMatch() {},
+    setPlayerDead() {},
+    removePlayerFromMatch() {},
+    async setMatchStatus(id, status) {
+        const match = this.matches.get(id);
+        if (match) match.status = status;
+    },
     endMatch(id, reason) { this.deleteMatch(id); },
     deleteMatch(id) { this.matches.delete(id); },
     createMatch(data) { this.matches.set(data.serverId, { players: new Map(), locationData: { Id: 'woods' } }); return true; }
 };
 const statusInstances = {
     SaveServer: { getProfile() { return null; } },
-    FikaUpdateCallbacks: { handleRaidAddPlayer() {}, handlePlayerDied() {} },
-    FikaRaidCallbacks: { handleRaidCreate() {}, handleRaidLeave() {} },
+    FikaUpdateCallbacks: {
+        handlePing() {}, handlePlayerspawn() {}, handleSethost() {},
+        handleRaidAddPlayer() {}, handlePlayerDied() {}, handleSetStatus() {}
+    },
+    FikaRaidCallbacks: { handleRaidCreate() {}, handleRaidJoin() {}, handleRaidLeave() {} },
     FikaMatchService: statusMatchService,
     LocationLifecycleService: { startLocalRaid() { return { location: 'woods' }; }, endLocalRaid() {} }
 };
@@ -351,6 +477,7 @@ async function verifyAsyncLifecycleWrappers() {
     fs.rmSync(asyncRoot, { recursive: true, force: true });
 }
 
-verifyAsyncLifecycleWrappers()
+verifyMatchStatusObservation()
+    .then(() => verifyAsyncLifecycleWrappers())
     .then(() => console.log('Fika243OperationsAdapter: all tests passed'))
     .catch(error => { console.error(error); process.exitCode = 1; });

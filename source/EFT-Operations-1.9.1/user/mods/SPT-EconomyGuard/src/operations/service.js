@@ -236,7 +236,7 @@ class OperationsService {
         if (!m || m.status !== 'published' || (m.startAt && Date.parse(m.startAt) > Date.now()) || (m.endAt && Date.parse(m.endAt) <= Date.now()) || g.members.length < m.minPlayers || !g.members.every(x => x.ready)) throw new Error('GROUP_NOT_READY');
         const validatedRaidId = text(raidId, 100, 'RAID_ID', true);
         g.state = 'in_raid'; g.raidId = validatedRaidId; g.startedAt = new Date().toISOString();
-        g.progress = Object.fromEntries(m.objectives.map(o => [o.id, 0])); g.progressTrust = {}; g.evidenceEvents = []; g.processedEventIds = []; this.persist(); return clone(g);
+        g.progress = Object.fromEntries(m.objectives.map(o => [o.id, 0])); g.progressTrust = Object.create(null); g.progressByTrust = Object.create(null); g.evidenceEvents = []; g.processedEventIds = []; this.persist(); return clone(g);
     }
 
     // Call only from a server-side SPT/Fika event adapter. Never expose this method as a public client endpoint.
@@ -251,10 +251,15 @@ class OperationsService {
             && event.type === 'collect' && event.acceptedBySpt === true;
         const clientReported = event.evidenceTrust === 'client_report_only' && source === 'fika-client-report'
             && ['extract', 'survive', 'raid_complete'].includes(event.type);
-        const hostAttestedIdentity = event.evidenceTrust === 'host_attested' && source === 'fika-host-client'
+        const memberHostAttestedIdentity = event.evidenceTrust === 'host_attested' && source === 'fika-host-client'
             && event.reporterProfileId && g.members.some(member => String(member.profileId) === String(event.reporterProfileId) || String(member.scavProfileId || '') === String(event.reporterProfileId))
             && String(event.reporterProfileId) === String(event.matchId)
             && String(event.matchId || '') === String(g.raidId || '');
+        const headlessHostAttestedIdentity = event.evidenceTrust === 'host_attested'
+            && source === 'fika-headless-host-client' && event.headlessHost === true
+            && event.reporterProfileId && String(event.reporterProfileId) === String(event.matchId)
+            && String(event.matchId || '') === String(g.raidId || '');
+        const hostAttestedIdentity = !!(memberHostAttestedIdentity || headlessHostAttestedIdentity);
         const hostAttestedKill = hostAttestedIdentity && event.type === 'kill' && event.victimIsAi === true;
         const hostAttestedVisit = hostAttestedIdentity && event.type === 'visit' && typeof event.target === 'string' && !!event.target.trim();
         const hostAttested = !!(hostAttestedKill || hostAttestedVisit);
@@ -279,7 +284,9 @@ class OperationsService {
         if (g.processedEventIds.includes(eventId)) return clone(g.progress);
         if (hostAttested) {
             const reporterId = requireProfileId(event.reporterProfileId);
-            if (!g.members.some(member => member.profileId === reporterId || member.scavProfileId === reporterId)) throw new Error('HOST_REPORTER_NOT_MEMBER');
+            const reporterIsMissionMember = g.members.some(member => member.profileId === reporterId || member.scavProfileId === reporterId);
+            const reporterIsAuthenticatedHeadless = event.headlessHost === true && source === 'fika-headless-host-client';
+            if (!reporterIsMissionMember && !reporterIsAuthenticatedHeadless) throw new Error('HOST_REPORTER_NOT_MEMBER');
             if (reporterId !== String(event.matchId)) throw new Error('HOST_REPORTER_MATCH_MISMATCH');
             if (event.matchId !== g.raidId) throw new Error('RAID_EVENT_MATCH_MISMATCH');
             if (event.type === 'kill') {
@@ -294,7 +301,22 @@ class OperationsService {
         if (!g.progress || typeof g.progress !== 'object' || Array.isArray(g.progress)) {
             g.progress = Object.fromEntries(m.objectives.map(objective => [objective.id, 0]));
         }
-        if (!g.progressTrust || typeof g.progressTrust !== 'object' || Array.isArray(g.progressTrust)) g.progressTrust = {};
+        if (!g.progressTrust || typeof g.progressTrust !== 'object' || Array.isArray(g.progressTrust)) g.progressTrust = Object.create(null);
+        else g.progressTrust = Object.assign(Object.create(null), g.progressTrust);
+        if (!g.progressByTrust || typeof g.progressByTrust !== 'object' || Array.isArray(g.progressByTrust)) g.progressByTrust = Object.create(null);
+        else g.progressByTrust = Object.assign(Object.create(null), g.progressByTrust);
+        let semanticHostEventKey = null;
+        if (hostAttested) {
+            if (event.type === 'kill') {
+                semanticHostEventKey = 'kill:' + String(event.matchId) + ':' + requireProfileId(event.victimProfileId);
+            } else if (event.type === 'visit') {
+                const visitActorId = requireProfileId(event.profileId);
+                const visitTarget = text(event.target, 100, 'VISIT_TRIGGER_ID', true).toLowerCase();
+                semanticHostEventKey = 'visit:' + String(event.matchId) + ':' + visitActorId + ':' + visitTarget;
+            }
+            if (!Array.isArray(g.processedHostEventKeys)) g.processedHostEventKeys = [];
+            if (g.processedHostEventKeys.includes(semanticHostEventKey)) return clone(g.progress);
+        }
         if (!Array.isArray(g.evidenceEvents)) g.evidenceEvents = [];
         const targetCandidates = [event.target, event.targetCategory].map(value => String(value || '').trim().toLowerCase()).filter(Boolean);
         for (const objective of m.objectives) {
@@ -302,8 +324,37 @@ class OperationsService {
             if (!matchingType) continue;
             if (objective.target && !targetCandidates.includes(String(objective.target).toLowerCase())) continue;
             if (objective.params.map && String(objective.params.map).toLowerCase() !== (eventMap || String(m.map || '').toLowerCase())) continue;
-            g.progress[objective.id] = Math.min(objective.count, (g.progress[objective.id] || 0) + amount);
-            if (g.progressTrust[objective.id] !== 'server_verified') g.progressTrust[objective.id] = event.evidenceTrust;
+            const currentProgress = Math.min(objective.count, Math.max(0, Number(g.progress[objective.id]) || 0));
+            const nextProgress = Math.min(objective.count, currentProgress + amount);
+            const creditedAmount = nextProgress - currentProgress;
+            g.progress[objective.id] = nextProgress;
+
+            // Legacy stores only had one trust label per objective, which could be
+            // overwritten by later events. Unaccounted historical progress stays unknown.
+            let trustCounts = Object.prototype.hasOwnProperty.call(g.progressByTrust, objective.id)
+                ? g.progressByTrust[objective.id] : Object.create(null);
+            if (!trustCounts || typeof trustCounts !== 'object' || Array.isArray(trustCounts)) trustCounts = Object.create(null);
+            else trustCounts = Object.assign(Object.create(null), trustCounts);
+            const normalizedTrustCounts = Object.create(null);
+            const allowedTrust = new Set(['server_verified', 'host_attested', 'spt_accepted_client_delta', 'client_report_only', 'legacy_unattributed']);
+            let accountedProgress = 0;
+            for (const [trust, rawCount] of Object.entries(trustCounts)) {
+                const count = Number(rawCount);
+                if (!allowedTrust.has(trust) || !Number.isSafeInteger(count) || count <= 0) continue;
+                normalizedTrustCounts[trust] = count;
+                accountedProgress += count;
+            }
+            if (accountedProgress > currentProgress) {
+                for (const key of Object.keys(normalizedTrustCounts)) delete normalizedTrustCounts[key];
+                accountedProgress = 0;
+            }
+            if (accountedProgress < currentProgress) {
+                normalizedTrustCounts.legacy_unattributed = (normalizedTrustCounts.legacy_unattributed || 0) + currentProgress - accountedProgress;
+            }
+            if (creditedAmount > 0) normalizedTrustCounts[event.evidenceTrust] = (normalizedTrustCounts[event.evidenceTrust] || 0) + creditedAmount;
+            g.progressByTrust[objective.id] = normalizedTrustCounts;
+            const activeTrusts = Object.entries(normalizedTrustCounts).filter(([, count]) => count > 0).map(([trust]) => trust);
+            g.progressTrust[objective.id] = activeTrusts.length > 1 ? 'mixed' : (activeTrusts[0] || 'none');
         }
         g.evidenceEvents.push({
             eventId, type: event.type, profileId: event.profileId ? String(event.profileId) : null,
@@ -311,6 +362,7 @@ class OperationsService {
             victimProfileId: event.victimProfileId ? String(event.victimProfileId) : null,
             victimRole: String(event.victimRole || ''), victimSide: String(event.victimSide || ''),
             reporterProfileId: event.reporterProfileId ? String(event.reporterProfileId) : null,
+            reporterKind: event.headlessHost === true ? 'fika_headless_host' : 'fika_player_host',
             matchId: event.matchId ? String(event.matchId) : null,
             evidenceTrust: event.evidenceTrust, source, timestamp: new Date().toISOString()
         });
@@ -319,6 +371,10 @@ class OperationsService {
         // the operations store without limit. IDs are scoped to this raid group.
         g.processedEventIds.push(eventId);
         if (g.processedEventIds.length > 10000) g.processedEventIds.splice(0, g.processedEventIds.length - 10000);
+        if (semanticHostEventKey) {
+            g.processedHostEventKeys.push(semanticHostEventKey);
+            if (g.processedHostEventKeys.length > 10000) g.processedHostEventKeys.splice(0, g.processedHostEventKeys.length - 10000);
+        }
         this.persist(); return clone(g.progress);
     }
 
@@ -344,7 +400,29 @@ class OperationsService {
         if (raidVerified) g.state = 'completed';
         else {
             g.state = 'review';
-            g.reviewData = { requiredDone, aliveProfileIds: [...alive], extractedProfileIds: [...extracted], objectiveEvidence: (g.evidenceEvents || []).slice(-200), progressTrust: clone(g.progressTrust || {}), evidenceTrust: String(raidOutcome && raidOutcome.evidenceTrust || 'untrusted_client_report'), source: String(raidOutcome && raidOutcome.source || 'unknown'), submittedAt: g.finishedAt };
+            g.reviewData = {
+                requiredDone,
+                aliveProfileIds: [...alive],
+                extractedProfileIds: [...extracted],
+                // Fika's server-side membership/death mutations are useful corroborating
+                // evidence, but a leave from the match is not proof of extraction.
+                memberLifecycle: Array.isArray(raidOutcome && raidOutcome.memberLifecycle)
+                    ? raidOutcome.memberLifecycle.filter(event => event && typeof event === 'object').slice(-500).map(event => ({
+                        eventId: text(event.eventId, 160, 'LIFECYCLE_EVENT_ID', true),
+                        type: text(event.type, 60, 'LIFECYCLE_EVENT_TYPE', true),
+                        playerId: text(event.playerId, 24, 'LIFECYCLE_PLAYER_ID', true),
+                        timestamp: event.timestamp && Number.isFinite(Date.parse(event.timestamp)) ? new Date(event.timestamp).toISOString() : null,
+                        evidenceTrust: text(event.evidenceTrust, 80, 'LIFECYCLE_EVIDENCE_TRUST', true),
+                        source: text(event.source, 120, 'LIFECYCLE_SOURCE', true)
+                    }))
+                    : [],
+                objectiveEvidence: (g.evidenceEvents || []).slice(-200),
+                progressTrust: clone(g.progressTrust || {}),
+                progressByTrust: clone(g.progressByTrust || {}),
+                evidenceTrust: String(raidOutcome && raidOutcome.evidenceTrust || 'untrusted_client_report'),
+                source: String(raidOutcome && raidOutcome.source || 'unknown'),
+                submittedAt: g.finishedAt
+            };
         }
         this.persist(); return clone(g);
     }
@@ -412,21 +490,56 @@ class OperationsService {
                 || Object.keys(memberRefs).some(index => !expectedMemberKeys.includes(index))) {
                 throw new Error('REVIEW_MEMBER_EVIDENCE_REQUIRED');
             }
+            const submittedOutcomes = attestation.memberOutcomes;
+            if (!submittedOutcomes || typeof submittedOutcomes !== 'object' || Array.isArray(submittedOutcomes)
+                || Object.keys(submittedOutcomes).length !== expectedMemberKeys.length
+                || Object.keys(submittedOutcomes).some(index => !expectedMemberKeys.includes(index))) {
+                throw new Error('REVIEW_MEMBER_OUTCOMES_REQUIRED');
+            }
+            const cleanMemberOutcomes = Object.create(null);
             for (const memberIndex of expectedMemberIndexes) {
-                cleanMemberEvidenceRefs[String(memberIndex)] = text(memberRefs[String(memberIndex)], 500, 'REVIEW_MEMBER_EVIDENCE_REF', true);
+                const key = String(memberIndex);
+                cleanMemberEvidenceRefs[key] = text(memberRefs[key], 500, 'REVIEW_MEMBER_EVIDENCE_REF', true);
+                const outcome = submittedOutcomes[key];
+                if (!['success', 'failed'].includes(outcome)) throw new Error('INVALID_REVIEW_MEMBER_OUTCOME');
+                cleanMemberOutcomes[key] = outcome;
             }
             confirmedObjectiveIds = expectedObjectiveIds;
             confirmedMemberIndexes = expectedMemberIndexes;
-            for (const member of g.members) { member.result = 'success'; this.award(m, g, member.profileId); }
+            for (const memberIndex of expectedMemberIndexes) {
+                const member = g.members[memberIndex];
+                const outcome = cleanMemberOutcomes[String(memberIndex)];
+                member.result = outcome;
+                member.reviewEvidenceRef = cleanMemberEvidenceRefs[String(memberIndex)];
+                if (outcome === 'success') this.award(m, g, member.profileId);
+                if (Array.isArray(g.results)) {
+                    const result = g.results.find(item => item && item.profileId === member.profileId);
+                    if (result) { result.success = outcome === 'success'; result.result = outcome; }
+                }
+            }
         } else {
-            for (const member of g.members) member.result = 'denied';
+            for (const member of g.members) {
+                member.result = 'denied';
+                if (Array.isArray(g.results)) {
+                    const result = g.results.find(item => item && item.profileId === member.profileId);
+                    if (result) { result.success = false; result.result = 'denied'; }
+                }
+            }
         }
         g.state = 'completed';
+        const reviewedMemberOutcomes = (Array.isArray(g.members) ? g.members : []).map((member, memberIndex) => ({
+            memberIndex,
+            result: member.result || (decision === 'approve' ? 'failed' : 'denied'),
+            evidenceRef: decision === 'approve' ? cleanMemberEvidenceRefs[String(memberIndex)] : ''
+        }));
         g.review = {
             decision, note: reviewNote, reviewer: reviewedBy, attested: decision === 'approve',
             attestationMethod: decision === 'approve' ? 'admin_review_checklist' : null,
             confirmedObjectiveIds, objectiveEvidenceRefs: cleanObjectiveEvidenceRefs,
             confirmedMemberIndexes, memberEvidenceRefs: cleanMemberEvidenceRefs,
+            memberOutcomes: reviewedMemberOutcomes,
+            successfulMemberIndexes: reviewedMemberOutcomes.filter(item => item.result === 'success').map(item => item.memberIndex),
+            failedMemberIndexes: reviewedMemberOutcomes.filter(item => item.result !== 'success').map(item => item.memberIndex),
             objectivesConfirmed: decision === 'approve', allMembersConfirmed: decision === 'approve',
             reviewedAt: new Date().toISOString()
         };
