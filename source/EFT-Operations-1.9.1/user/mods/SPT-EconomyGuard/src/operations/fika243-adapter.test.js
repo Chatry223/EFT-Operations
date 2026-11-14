@@ -52,14 +52,20 @@ assert.equal(matchEvents[0].rewardEligible, false, 'a match-end hook alone must 
 assert.equal(adapter.getStatus().matchStatusHook, true, 'Fika 2.4.3 match status hook must be installed');
 
 async function verifyMatchStatusObservation() {
-    const statusResult = await matchService.setMatchStatus('match-1', 2);
-    assert.equal(statusResult, true, 'the original Fika status handler result must be preserved');
-    const statusEvent = adapter.getRecentEvents(20).find(event => event.type === 'fika_match_status_changed');
-    assert.ok(statusEvent, 'Fika status transitions must be retained for raid review');
-    assert.equal(statusEvent.statusName, 'COMPLETE');
+    assert.equal(adapter.getStatus().matchStatusHook, true, 'Fika 2.4.3 status hook must be part of readiness');
+    const inGameResult = await matchService.setMatchStatus('match-1', 1);
+    const completeResult = await matchService.setMatchStatus('match-1', 2);
+    await matchService.setMatchStatus('match-1', 2);
+    assert.equal(inGameResult, true, 'the original Fika async IN_GAME result must be preserved');
+    assert.equal(completeResult, true, 'the original Fika async COMPLETE result must be preserved');
+    const statusEvents = adapter.getRecentEvents(20).filter(event => event.type === 'fika_match_status_changed');
+    assert.equal(statusEvents.length, 2, 'duplicate status writes must not duplicate evidence');
+    const statusEvent = statusEvents.find(event => event.statusName === 'COMPLETE');
+    assert.ok(statusEvent, 'Fika COMPLETE transition must be retained for raid review');
     assert.deepEqual(statusEvent.players.sort(), ['profile-a', 'profile-b']);
     assert.equal(statusEvent.evidenceTrust, 'fika_server_lifecycle');
-    assert.equal(statusEvent.rewardEligible, false, 'Fika COMPLETE status is not independent extraction proof');
+    assert.equal(statusEvent.rewardEligible, false, 'Fika COMPLETE is not independent extraction proof');
+    assert.ok(statusEvents.some(event => event.statusName === 'IN_GAME'));
 }
 
 // A raid-end request is client-originated. Preserve it for review, but mark it untrusted.
