@@ -309,6 +309,8 @@ const statusMatchService = {
     matches: new Map(),
     getMatch(id) { return this.matches.get(id) || null; },
     addPlayerToMatch() {},
+    setPlayerDead() {},
+    removePlayerFromMatch() {},
     endMatch(id, reason) { this.deleteMatch(id); },
     deleteMatch(id) { this.matches.delete(id); },
     createMatch(data) { this.matches.set(data.serverId, { players: new Map(), locationData: { Id: 'woods' } }); return true; }
