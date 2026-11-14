@@ -209,6 +209,14 @@ class FakeFikaMatchService {
     getMatch(id) { return this.matches.get(id); }
     getMatchIdByProfile() { return 'abcdef0123456789abcdef11'; }
     addPlayerToMatch(matchId, playerId, data) { this.matches.get(matchId).players.set(playerId, data); }
+    setPlayerDead(matchId, playerId) {
+        if (this.matches.has(matchId) && this.matches.get(matchId).players.has(playerId)) {
+            this.matches.get(matchId).players.get(playerId).isDead = true;
+        }
+    }
+    removePlayerFromMatch(matchId, playerId) {
+        if (this.matches.has(matchId)) this.matches.get(matchId).players.delete(playerId);
+    }
     // Fika client 1.2.3 sends serverId = host profileId. Fika Server 2.4.3
     // immediately inserts that same ID as the host player during createMatch.
     createMatch(data) {
@@ -237,6 +245,17 @@ raidProfiles.set('abcdef0123456789abcdef12', profileFor('abcdef0123456789abcdef1
 ]));
 lifecycleAdapter.services.saveServer = { getProfile(sessionId) { return raidProfiles.get(sessionId) || null; } };
 assert.equal(lifecycleAdapter.patchMatchService(liveMatchService), true);
+assert.equal(lifecycleAdapter.getStatus().playerDeathHook, true, 'Fika server-side setPlayerDead mutation must be observed');
+assert.equal(lifecycleAdapter.getStatus().playerLeaveHook, true, 'Fika server-side removePlayerFromMatch mutation must be observed');
+liveMatchService.matches.set('probe-match', { players: new Map() });
+liveMatchService.addPlayerToMatch('probe-match', 'probe-player', { isDead: false });
+liveMatchService.setPlayerDead('probe-match', 'probe-player');
+liveMatchService.removePlayerFromMatch('probe-match', 'probe-player');
+const probeEvents = lifecycleAdapter.getRecentEvents(20).filter(event => event.matchId === 'probe-match');
+assert.deepEqual(probeEvents.map(event => event.type).sort(), [
+    'fika_player_death_confirmed', 'fika_player_joined', 'fika_player_left_match'
+].sort(), 'server-side Fika roster, death and leave mutations must be recorded');
+assert.ok(probeEvents.every(event => event.evidenceTrust === 'fika_server_match_state' && event.rewardEligible === false));
 assert.equal(ops.state.groups.find(x => x.id === group.id).state, 'forming');
 const hostProfileId = 'abcdef0123456789abcdef11';
 liveMatchService.createMatch({ serverId: hostProfileId, settings: { location: 'woods' } });
@@ -272,6 +291,8 @@ liveMatchService.endMatch(hostProfileId, 'host_left');
 const finishedGroup = ops.state.groups.find(x => x.id === group.id);
 assert.equal(finishedGroup.state, 'review', 'Fika match end must enter manual review, not auto-award');
 assert.equal(finishedGroup.reviewData.evidenceTrust, 'fika_registry_and_client_reports_unverified');
+assert.ok(Array.isArray(finishedGroup.reviewData.memberLifecycle), 'per-member Fika lifecycle evidence must be retained in the review record');
+assert.ok(finishedGroup.reviewData.memberLifecycle.some(event => event.type === 'fika_player_joined'));
 assert.deepEqual(finishedGroup.reviewData.aliveProfileIds.sort(), ['abcdef0123456789abcdef11', 'abcdef0123456789abcdef12']);
 assert.deepEqual(finishedGroup.reviewData.extractedProfileIds.sort(), ['abcdef0123456789abcdef11', 'abcdef0123456789abcdef12']);
 assert.equal(ops.state.awards.length, 0, 'untrusted extraction reports must never issue rewards');
