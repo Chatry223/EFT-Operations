@@ -331,6 +331,10 @@ const statusMatchService = {
     addPlayerToMatch() {},
     setPlayerDead() {},
     removePlayerFromMatch() {},
+    async setMatchStatus(id, status) {
+        const match = this.matches.get(id);
+        if (match) match.status = status;
+    },
     endMatch(id, reason) { this.deleteMatch(id); },
     deleteMatch(id) { this.matches.delete(id); },
     createMatch(data) { this.matches.set(data.serverId, { players: new Map(), locationData: { Id: 'woods' } }); return true; }
