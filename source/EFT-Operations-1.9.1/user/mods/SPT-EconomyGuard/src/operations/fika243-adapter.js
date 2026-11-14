@@ -35,12 +35,13 @@ class Fika243OperationsAdapter {
         this.status.playerDeathHook = false;
         this.status.playerLeaveHook = false;
         this.status.matchEndHook = false;
+        this.status.matchStatusHook = false;
         this.status.matchDeleteHook = false;
         this.status.matchCreateHook = false;
         this.status.lifecycleHook = false;
         this.status.observerInstalled = false;
         this.status.hookState = 'not_installed';
-        this.status.missingHooks = ['saveServer', 'updateIdentity', 'raidIdentity', 'playerJoin', 'playerDeath', 'playerLeave', 'matchEnd', 'matchDelete', 'matchCreate', 'lifecycle'];
+        this.status.missingHooks = ['saveServer', 'updateIdentity', 'raidIdentity', 'playerJoin', 'playerDeath', 'playerLeave', 'matchEnd', 'matchStatus', 'matchDelete', 'matchCreate', 'lifecycle'];
     }
 
     log(level, message) {
@@ -147,6 +148,7 @@ class Fika243OperationsAdapter {
             playerDeath: this.status.playerDeathHook === true,
             playerLeave: this.status.playerLeaveHook === true,
             matchEnd: this.status.matchEndHook === true,
+            matchStatus: this.status.matchStatusHook === true,
             matchDelete: this.status.matchDeleteHook === true,
             matchCreate: this.status.matchCreateHook === true,
             lifecycle: this.status.lifecycleHook === true
@@ -587,6 +589,31 @@ class Fika243OperationsAdapter {
         const target = hasHooks ? proto : instance;
         const adapter = this;
         let patched = false;
+
+        // Fika 2.4.3 exposes an explicit LOADING -> IN_GAME -> COMPLETE status
+        // transition. It is useful review evidence, but COMPLETE is not proof that
+        // any member extracted successfully.
+        if (typeof target.setMatchStatus === 'function') {
+            if (!target.__egFika243MatchStatusHook) {
+                const original = target.setMatchStatus;
+                target.setMatchStatus = function (matchId, status, ...rest) {
+                    const result = original.call(this, matchId, status, ...rest);
+                    if (result && typeof result.then === 'function') {
+                        return result.then(value => {
+                            safe(() => adapter.captureMatchStatus(this, matchId, status));
+                            return value;
+                        });
+                    }
+                    safe(() => adapter.captureMatchStatus(this, matchId, status));
+                    return result;
+                };
+                Object.defineProperty(target, '__egFika243MatchStatusHook', { value: true, enumerable: false });
+                patched = true;
+            }
+            this.status.matchStatusHook = true;
+        } else {
+            this.status.matchStatusHook = false;
+        }
 
         if (typeof target.endMatch === 'function') {
             if (!target.__egFika243MatchHook) {
@@ -1130,6 +1157,37 @@ class Fika243OperationsAdapter {
             reportedFoundInRaidQuestItems: foundInRaidItems,
             reportedDroppedQuestItems: droppedQuestItems,
             evidenceTrust: 'untrusted_client_report',
+            rewardEligible: false
+        };
+        this.appendEvent(event);
+        return event;
+    }
+
+    captureMatchStatus(service, matchId, status) {
+        const id = String(matchId || '');
+        if (!id) return null;
+        const match = safe(() => service.getMatch && service.getMatch(id), null);
+        if (!match) return null;
+        const numericStatus = Number(status);
+        const statusName = numericStatus === 0 ? 'LOADING' : (numericStatus === 1 ? 'IN_GAME' : (numericStatus === 2 ? 'COMPLETE' : 'UNKNOWN'));
+        const eventId = `fika-match-status:${id}:${String(status)}`;
+        if (this.getRecentEvents(500).some(event => event.eventId === eventId)) return null;
+        const missionGroup = this.operations && this.operations.state && Array.isArray(this.operations.state.groups)
+            ? this.operations.state.groups.find(group => String(group.raidId || '') === id)
+            : null;
+        const event = {
+            eventId,
+            type: 'fika_match_status_changed',
+            timestamp: new Date().toISOString(),
+            fikaServerVersion: EXPECTED_FIKA_VERSION,
+            matchId: id,
+            groupId: missionGroup ? missionGroup.id : null,
+            missionId: missionGroup ? missionGroup.missionId : null,
+            status: Number.isFinite(numericStatus) ? numericStatus : String(status || ''),
+            statusName,
+            players: match.players instanceof Map ? [...match.players.keys()].map(String) : [],
+            evidenceTrust: 'fika_server_lifecycle',
+            source: 'FikaMatchService.setMatchStatus',
             rewardEligible: false
         };
         this.appendEvent(event);
