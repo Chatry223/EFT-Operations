@@ -400,7 +400,29 @@ class OperationsService {
         if (raidVerified) g.state = 'completed';
         else {
             g.state = 'review';
-            g.reviewData = { requiredDone, aliveProfileIds: [...alive], extractedProfileIds: [...extracted], objectiveEvidence: (g.evidenceEvents || []).slice(-200), progressTrust: clone(g.progressTrust || {}), progressByTrust: clone(g.progressByTrust || {}), evidenceTrust: String(raidOutcome && raidOutcome.evidenceTrust || 'untrusted_client_report'), source: String(raidOutcome && raidOutcome.source || 'unknown'), submittedAt: g.finishedAt };
+            g.reviewData = {
+                requiredDone,
+                aliveProfileIds: [...alive],
+                extractedProfileIds: [...extracted],
+                // Fika's server-side membership/death mutations are useful corroborating
+                // evidence, but a leave from the match is not proof of extraction.
+                memberLifecycle: Array.isArray(raidOutcome && raidOutcome.memberLifecycle)
+                    ? raidOutcome.memberLifecycle.filter(event => event && typeof event === 'object').slice(-500).map(event => ({
+                        eventId: text(event.eventId, 160, 'LIFECYCLE_EVENT_ID', true),
+                        type: text(event.type, 60, 'LIFECYCLE_EVENT_TYPE', true),
+                        playerId: text(event.playerId, 24, 'LIFECYCLE_PLAYER_ID', true),
+                        timestamp: event.timestamp && Number.isFinite(Date.parse(event.timestamp)) ? new Date(event.timestamp).toISOString() : null,
+                        evidenceTrust: text(event.evidenceTrust, 80, 'LIFECYCLE_EVIDENCE_TRUST', true),
+                        source: text(event.source, 120, 'LIFECYCLE_SOURCE', true)
+                    }))
+                    : [],
+                objectiveEvidence: (g.evidenceEvents || []).slice(-200),
+                progressTrust: clone(g.progressTrust || {}),
+                progressByTrust: clone(g.progressByTrust || {}),
+                evidenceTrust: String(raidOutcome && raidOutcome.evidenceTrust || 'untrusted_client_report'),
+                source: String(raidOutcome && raidOutcome.source || 'unknown'),
+                submittedAt: g.finishedAt
+            };
         }
         this.persist(); return clone(g);
     }
