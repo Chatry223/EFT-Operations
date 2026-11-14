@@ -867,10 +867,18 @@ class EconomyGuard {
         if (!selected.length || selected.length !== selectedIds.length) {
             return { known: false, valid: true, reason: 'TRADER_SELL_ITEMS_UNAVAILABLE', assetValue: 0, confidence: 'LOW' };
         }
+        // Trader sell requests identify the selected root item(s), while SPT's
+        // inventory stores container contents as separate rows linked by parentId.
+        // Expand the exact selected trees before valuation so PackNStrap cases,
+        // nested containers, weapon attachments and contained stacks are counted.
+        const selectedTree = core.itemTree(selectedIds, inventory);
+        if (!selectedTree.length || selectedTree.length < selected.length) {
+            return { known: false, valid: true, reason: 'TRADER_SELL_ITEM_TREE_INCOMPLETE', assetValue: 0, confidence: 'LOW' };
+        }
         // Trader buyback is based on SPT Handbook value, not LiveFleaPrices/Ragfair
         // dynamic price. Do not let a volatile flea price inflate the trader payout ceiling.
-        const asset = this.getTraderSellAssetValue(selected, instance);
-        const qualityMultiplier = this.getPriceQualityMultiplier(instance, selected);
+        const asset = this.getTraderSellAssetValue(selectedTree, instance);
+        const qualityMultiplier = this.getPriceQualityMultiplier(instance, selectedTree);
         // SPT 3.11.1 TraderHelper.getTrader() returns ITraderBase directly,
         // not a { base } wrapper. The effective buyback coefficient lives on the
         // player's current loyalty-level row, not on ITraderBase itself.
@@ -901,7 +909,7 @@ class EconomyGuard {
         const multiplier = Number(this.config.trader.maxSellPayoutMultiplier) || 3;
         const safety = Number(this.config.trader.sellPayoutSafetyFactor) || 1.35;
         const ceiling = expectedRub * multiplier * safety;
-        return { known: true, valid: actualRub <= ceiling, expectedRub, actualRub, ceiling, assetValue: asset.value, qualityMultiplier, confidence: asset.confidence, priceSource: asset.source, traderId: request.tid, buyPriceCoef, buybackPercent, loyaltyLevel: Number(profile && profile.TradersInfo && profile.TradersInfo[request.tid] && profile.TradersInfo[request.tid].loyaltyLevel) || null };
+        return { known: true, valid: actualRub <= ceiling, expectedRub, actualRub, ceiling, assetValue: asset.value, selectedItemCount: selectedTree.length, assetBreakdown: asset.breakdown, qualityMultiplier, confidence: asset.confidence, priceSource: asset.source, traderId: request.tid, buyPriceCoef, buybackPercent, loyaltyLevel: Number(profile && profile.TradersInfo && profile.TradersInfo[request.tid] && profile.TradersInfo[request.tid].loyaltyLevel) || null };
     }
 
     checkFleaListing(instance, profile, request) {
