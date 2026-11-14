@@ -31,7 +31,9 @@ assert.equal(adapter.getStatus().itemSending.enabled, true, 'enabled Fika item s
 fs.writeFileSync(path.join(fikaDir, 'assets', 'configs', 'fika.jsonc'), JSON.stringify({ server: { allowItemSending: false } }));
 
 const matchService = {
-    getMatch(id) { return id === 'match-1' ? { players: new Map([['profile-a', {}], ['profile-b', {}]]) } : null; },
+    match: { players: new Map([['profile-a', {}], ['profile-b', {}]]), status: 0 },
+    getMatch(id) { return id === 'match-1' ? this.match : null; },
+    async setMatchStatus(id, status) { if (id === 'match-1') this.match.status = status; return true; },
     endMatch(id, reason) { return { id, reason }; }
 };
 adapter.services.fikaMatchService = matchService;
@@ -47,6 +49,18 @@ assert.equal(matchEvents[0].type, 'fika_match_end');
 assert.deepEqual(matchEvents[0].players.sort(), ['profile-a', 'profile-b']);
 assert.equal(matchEvents[0].evidenceTrust, 'fika_match_end_lifecycle_with_authenticated_roster');
 assert.equal(matchEvents[0].rewardEligible, false, 'a match-end hook alone must never authorize rewards');
+assert.equal(adapter.getStatus().matchStatusHook, true, 'Fika 2.4.3 match status hook must be installed');
+
+async function verifyMatchStatusObservation() {
+    const statusResult = await matchService.setMatchStatus('match-1', 2);
+    assert.equal(statusResult, true, 'the original Fika status handler result must be preserved');
+    const statusEvent = adapter.getRecentEvents(20).find(event => event.type === 'fika_match_status_changed');
+    assert.ok(statusEvent, 'Fika status transitions must be retained for raid review');
+    assert.equal(statusEvent.statusName, 'COMPLETE');
+    assert.deepEqual(statusEvent.players.sort(), ['profile-a', 'profile-b']);
+    assert.equal(statusEvent.evidenceTrust, 'fika_server_lifecycle');
+    assert.equal(statusEvent.rewardEligible, false, 'Fika COMPLETE status is not independent extraction proof');
+}
 
 // A raid-end request is client-originated. Preserve it for review, but mark it untrusted.
 adapter.services.saveServer = { getProfile(sessionId) {
@@ -453,6 +467,7 @@ async function verifyAsyncLifecycleWrappers() {
     fs.rmSync(asyncRoot, { recursive: true, force: true });
 }
 
-verifyAsyncLifecycleWrappers()
+verifyMatchStatusObservation()
+    .then(() => verifyAsyncLifecycleWrappers())
     .then(() => console.log('Fika243OperationsAdapter: all tests passed'))
     .catch(error => { console.error(error); process.exitCode = 1; });
