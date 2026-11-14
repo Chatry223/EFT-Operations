@@ -173,14 +173,15 @@ const fakeRaidCallbacks = {
 assert.equal(adapter.patchRaidCallbacks(fakeRaidCallbacks), true);
 assert.equal(fakeRaidCallbacks.handleRaidCreate('', { serverId: hostMatchId, hostUsername: 'pmc-name' }, 'session-1'), 'created');
 assert.equal(fakeRaidCallbacks.handleRaidCreate('', { serverId: headlessSessionId, hostUsername: 'headless-pmc' }, headlessSessionId), 'created');
-assert.equal(fakeRaidCallbacks.handleRaidJoin('', { serverId: 'match-1' }, 'session-1'), 'joined');
+assert.equal(fakeRaidCallbacks.handleRaidJoin('', { serverId: 'match-1', profileId: hostMatchId }, 'session-1'), 'joined');
 assert.equal(fakeRaidCallbacks.handleRaidLeave('', { serverId: 'match-1', profileId: 'abcdef0123456789abcdef02' }, 'session-1'), 'left');
 assert.equal(fakeRaidCallbacks.handleRaidLeave('', { serverId: hostMatchId, profileId: hostMatchId }, 'session-1'), 'left', 'normal host sentinel must be authenticated as the active host');
 assert.equal(fakeRaidCallbacks.handleRaidLeave('', { serverId: headlessSessionId, profileId: headlessSessionId }, headlessSessionId), 'left', 'Fika Headless host sentinel is its dedicated SPT Session ID');
 assert.equal(acceptedRaidCalls, 6);
 assert.throws(() => fakeRaidCallbacks.handleRaidCreate('', { serverId: 'foreign-host-match', hostUsername: 'pmc-name' }, 'session-1'), /FIKA_HOST_SESSION_IDENTITY_MISMATCH/);
-assert.throws(() => fakeRaidCallbacks.handleRaidJoin('', { serverId: 'missing-match' }, 'session-1'), /FIKA_MATCH_NOT_FOUND/);
-assert.throws(() => fakeRaidCallbacks.handleRaidJoin('', { serverId: 'match-1' }, 'session-2'), /FIKA_PROFILE_ALREADY_IN_OTHER_MATCH/);
+assert.throws(() => fakeRaidCallbacks.handleRaidJoin('', { serverId: 'missing-match', profileId: hostMatchId }, 'session-1'), /FIKA_MATCH_NOT_FOUND/);
+assert.throws(() => fakeRaidCallbacks.handleRaidJoin('', { serverId: 'match-1', profileId: 'abcdef0123456789abcdef99' }, 'session-1'), /FIKA_SESSION_PROFILE_MISMATCH/);
+assert.throws(() => fakeRaidCallbacks.handleRaidJoin('', { serverId: 'match-1', profileId: 'abcdef0123456789abcdef21' }, 'session-2'), /FIKA_PROFILE_ALREADY_IN_OTHER_MATCH/);
 assert.throws(() => fakeRaidCallbacks.handleRaidLeave('', { serverId: 'match-1', profileId: 'abcdef0123456789abcdef99' }, 'session-1'), /FIKA_SESSION_PROFILE_MISMATCH/);
 assert.throws(() => fakeRaidCallbacks.handleRaidLeave('', { serverId: hostMatchId, profileId: hostMatchId }, 'session-unrelated'), /FIKA_MATCH_HOST_SESSION_MISMATCH/);
 assert.equal(acceptedRaidCalls, 6, 'spoofed create/join/leave requests must be rejected before Fika mutates matches');

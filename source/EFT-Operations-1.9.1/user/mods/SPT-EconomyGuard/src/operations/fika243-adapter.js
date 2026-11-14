@@ -213,9 +213,10 @@ class Fika243OperationsAdapter {
                     // uses the dedicated SPT session ID (verified by info.password).
                     adapter.assertRaidHostBelongsToSession(sessionId, request.serverId);
                 } else if (methodName === 'handleRaidJoin') {
-                    // Join is a read-only handshake, but the session must exist and
-                    // cannot request a second match while its PMC/Scav is elsewhere.
-                    adapter.assertFikaSessionCanJoinMatch(sessionId, request.serverId);
+                    // Fika 2.4.3 returns the match's raid code/settings from this handshake.
+                    // Authenticate the requested PMC/Scav identity before exposing match data,
+                    // and reject accounts whose character is already bound to another match.
+                    adapter.assertFikaAccountCanJoinMatch(sessionId, request.profileId, request.serverId, methodName);
                 } else if (String(request.serverId || '') === String(request.profileId || '')) {
                     adapter.assertFikaMatchHostBelongsToSession(sessionId, request.serverId, methodName);
                 } else {
