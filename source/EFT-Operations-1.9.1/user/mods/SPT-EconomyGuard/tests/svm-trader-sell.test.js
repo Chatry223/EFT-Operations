@@ -64,12 +64,20 @@ try {
     assert.equal(within.priceSource, 'spt-handbook');
     assert.equal(within.ceiling, 81000);
     assert.equal(within.valid, true);
+    assert.equal(within.payoutRatio, 4.05);
+    assert.equal(within.reviewRequired, true, 'payouts above the review threshold are flagged without crossing the hard block ceiling');
 
     const over = guard.checkTraderSell(instance, profile, {
         tid: traderId, items: [{ id: 'item-1' }], price: 81001
     }, 'session-1');
     assert.equal(over.known, true);
     assert.equal(over.valid, false, 'payout above the SVM-adjusted 20% buyback ceiling must be rejected');
+
+    const ordinary = guard.checkTraderSell(instance, profile, {
+        tid: traderId, items: [{ id: 'item-1' }], price: 30000
+    }, 'session-1');
+    assert.equal(ordinary.valid, true);
+    assert.equal(ordinary.reviewRequired, false, 'ordinary payout within twice the SPT/SVM expected value must not create a review');
 
     // Fallback path for SPT-compatible wrappers or test doubles that do not expose getLoyaltyLevel.
     const fallbackInstance = Object.assign({}, instance, {
