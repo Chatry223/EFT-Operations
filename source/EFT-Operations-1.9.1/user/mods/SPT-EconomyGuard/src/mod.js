@@ -31,7 +31,7 @@ class SptEconomyGuardMod {
             mode: 'audit',
             dataDirectory: 'SPT-EconomyGuard-Data',
             price: { maxOvervalueRatio: 20, minUndervalueRatio: 0.05, referenceDisagreementRatio: 5, allowSingleReferenceSourceForBlocking: false, minimumReferenceRoubles: 100, unknownItemReviewThresholdRoubles: 1000000, marketReviewOvervalueRatio: 10, marketReviewUndervalueRatio: 0.1 },
-            trader: { blockInvalidPaymentScheme: true, maxSellPayoutMultiplier: 3, sellPayoutSafetyFactor: 1.35 },
+            trader: { blockInvalidPaymentScheme: true, maxSellPayoutMultiplier: 3, sellPayoutSafetyFactor: 1.35, reviewSellPayoutMultiplier: 2 },
             flea: { blockSelfPurchase: true, blockPaymentMismatch: true, blockExtremePrice: true, maxTrackedEventsInMemory: 20000, pairWindowMinutes: 10, pairCaseThreshold: 5, cycleWindowHours: 24 },
             restrictions: { enabled: true },
             fence: { absoluteMaxPayoutRoubles: 50000000, blockAbsoluteCap: true },
