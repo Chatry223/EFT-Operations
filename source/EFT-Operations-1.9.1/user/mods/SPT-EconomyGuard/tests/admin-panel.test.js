@@ -86,7 +86,7 @@ let outsideZip = null;
     state:'review',createdAt:'2026-11-09T20:00:00.000Z',finishedAt:'2026-11-09T20:05:00.000Z',
     members:[{profileId:'PROFILESECRET',scavProfileId:'SCAVSECRET',displayName:'Alpha PMC',ready:true,result:'review'}],
     progress:{kills:1,loot:2,extract:1},progressTrust:{kills:'host_attested',loot:'spt_accepted_client_delta',extract:'client_report_only'},progressByTrust:{kills:{host_attested:1},loot:{spt_accepted_client_delta:2},extract:{client_report_only:1}},evidenceEvents:[{eventId:'host-event-secret',type:'kill',profileId:'PROFILESECRET',target:'assault',targetCategory:'scav',victimProfileId:'BOTSECRET',victimRole:'assault',victimSide:'Savage',reporterProfileId:'PROFILESECRET',matchId:'fika-match-secret',evidenceTrust:'host_attested',timestamp:'2026-11-09T20:04:00.000Z'},{eventId:'loot-event-secret',type:'collect',profileId:'PROFILESECRET',amount:2,target:'tpl-123',source:'spt-server-adapter',evidenceTrust:'spt_accepted_client_delta',timestamp:'2026-11-09T20:04:30.000Z'}],
-    reviewData:{requiredDone:false,aliveProfileIds:['PROFILESECRET'],extractedProfileIds:['PROFILESECRET'],evidenceTrust:'untrusted_client_report',source:'fika-server-adapter',submittedAt:'2026-11-09T20:05:00.000Z'}
+    reviewData:{requiredDone:false,aliveProfileIds:['PROFILESECRET'],extractedProfileIds:['PROFILESECRET'],memberLifecycle:[{eventId:'lifecycle-secret',type:'fika_player_death_confirmed',playerId:'PROFILESECRET',timestamp:'2026-11-09T20:04:45.000Z',evidenceTrust:'fika_server_accepted_client_event',source:'FikaMatchService.setPlayerDead'}],evidenceTrust:'untrusted_client_report',source:'fika-server-adapter',submittedAt:'2026-11-09T20:05:00.000Z'}
   };
   operations.state.groups.push(reviewGroup);
   operations.reviewQueue=()=>[reviewGroup];
@@ -105,6 +105,9 @@ let outsideZip = null;
   assert.strictEqual(reviewRows[0].objectiveEvidence[2].clientReportedCount,1);
   assert.strictEqual(reviewRows[0].objectiveEvidence[2].evidenceStatus,'client_report_only');
   assert.strictEqual(reviewRows[0].reviewData.evidenceCount,2);
+  assert.strictEqual(reviewRows[0].reviewData.memberLifecycle[0].displayName,'Alpha PMC',
+    'admin review should expose lifecycle evidence with a display name, not a private profile ID');
+  assert.strictEqual(reviewRows[0].reviewData.memberLifecycle[0].evidenceTrust,'fika_server_accepted_client_event');
   const safeReviewJson=JSON.stringify(reviewRows);
   for(const secret of ['PROFILESECRET','VICTIMSECRET','SCAVSECRET','ITEMSECRET','fika-match-secret','LEADERSECRET','BOTSECRET','host-event-secret','loot-event-secret'])
     assert.ok(!safeReviewJson.includes(secret),`review API must not expose internal identifier ${secret}`);
