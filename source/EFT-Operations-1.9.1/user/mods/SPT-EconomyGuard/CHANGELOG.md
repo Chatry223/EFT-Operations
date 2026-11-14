@@ -65,3 +65,7 @@
 - Death-state evidence is labeled as a server-accepted client event, not independent server proof, because the Fika callback originates from the client.
 - All lifecycle evidence remains ineligible for automatic rewards; unverified raids continue to require individual admin review.
 - Added regression coverage for lifecycle hooks, trust labels, review persistence, and required-hook readiness.
+- Added a read-only observer at the exact Fika 2.4.3 `FikaSendItemController.sendItem` execution boundary; records sender/receiver profile references, item-tree TPL/count summary, and whether the sender inventory debit was observed.
+- The transfer observer preserves Fika's original response/exception behavior, records uncertain outcomes without claiming delivery, and never makes item transfers reward-eligible.
+- The authenticated Fika admin panel distinguishes a closed route, an enabled-and-observed route, and an enabled-but-unmonitored route.
+- Added regression tests for successful debit observation, failed/uncertain transfer, exception propagation, item-tree aggregation, and non-interference.
