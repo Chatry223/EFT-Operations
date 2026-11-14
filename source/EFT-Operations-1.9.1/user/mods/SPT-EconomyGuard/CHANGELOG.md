@@ -55,3 +55,13 @@
 - Client requests target the server's `EFTOperations` static-router prefix and attempt to reuse the active SPT PHP session cookie; no fabricated player ID or credential is used.
 - The client project is source-only in this release; it was not compiled in this Linux environment and must be built against the user's Windows game assemblies.
 - Raid start, kill/extract proof, rewards, 3D briefing room and synchronized video remain out of scope for this milestone.
+
+
+
+## 1.9.1 — Fika 2.4.3 per-player lifecycle evidence
+- Added version-gated observation of Fika Server 2.4.3 `FikaMatchService.addPlayerToMatch`, `setPlayerDead`, and `removePlayerFromMatch` mutations.
+- Match review records now retain per-member join, server-accepted death-state, and roster-removal evidence with timestamps, source, and explicit trust labels.
+- A roster removal is recorded with an unknown reason and is never treated as extraction.
+- Death-state evidence is labeled as a server-accepted client event, not independent server proof, because the Fika callback originates from the client.
+- All lifecycle evidence remains ineligible for automatic rewards; unverified raids continue to require individual admin review.
+- Added regression coverage for lifecycle hooks, trust labels, review persistence, and required-hook readiness.
