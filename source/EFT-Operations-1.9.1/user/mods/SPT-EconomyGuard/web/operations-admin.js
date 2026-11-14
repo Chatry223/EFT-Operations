@@ -83,6 +83,9 @@
             map: x.map || '',
             exitStatus: x.exitStatus || '',
             exitName: x.exitName || '',
+            matchStatus: x.matchStatusName || '',
+            matchStatusCode: x.matchStatusCode,
+            playerCount: Number(x.playerCount || 0),
             trust: x.evidenceTrust || '',
             victims: (x.reportedVictims || []).map(v => ({
               name: v.name, role: v.role, side: v.side, level: v.level,
@@ -93,9 +96,12 @@
             lootItems: (x.reportedLootItems || []).map(v => ({ tpl: v.tpl, count: v.count, acceptedBySpt: v.acceptedBySpt })),
             sessionCounters: x.reportedSessionCounters || []
           }));
-          const summary = raidEnds.length
+          const matchStatusTrail = events.filter(x => x.type === 'fika_match_status_changed').slice().reverse()
+            .map(x => x.matchStatusName || 'UNKNOWN').filter(Boolean);
+          const statusSummary = matchStatusTrail.length ? ' · match status ' + matchStatusTrail.join(' → ') : '';
+          const summary = (raidEnds.length
             ? raidEnds.length + ' raid reports · ' + victimCount + ' victims · ' + corroboratedCount + ' Fika corroborated · ' + lootCount + ' accepted loot units · ' + deathReports + ' death reports'
-            : events.length + ' Fika events · ' + deathReports + ' death reports';
+            : events.length + ' Fika events · ' + deathReports + ' death reports') + statusSummary;
           const objectiveRows = Array.isArray(g.objectiveEvidence) ? g.objectiveEvidence : [];
           const hostEvidence = Array.isArray(g.hostEvidence) ? g.hostEvidence : [];
           const hasHostAttested = objectiveRows.some(item => Number(item.hostAttestedCount || 0) > 0);
