@@ -69,3 +69,13 @@
 - The transfer observer preserves Fika's original response/exception behavior, records uncertain outcomes without claiming delivery, and never makes item transfers reward-eligible.
 - The authenticated Fika admin panel distinguishes a closed route, an enabled-and-observed route, and an enabled-but-unmonitored route.
 - Added regression tests for successful debit observation, failed/uncertain transfer, exception propagation, item-tree aggregation, and non-interference.
+
+
+## 1.9.2 — Live price and nested-container valuation hardening
+
+- Confirmed the LiveFleaPrices integration point is SPT's refreshed `RagfairPriceService` dynamic-price cache, which reflects the mod's final price table after blacklist, limiter and trader-price rules; added regression coverage for cache refresh and the 1-RUB sentinel fallback.
+- Kept trader buyback valuation anchored to SPT Handbook prices and the active SVM loyalty coefficient; LiveFleaPrices flea prices cannot inflate trader payout expectations.
+- Fixed trader sell valuation to expand the selected inventory item tree, including PackNStrap-style containers, nested contents, weapon attachments and contained stacks.
+- Added a fail-safe unknown result when the selected inventory tree cannot be resolved; unrelated inventory items are never included.
+- Added regression coverage for a container with a 60-round nested stack, correct SVM 20% buyback valuation, and exclusion of unrelated items.
+- Documented the exact integration model, remaining runtime gates, and the existing 4.05x trader payout guard-band review item in `PRICE-MOD-COMPATIBILITY.md`.
