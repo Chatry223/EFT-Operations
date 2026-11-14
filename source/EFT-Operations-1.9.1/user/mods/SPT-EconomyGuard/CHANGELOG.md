@@ -82,3 +82,6 @@
 - Added a configurable, non-blocking Trader payout review threshold (default 2x SPT Handbook/SVM expected value). Intermediate anomalies enter the medium-severity review queue; the existing 4.05x hard-block ceiling is unchanged pending real transaction-log analysis.
 - Added an end-to-end `TradeHelper.sellItem` hook regression: verifies a 2.5x payout creates a persisted MEDIUM case, preserves the original SPT sell result, and does not duplicate the case on repeated hook installation.
 - Linked payout review cases to the actual SPT profile ID and nickname (with the login session stored separately), so the Admin Center can identify the player instead of showing `Unknown`.
+
+- Added observation of the exact Fika 2.4.3 `FikaMatchService.setMatchStatus` transition. The review stream now records `LOADING`, `IN_GAME`, and `COMPLETE` with the live roster and explicit `fika_server_lifecycle` trust; `COMPLETE` is never treated as extraction proof or reward authorization.
+- Added regression coverage for async status-hook response preservation, roster capture, trust labeling, and `rewardEligible: false`; the match-status hook is now part of Fika observer readiness.
