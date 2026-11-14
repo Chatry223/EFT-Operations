@@ -26,6 +26,8 @@ class Fika243OperationsAdapter {
         this.patched = new Set();
         this.status = this.detectVersion();
         this.status.itemSending = this.readItemSendingSetting();
+        this.status.itemSendingHook = false;
+        this.itemSendSequence = 0;
         this.status.saveServerHook = false;
         this.status.updateIdentityHook = false;
         this.status.raidIdentityHook = false;
@@ -104,6 +106,7 @@ class Fika243OperationsAdapter {
         });
         this.hook(container, 'FikaUpdateCallbacks', instance => this.patchUpdateCallbacks(instance));
         this.hook(container, 'FikaRaidCallbacks', instance => this.patchRaidCallbacks(instance));
+        this.hook(container, 'FikaSendItemController', instance => this.patchItemSendingController(instance));
         this.hook(container, 'FikaMatchService', instance => {
             this.services.fikaMatchService = instance;
             this.patchMatchService(instance);
@@ -466,6 +469,115 @@ class Fika243OperationsAdapter {
         this.status.lifecycleHook = target.startLocalRaid === target.__egFika243StartLifecycleWrapper
             && target.endLocalRaid === target.__egFika243EndLifecycleWrapper;
         return this.status.lifecycleHook;
+    }
+
+    // Fika 2.4.3 routes SendToPlayer through FikaItemEventRouter ->
+    // FikaSendItemCallbacks -> FikaSendItemController.sendItem. Observe the
+    // controller boundary so the audit sees the actual server transfer path.
+    // The wrapper never edits the request, profile, or Fika response.
+    patchItemSendingController(instance) {
+        if (!instance || typeof instance.sendItem !== 'function') {
+            this.status.itemSendingHook = false;
+            return false;
+        }
+        const target = instance;
+        if (target.__egFika243ItemSendingHook) {
+            this.status.itemSendingHook = true;
+            return true;
+        }
+        const adapter = this;
+        const original = target.sendItem;
+        target.sendItem = async function (pmcData, body, sessionId, ...rest) {
+            const request = object(body);
+            const senderSessionId = String(sessionId || '');
+            const targetSessionId = String(request.target || '');
+            const itemId = String(request.id || '');
+            const before = adapter.snapshotFikaTransfer(senderSessionId, targetSessionId, itemId);
+            let result;
+            try {
+                result = await original.call(this, pmcData, body, sessionId, ...rest);
+            } catch (error) {
+                adapter.recordFikaTransfer(before, 'controller_threw', error && error.message ? error.message : 'unknown_error');
+                throw error;
+            }
+            const after = adapter.snapshotFikaTransfer(senderSessionId, targetSessionId, itemId);
+            const debited = !!(before && before.rootFound && after && !after.rootFound);
+            adapter.recordFikaTransfer(before, debited ? 'sender_inventory_debited' : 'not_confirmed', null);
+            return result;
+        };
+        Object.defineProperty(target, '__egFika243ItemSendingHook', { value: true, enumerable: false });
+        this.status.itemSendingHook = true;
+        return true;
+    }
+
+    snapshotFikaTransfer(senderSessionId, targetSessionId, itemId) {
+        if (!senderSessionId || !targetSessionId || !itemId
+            || !this.services.saveServer || typeof this.services.saveServer.getProfile !== 'function') return null;
+        const sender = safe(() => this.services.saveServer.getProfile(senderSessionId), null);
+        const receiver = safe(() => this.services.saveServer.getProfile(targetSessionId), null);
+        if (!sender || !receiver) return null;
+        const inventory = object(object(object(sender.characters).pmc).Inventory).items;
+        const items = Array.isArray(inventory) ? inventory : [];
+        const byId = new Map(items.filter(item => item && item._id).map(item => [String(item._id), item]));
+        const root = byId.get(itemId);
+        if (!root) return {
+            senderSessionId, targetSessionId, itemId, rootFound: false,
+            senderProfileId: String(object(object(sender.characters).pmc)._id || ''),
+            targetProfileId: String(object(object(receiver.characters).pmc)._id || ''),
+            itemCount: 0, itemTplCounts: {}
+        };
+        const selected = new Set([itemId]);
+        let changed = true;
+        while (changed && selected.size < 5000) {
+            changed = false;
+            for (const item of items) {
+                if (!item || !item._id || !item.parentId) continue;
+                if (selected.has(String(item.parentId)) && !selected.has(String(item._id))) {
+                    selected.add(String(item._id));
+                    changed = true;
+                }
+            }
+        }
+        const tplCounts = Object.create(null);
+        let itemCount = 0;
+        for (const id of selected) {
+            const item = byId.get(id);
+            if (!item) continue;
+            itemCount++;
+            const tpl = String(item._tpl || 'unknown');
+            const count = Number(object(item.upd).StackObjectsCount);
+            tplCounts[tpl] = (tplCounts[tpl] || 0) + (Number.isSafeInteger(count) && count > 0 ? count : 1);
+        }
+        return {
+            senderSessionId, targetSessionId, itemId, rootFound: true,
+            senderProfileId: String(object(object(sender.characters).pmc)._id || ''),
+            targetProfileId: String(object(object(receiver.characters).pmc)._id || ''),
+            itemCount, itemTplCounts: tplCounts
+        };
+    }
+
+    recordFikaTransfer(snapshot, transferState, error) {
+        const sequence = ++this.itemSendSequence;
+        const event = {
+            eventId: `fika-item-send:${Date.now()}:${sequence}`,
+            type: 'fika_item_send_observed',
+            timestamp: new Date().toISOString(),
+            fikaServerVersion: EXPECTED_FIKA_VERSION,
+            source: 'FikaSendItemController.sendItem',
+            evidenceTrust: 'fika_server_controller_observation',
+            senderSessionId: snapshot ? snapshot.senderSessionId : '',
+            targetSessionId: snapshot ? snapshot.targetSessionId : '',
+            senderProfileId: snapshot ? snapshot.senderProfileId : '',
+            targetProfileId: snapshot ? snapshot.targetProfileId : '',
+            itemId: snapshot ? snapshot.itemId : '',
+            itemCount: snapshot ? snapshot.itemCount : 0,
+            itemTplCounts: snapshot ? snapshot.itemTplCounts : {},
+            transferState,
+            error: error ? String(error).slice(0, 240) : null,
+            rewardEligible: false
+        };
+        this.appendEvent(event);
+        return event;
     }
 
     patchMatchService(instance) {
@@ -1085,7 +1197,7 @@ class Fika243OperationsAdapter {
     }
 
     getStatus() {
-        const itemSending = this.readItemSendingSetting();
+        const itemSending = { ...this.readItemSendingSetting(), monitored: this.status.itemSendingHook === true };
         return { ...this.status, itemSending, fikaServerVersion: EXPECTED_FIKA_VERSION, fikaClientTargetVersion: '1.2.3', fikaClientConfigLastVersion: '1.2.3', fikaClientConfigEvidence: 'BepInEx/config/com.fika.core.cfg [Hidden] Last Version (advisory only; loaded BepInEx plugin metadata is authoritative)', operationsClientPluginVersion: '0.1.0' };
     }
 }
