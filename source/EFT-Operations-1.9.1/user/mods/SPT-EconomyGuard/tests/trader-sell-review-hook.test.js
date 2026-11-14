@@ -64,7 +64,9 @@ try {
     assert.equal(cases[0].type, 'TRADER_SELL_PAYOUT_REVIEW');
     assert.equal(cases[0].severity, 'MEDIUM');
     assert.equal(cases[0].status, 'OPEN');
-    assert.equal(cases[0].evidence.playerId, profileId);
+    assert.equal(cases[0].evidence.profileId, profileId, 'admin case must be linked to the SPT profile, not only the login session');
+    assert.equal(cases[0].evidence.sessionId, 'session-review');
+    assert.equal(cases[0].evidence.playerId, 'session-review', 'legacy playerId field remains session-scoped for compatibility');
     assert.equal(cases[0].evidence.traderId, 'trader-id');
     assert.equal(cases[0].evidence.check.reviewRequired, true);
     assert.equal(cases[0].evidence.check.payoutRatio, 2.5);
