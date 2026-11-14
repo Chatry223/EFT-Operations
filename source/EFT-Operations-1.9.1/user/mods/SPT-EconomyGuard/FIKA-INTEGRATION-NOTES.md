@@ -65,3 +65,30 @@ These lifecycle records are linked to the matching mission review by Match ID an
 The review still remains unverified because Fika 2.4.3 does not independently prove a successful extraction or every in-raid objective. `player_raid_end` client payloads remain untrusted. Automatic mission rewards remain disabled unless a future independently validated server source can satisfy the strict `server_verified` completion gate.
 
 Regression coverage now checks join/death/leave observation, exact trust labels, preservation of the review evidence, and readiness failure when the required lifecycle hooks are unavailable.
+
+
+## Fika Server 2.4.3 item-transfer observer — 2026-11-14
+
+The exact upstream tag `project-fika/Fika-Server@v2.4.3` was inspected for the item-send path:
+
+`FikaItemEventRouter.handleItemEvent("SendToPlayer")` → `FikaSendItemCallbacks.handleSendItem` → `FikaSendItemController.sendItem(pmcData, body, sessionID)`.
+
+The controller:
+- resolves sender and receiver profiles using SPT session IDs;
+- obtains the selected root item and its descendants from the sender PMC inventory;
+- queues a system message containing the item tree for the receiver;
+- removes the root item from the sender inventory;
+- returns the original SPT item-event response.
+
+The adapter now patches the registered `FikaSendItemController` instance (not the HTTP callback, because `SendToPlayer` is handled by Fika's item-event router). It snapshots the server profile's PMC item tree before and after the original async method, then writes an audit event to the existing bounded Fika JSONL stream.
+
+Evidence fields include sender/receiver session and profile references, root item ID, descendant item count, aggregated TPL/stack counts, transfer state, source method, timestamp, and trust label. The wrapper returns the exact original response object and rethrows the original exception.
+
+**Important trust boundary:** observing the controller and seeing the sender inventory root disappear proves that the server-side debit was observed; it does not independently prove that the receiver later opened or retained the mail. If the root remains, the operation throws, or either profile cannot be inspected, the event is marked uncertain/not confirmed. These records are audit evidence only and always have `rewardEligible: false`.
+
+The Fika admin panel now reports:
+- **DISABLED** — Fika's item-transfer route is closed by configuration;
+- **ENABLED — server controller observed** — the observer is installed, but individual delivery still needs outcome review;
+- **ENABLED — UNMONITORED** — configuration permits transfers but the controller hook is unavailable.
+
+The observer does not change `allowItemSending`, does not block or alter transfers, and does not alter Fika's response semantics. A regression test covers tree aggregation, observed sender debit, uncertain responses, thrown errors, hook idempotence, and response preservation.
