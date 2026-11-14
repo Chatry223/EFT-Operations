@@ -597,7 +597,7 @@ class Fika243OperationsAdapter {
             eventId, type: 'fika_player_joined', timestamp: new Date().toISOString(),
             fikaServerVersion: EXPECTED_FIKA_VERSION, matchId: id, playerId: player,
             isDead: object(match.players.get(player)).isDead === true,
-            evidenceTrust: 'fika_server_match_state', source: 'FikaMatchService.addPlayerToMatch',
+            evidenceTrust: 'fika_server_membership_mutation', source: 'FikaMatchService.addPlayerToMatch',
             rewardEligible: false
         };
         this.appendEvent(event);
@@ -616,7 +616,7 @@ class Fika243OperationsAdapter {
         const event = {
             eventId, type: 'fika_player_death_confirmed', timestamp: new Date().toISOString(),
             fikaServerVersion: EXPECTED_FIKA_VERSION, matchId: id, playerId: player,
-            evidenceTrust: 'fika_server_match_state', source: 'FikaMatchService.setPlayerDead',
+            evidenceTrust: 'fika_server_accepted_client_event', source: 'FikaMatchService.setPlayerDead',
             rewardEligible: false
         };
         this.appendEvent(event);
@@ -634,7 +634,7 @@ class Fika243OperationsAdapter {
         const event = {
             eventId, type: 'fika_player_left_match', timestamp: new Date().toISOString(),
             fikaServerVersion: EXPECTED_FIKA_VERSION, matchId: id, playerId: player,
-            leaveReason: 'unknown', evidenceTrust: 'fika_server_match_state',
+            leaveReason: 'unknown', evidenceTrust: 'fika_server_membership_mutation',
             source: 'FikaMatchService.removePlayerFromMatch', rewardEligible: false
         };
         this.appendEvent(event);
